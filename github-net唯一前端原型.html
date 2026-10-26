@@ -71,6 +71,12 @@
   .search::after{content:"";position:absolute;left:19px;top:19px;width:5px;height:1.6px;background:var(--text-3);transform:rotate(45deg);pointer-events:none}
 
   select.mode{height:30px;border-radius:6px;border:1px solid var(--border-strong);background:#fff;padding:0 8px;outline:none;cursor:pointer}
+  .service-strategy-panel{display:flex;align-items:center;justify-content:center;gap:7px;min-width:0;height:28px;padding:0 7px;background:#eef4ff;border:1px solid #c9d9fb;border-radius:8px}
+  .service-strategy-label{color:#244b91;font-size:11.5px;font-weight:700;line-height:1.2;white-space:nowrap}
+  .service-strategy-controls{display:flex;align-items:center;justify-content:center;gap:7px}
+  .service-strategy-controls select{height:26px;max-width:190px;padding:0 7px;border:1px solid #b9c9e8;border-radius:5px;background:#fff;color:var(--text);font-size:11.5px;outline:none}
+  .service-strategy-controls select:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+  .service-detect-button{height:26px;padding:0 9px;font-size:11.5px}
   .toolbar .spacer{flex:1}
 
   /* 挂在工具栏里面，位置跟着工具栏下沿走，不再写死像素（写死会压到按钮上） */
@@ -202,6 +208,9 @@
 
   .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
   .card-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .service-card-head{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+  .service-card-head>.service-card-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+  @media (max-width:900px){.service-card-head{grid-template-columns:1fr;justify-items:center}.service-card-head>.service-card-actions{justify-content:center}.service-card-head>h3{justify-self:start;width:100%}}
   .card-head h3{margin:0;font-size:14px;font-weight:600}
   .card-head .crumb{color:var(--text-3);font-weight:400;font-size:13px}
   .card-head .spacer{flex:1}
@@ -957,7 +966,7 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
 
         <section class="settings-pane" data-pane="update">
           <h3 class="pane-title">检测升级</h3>
-          <p class="pane-desc">检查是否有新版本可用。检查过程不会影响正在运行的加速任务。</p>
+          <p class="pane-desc">启动时自动检查 GitHub 最新稳定版，也可以手动检查。</p>
           <div class="set-card">
             <div class="ver-grid">
               <div class="ver-block"><div class="ver-label">当前版本</div><div class="ver-value" id="curVer">v1.0.0</div></div>
@@ -974,12 +983,8 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
             <ul class="changelog" id="changelog"></ul>
             <div class="dl-area">
               <div class="set-row">
-                <span class="update-status" id="dlHint">更新包大小约 28 MB，预计 1 分钟</span>
-                <button class="btn primary" id="btnDownload">立即更新</button>
-              </div>
-              <div class="dl-progress" id="dlProgress">
-                <div class="dl-bar"><i></i></div>
-                <div class="dl-text"><span id="dlPct">0%</span><span id="dlSpeed">—</span></div>
+                <span class="update-status">查看 GitHub 发布说明并下载适用于本系统的安装包。</span>
+                <a class="btn primary" id="btnDownload" href="https://github.com/xiaokentrl/github-net/releases" target="_blank" rel="noopener noreferrer">打开 GitHub 发布页</a>
               </div>
             </div>
           </div>
@@ -1001,11 +1006,11 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
               <div class="about-logo-lg">GH</div>
               <div class="about-hero-info">
                 <h3>GitHub 加速助手</h3>
-                <p>让 GitHub 访问更稳定、更快速。开源、跨平台、无侵入。</p>
+                <p>让 GitHub 访问更稳定、更快速。项目采用 MIT 协议开源。</p>
                 <div class="about-links">
-                  <button class="btn ghost" id="btnOpenRepo">项目主页</button>
-                  <button class="btn ghost" id="btnFeedback">反馈问题</button>
-                  <button class="btn ghost" id="btnLicense">许可协议</button>
+                  <a class="btn ghost" href="https://github.com/xiaokentrl/github-net" target="_blank" rel="noopener noreferrer">项目主页</a>
+                  <a class="btn ghost" href="https://github.com/xiaokentrl/github-net/issues/new" target="_blank" rel="noopener noreferrer">反馈问题</a>
+                  <a class="btn ghost" href="https://github.com/xiaokentrl/github-net/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">许可协议</a>
                 </div>
               </div>
             </div>
@@ -1014,7 +1019,7 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
             <div class="set-card-title"><span class="ico">ⓘ</span>版本信息</div>
             <div class="set-row" style="padding:4px 0"><span style="color:var(--text-2)">当前版本</span><b style="font-family:ui-monospace,monospace">v1.0.0</b></div>
             <div class="set-row" style="padding:4px 0"><span style="color:var(--text-2)">构建日期</span><b style="font-family:ui-monospace,monospace">2026-10-18</b></div>
-            <div class="set-row" style="padding:4px 0"><span style="color:var(--text-2)">许可协议</span><b>CC BY-SA 4.0</b></div>
+            <div class="set-row" style="padding:4px 0"><span style="color:var(--text-2)">许可协议</span><b>MIT</b></div>
             <div class="set-row" style="padding:4px 0"><span style="color:var(--text-2)">数据目录</span><code style="font-size:11.5px;color:var(--text-2)">~/.config/github-net</code></div>
           </div>
         </section>
@@ -1161,6 +1166,7 @@ const state = {
   batchDetecting: false,
   startupAutomationRunning: false,
   taskSeq: 0,
+  detectingServiceId: null,
   lastDetect: null,
   bannerDismissed: false,
   appStatus: { dnsService: '未连接（原型）' },
@@ -1184,6 +1190,7 @@ const state = {
     startMinimized: false,
     detectFocusFollow: false,
     applyFocusFollow: false,
+    primaryStrategyByService: {},
     /* 需求①：自动检测 / 自动应用默认关闭 */
     autoDetectOnStartup: false,
     autoApplyOnStartup: false
@@ -1193,8 +1200,8 @@ const state = {
     latest: null,
     checking: false,
     hasUpdate: false,
-    downloading: false,
-    downloaded: false,
+    error: '',
+    releaseUrl: '',
     log: []
   }
 };
@@ -1272,6 +1279,13 @@ function findItem(id) {
 }
 function findCategoryOfItem(id) {
   return state.categories.find(c => c.items.some(i => i.id === id)) || null;
+}
+function selectedStrategyIdForItem(item) {
+  const cat = findCategoryOfItem(item.id);
+  return cat ? (state.settings.primaryStrategyByService[cat.id] || 'dns-hosts') : 'dns-hosts';
+}
+function strategyName(strategyId) {
+  return strategyId === 'dns-hosts' ? '自动查找可用 IP' : strategyId;
 }
 function categoryCheckState(cat) {
   const total = cat.items.length;
@@ -1452,7 +1466,13 @@ btnToggleQueue.onclick = toggleQueueCollapsed;
 /* ============ 设置持久化 ============ */
 const SETTINGS_KEY = 'gh-accel-settings-v1';
 function persistSettings() {
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings)); } catch (e) {}
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+    return true;
+  } catch (e) {
+    console.error('[persistSettings] 无法保存设置:', e);
+    return false;
+  }
 }
 const SELECTION_KEY = 'gh-accel-selection-v1';
 function persistSelection() {
@@ -1487,6 +1507,13 @@ function loadSettings() {
       if (!['zh-CN', 'zh-TW'].includes(state.settings.language)) {
         state.settings.language = 'zh-CN';
       }
+      if (!state.settings.primaryStrategyByService || typeof state.settings.primaryStrategyByService !== 'object' || Array.isArray(state.settings.primaryStrategyByService)) {
+        state.settings.primaryStrategyByService = {};
+      }
+      state.settings.primaryStrategyByService = Object.fromEntries(
+        Object.entries(state.settings.primaryStrategyByService)
+          .filter(([serviceId, strategyId]) => CATEGORY_DEFS.some(category => category.id === serviceId) && strategyId === 'dns-hosts')
+      );
     }
   } catch (e) {}
   if (!state.settings.autoDetectOnStartup) state.settings.autoApplyOnStartup = false;
@@ -1635,25 +1662,88 @@ document.getElementById('settingsSave').onclick = () => {
 };
 
 /* ============ 检测升级 ============ */
-const UPDATE_CHECK_DELAY = 900;
+const GITHUB_LATEST_RELEASE_URL = 'https://api.github.com/repos/xiaokentrl/github-net/releases/latest';
+const GITHUB_RELEASES_URL = 'https://github.com/xiaokentrl/github-net/releases';
+function compareVersions(left, right) {
+  const parse = value => {
+    const match = String(value).trim().replace(/^v/i, '').match(/^(\d+)\.(\d+)\.(\d+)$/);
+    return match ? match.slice(1, 4).map(Number) : null;
+  };
+  const a = parse(left);
+  const b = parse(right);
+  if (!a || !b) throw new Error('版本号格式无效');
+  for (let index = 0; index < a.length; index++) {
+    if (a[index] !== b[index]) return a[index] > b[index] ? 1 : -1;
+  }
+  return 0;
+}
 async function checkUpdate() {
   if (state.update.checking) return null;
   state.update.checking = true;
+  state.update.error = '';
   syncUpdatePane();
-  await sleep(UPDATE_CHECK_DELAY);
-  const hasUpdate = Math.random() < 0.4;
-  if (hasUpdate) {
-    state.update.latest = 'v1.1.0';
-    state.update.hasUpdate = true;
-    state.update.log = ['新增系统代理模式', '优化 DNS 刷新逻辑', '修复队列恢复偶发失败', '设置中心增加检测升级页面'];
-  } else {
-    state.update.latest = state.update.current;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(GITHUB_LATEST_RELEASE_URL, {
+      headers: { Accept: 'application/vnd.github+json' },
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    if (response.status === 404) {
+      state.update.latest = null;
+      state.update.hasUpdate = false;
+      state.update.releaseUrl = '';
+      state.update.log = [];
+      state.update.error = 'GitHub 尚未发布稳定版';
+      return null;
+    }
+    if (response.status === 403) throw new Error('GitHub 暂时限制了版本查询，请稍后重试');
+    if (!response.ok) throw new Error(`GitHub 版本查询失败（HTTP ${response.status}）`);
+
+    const release = await response.json();
+    if (release.draft || release.prerelease || typeof release.tag_name !== 'string') {
+      throw new Error('GitHub 返回的版本不是有效的稳定版');
+    }
+    const version = release.tag_name.trim();
+    if (compareVersions(version, state.update.current) <= 0) {
+      state.update.latest = version;
+      state.update.hasUpdate = false;
+    } else {
+      state.update.latest = version;
+      state.update.hasUpdate = true;
+    }
+    state.update.releaseUrl = typeof release.html_url === 'string'
+      && new URL(release.html_url).origin === 'https://github.com'
+      ? release.html_url
+      : GITHUB_RELEASES_URL;
+    state.update.log = String(release.body || '')
+      .split(/\r?\n/)
+      .map(line => line.replace(/^\s*[-*]\s*/, '').trim())
+      .filter(Boolean)
+      .slice(0, 12);
+    if (!state.update.log.length) state.update.log = ['请前往 GitHub 查看此版本的发布说明。'];
+  } catch (error) {
+    state.update.latest = null;
     state.update.hasUpdate = false;
+    state.update.releaseUrl = '';
     state.update.log = [];
+    state.update.error = error.name === 'AbortError'
+      ? '连接 GitHub 超时，请检查网络后重试'
+      : (error.message || '无法连接 GitHub 检查版本');
+    console.error('[checkUpdate] GitHub 稳定版检查失败:', error);
+  } finally {
+    clearTimeout(timeout);
+    state.update.checking = false;
+    syncUpdatePane();
   }
-  state.update.checking = false;
-  syncUpdatePane();
-  return { hasUpdate, latest: state.update.latest, log: state.update.log };
+  return {
+    hasUpdate: state.update.hasUpdate,
+    latest: state.update.latest,
+    releaseUrl: state.update.releaseUrl,
+    log: state.update.log,
+    error: state.update.error
+  };
 }
 function syncUpdatePane() {
   const u = state.update;
@@ -1666,25 +1756,21 @@ function syncUpdatePane() {
   const statusEl = document.getElementById('updateStatus');
   if (statusEl) {
     if (u.checking) { statusEl.textContent = '正在检查…'; statusEl.className = 'update-status'; }
-    else if (u.downloading) { statusEl.textContent = '正在下载更新包…'; statusEl.className = 'update-status has-new'; }
-    else if (u.downloaded) { statusEl.textContent = '更新包已就绪，重启后安装'; statusEl.className = 'update-status ok'; }
     else if (u.hasUpdate) { statusEl.textContent = '发现新版本 ' + u.latest; statusEl.className = 'update-status has-new'; }
-    else if (u.latest) { statusEl.textContent = '已是最新版本'; statusEl.className = 'update-status ok'; }
+    else if (u.error) { statusEl.textContent = u.error; statusEl.className = 'update-status err'; }
+    else if (u.latest && compareVersions(u.latest, u.current) < 0) { statusEl.textContent = `当前版本高于 GitHub 最新稳定版 ${u.latest}`; statusEl.className = 'update-status'; }
+    else if (u.latest) { statusEl.textContent = '已是最新稳定版'; statusEl.className = 'update-status ok'; }
     else { statusEl.textContent = '尚未检查'; statusEl.className = 'update-status'; }
   }
   const checkBtn = document.getElementById('btnCheckUpdateInSettings');
-  if (checkBtn) { checkBtn.disabled = u.checking || u.downloading; checkBtn.textContent = u.checking ? '检查中…' : '检查更新'; }
+  if (checkBtn) { checkBtn.disabled = u.checking; checkBtn.textContent = u.checking ? '检查中…' : '检查更新'; }
   const detailCard = document.getElementById('updateDetailCard');
   if (detailCard) {
     if (u.hasUpdate) {
       detailCard.style.display = '';
       document.getElementById('changelog').innerHTML = u.log.map(item => `<li>${escapeHtml(item)}</li>`).join('');
       const dlBtn = document.getElementById('btnDownload');
-      const dlProgress = document.getElementById('dlProgress');
-      const dlHint = document.getElementById('dlHint');
-      if (u.downloading) { dlBtn.disabled = true; dlBtn.textContent = '下载中…'; dlProgress.classList.add('show'); dlHint.textContent = '正在下载更新包…'; }
-      else if (u.downloaded) { dlBtn.disabled = false; dlBtn.textContent = '重启安装'; dlProgress.classList.add('show'); dlHint.textContent = '下载完成，点击重启安装'; }
-      else { dlBtn.disabled = false; dlBtn.textContent = '立即更新'; dlProgress.classList.remove('show'); dlHint.textContent = '更新包大小约 28 MB，预计 1 分钟'; }
+      dlBtn.href = u.releaseUrl || GITHUB_RELEASES_URL;
     } else detailCard.style.display = 'none';
   }
   const navDot = document.getElementById('navUpdateDot');
@@ -1695,33 +1781,13 @@ function syncUpdatePane() {
 document.getElementById('btnCheckUpdateInSettings').onclick = async () => {
   await checkUpdate();
   if (state.update.hasUpdate) toast(`发现新版本 ${state.update.latest}`);
-  else toast(`已是最新版本 ${state.update.current}`);
-};
-document.getElementById('btnDownload').onclick = async () => {
-  const u = state.update;
-  if (u.downloaded) { toast('重启后自动安装（模拟）'); return; }
-  if (u.downloading) return;
-  u.downloading = true;
-  syncUpdatePane();
-  const bar = document.querySelector('#dlProgress .dl-bar i');
-  for (let p = 0; p <= 100; p += 4) {
-    bar.style.width = p + '%';
-    document.getElementById('dlPct').textContent = p + '%';
-    document.getElementById('dlSpeed').textContent = (1.8 + Math.random() * 2.6).toFixed(1) + ' MB/s';
-    await sleep(90);
-  }
-  u.downloading = false; u.downloaded = true;
-  syncUpdatePane();
-  toast('更新包下载完成，重启后安装');
+  else if (state.update.error) toast(state.update.error);
+  else toast(`已是最新稳定版 ${state.update.latest}`);
 };
 document.getElementById('btnCheckUpdate').onclick = () => {
   openSettings('update');
   if (!state.update.checking) checkUpdate();
 };
-
-document.getElementById('btnOpenRepo').onclick = () => toast('打开项目主页（模拟）');
-document.getElementById('btnFeedback').onclick = () => toast('打开反馈页面（模拟）');
-document.getElementById('btnLicense').onclick = () => toast('打开许可协议（模拟）');
 
 /* ============ 重算演示状态 ============ */
 document.getElementById('btnSyncState').onclick = async () => {
@@ -1984,14 +2050,32 @@ function renderDetail() {
 
   const displayCatName = cat ? escapeHtml(cat.name) : '—';
   const displayItemName = escapeHtml(item.name || '—');
+  const primaryStrategyId = cat
+    ? (state.settings.primaryStrategyByService[cat.id] || 'dns-hosts')
+    : 'dns-hosts';
+  const strategySelectorHtml = isRealItem ? `
+    <div class="service-strategy-panel" title="已选择的方法会保存，并用于此服务后续检测；检测不会修改系统。">
+      <span class="service-strategy-label">${displayCatName} 全部加速方法</span>
+      <div class="service-strategy-controls">
+      <select id="serviceStrategySelect" aria-label="${displayCatName} 全部加速方法">
+        <option value="dns-hosts">自动查找可用 IP</option>
+        <option value="curated-ip-hosts" disabled>使用可信 IP 清单（未开放）</option>
+      </select>
+      <button class="btn service-detect-button" id="btnDetectService" ${state.batchDetecting || state.queueRunning || state.startupAutomationRunning ? 'disabled' : ''}>
+        ${state.detectingServiceId === cat.id ? '检测中…' : '检测'}
+      </button>
+      </div>
+    </div>` : '';
 
   detailEl.innerHTML = `
     <div class="card">
-      <div class="card-head">
+      <div class="card-head ${isRealItem ? 'service-card-head' : ''}">
         <h3>${displayCatName} <span class="crumb">/ ${displayItemName}</span></h3>
-        <div class="spacer"></div>
-        <span class="badge ${meta.badge}">${meta.text}</span>
-        ${showRestoreHosts ? `<button class="btn btn-sm restore" id="btnRestoreHosts" title="还原到本次应用前的 Hosts 状态">还原Hosts</button>` : ''}
+        ${strategySelectorHtml}
+        <div class="service-card-actions">
+          <span class="badge ${meta.badge}">${meta.text}</span>
+          ${showRestoreHosts ? `<button class="btn btn-sm restore" id="btnRestoreHosts" title="还原到本次应用前的 Hosts 状态">还原Hosts</button>` : ''}
+        </div>
       </div>
       <div class="metrics">${metricsHtml}</div>
       <div class="domains-line">
@@ -2028,6 +2112,26 @@ function renderDetail() {
 
   const dOne = document.getElementById('btnDetectOne');
   const aOne = document.getElementById('btnApplyOne');
+  const serviceStrategySelect = document.getElementById('serviceStrategySelect');
+  if (serviceStrategySelect && cat) {
+    serviceStrategySelect.value = primaryStrategyId;
+    serviceStrategySelect.addEventListener('change', () => {
+      if (serviceStrategySelect.value !== 'dns-hosts') return;
+      const previousStrategyId = state.settings.primaryStrategyByService[cat.id] || 'dns-hosts';
+      state.settings.primaryStrategyByService[cat.id] = serviceStrategySelect.value;
+      if (!persistSettings()) {
+        state.settings.primaryStrategyByService[cat.id] = previousStrategyId;
+        serviceStrategySelect.value = previousStrategyId;
+        toast('加速方法未能保存，请检查浏览器存储空间');
+        return;
+      }
+      toast(`已为 ${cat.name} 保存加速方法；点击「检测 ${cat.name}」才会开始检测`);
+    });
+  }
+  const detectServiceButton = document.getElementById('btnDetectService');
+  if (detectServiceButton && cat) {
+    detectServiceButton.onclick = () => detectAll({ targetItems: cat.items, serviceId: cat.id });
+  }
   if (dOne) dOne.onclick = () => { if (isRealItem) detectSingle(item); };
   if (aOne) aOne.onclick = () => { if (isRealItem) applySingle(item); };
   const rHosts = document.getElementById('btnRestoreHosts');
@@ -2311,6 +2415,11 @@ async function detectSingle(item) {
   const inQueueRunning = state.queue.find(t => t.kind === 'apply' && t.itemId === item.id && t.status === 'running');
   if (inQueueRunning) { toast('该项正在队列中执行'); return; }
 
+  const strategyId = selectedStrategyIdForItem(item);
+  if (strategyId !== 'dns-hosts') {
+    toast(`当前选择的加速方法「${strategyName(strategyId)}」尚未开放`);
+    return;
+  }
   const snap = {
     status: item.status, bestIp: item.bestIp, latency: item.latency,
     speed: item.speed, score: item.score, source: item.source,
@@ -2330,7 +2439,7 @@ async function detectSingle(item) {
     item.latency = best.latency;
     item.speed = best.speed + ' MB/s';
     item.score = best.score;
-    item.source = ['GitHub520', 'DoH 优选', '在线查询', '本地缓存'][Math.floor(Math.random() * 4)];
+    item.source = strategyName(strategyId);
     item.lastCheck = nowStr();
     if (!item.appliedIp) item.status = 'detected';
     else if (item.bestIp === item.appliedIp) item.status = 'applied';
@@ -2348,13 +2457,16 @@ async function detectSingle(item) {
   renderStatus();
 }
 
-async function detectAll({ allowStartupAutomation = false } = {}) {
+async function detectAll({ allowStartupAutomation = false, targetItems = null, serviceId = null } = {}) {
   if (state.batchDetecting) return null;
   if (state.startupAutomationRunning && !allowStartupAutomation) return null;
   if (state.queueRunning) { toast('队列正在执行中，请稍候再检测'); return null; }
 
-  const selected = checkedItems();
-  if (!selected.length) { toast('请先勾选要检测的项'); return null; }
+  const selected = targetItems || checkedItems();
+  if (!selected.length) {
+    toast(serviceId ? '此服务没有可检测的项目' : '请先勾选要检测的项');
+    return null;
+  }
 
   const existingDetectItemIds = new Set(
     state.queue
@@ -2383,9 +2495,11 @@ async function detectAll({ allowStartupAutomation = false } = {}) {
   }
 
   const detectTasks = targets.map(item => {
+    const strategyId = selectedStrategyIdForItem(item);
     const task = {
       id: 'd_' + (++state.taskSeq),
       kind: 'detect', itemId: item.id, name: labelOf(item),
+      strategyId,
       status: 'waiting', phase: null, phaseText: '',
       duration: '', errorMsg: '',
       prevAppliedIp: item.appliedIp, startedAt: 0
@@ -2395,7 +2509,9 @@ async function detectAll({ allowStartupAutomation = false } = {}) {
   });
 
   state.batchDetecting = true;
-  toast(`开始检测 ${detectTasks.length} 项…`);
+  state.detectingServiceId = serviceId;
+  const serviceName = serviceId ? state.categories.find(category => category.id === serviceId)?.name : '';
+  toast(`开始检测${serviceName ? `「${serviceName}」` : ''} ${detectTasks.length} 项…`);
   renderAll();
 
   let successCount = 0;
@@ -2407,7 +2523,7 @@ async function detectAll({ allowStartupAutomation = false } = {}) {
 
       const item = findItem(task.itemId);
       if (!item) continue;
-      if (!item.checked) {
+      if (!item.checked && !serviceId) {
         task.status = 'cancelled';
         patchQueueRow(task);
         renderQueueHeader();
@@ -2435,6 +2551,7 @@ async function detectAll({ allowStartupAutomation = false } = {}) {
     toast('检测流程异常：' + (err && err.message ? err.message : String(err)));
   } finally {
     state.batchDetecting = false;
+    state.detectingServiceId = null;
     if (successCount > 0) state.lastDetect = nowStr();
 
     if (focusFollow) {
@@ -2458,7 +2575,7 @@ async function detectAll({ allowStartupAutomation = false } = {}) {
   if (applied) parts.push(`已是最优 ${applied}`);
   if (stale) parts.push(`待更新 ${stale}`);
   if (errs) parts.push(`失败 ${errs}`);
-  toast(`检测完成：${parts.join(' · ') || '无变化'}`);
+  toast(`检测完成${serviceName ? `（${serviceName}）` : ''}：${parts.join(' · ') || '无变化'}`);
 
   return targets;
 }
@@ -2483,7 +2600,7 @@ async function executeDetectTask(task) {
   };
 
   task.status = 'running';
-  task.phaseText = '正在查询候选 IP…';
+  task.phaseText = `正在使用「${strategyName(task.strategyId)}」检测…`;
   task.startedAt = performance.now();
   item.status = 'detecting';
   item.errorMsg = '';
@@ -2497,6 +2614,9 @@ async function executeDetectTask(task) {
   let ok = false;
 
   try {
+    if (task.strategyId !== 'dns-hosts') {
+      throw new Error(`加速方法「${strategyName(task.strategyId)}」尚未开放`);
+    }
     await sleep(180 + Math.random() * 200);
     generateCandidates(item);
     if (item.candidates.length === 0 || Math.random() < 0.05) throw new Error('DoH 查询超时，未获取到候选 IP');
@@ -2505,7 +2625,7 @@ async function executeDetectTask(task) {
     item.latency = best.latency;
     item.speed = best.speed + ' MB/s';
     item.score = best.score;
-    item.source = ['GitHub520', 'DoH 优选', '在线查询', '本地缓存'][Math.floor(Math.random() * 4)];
+    item.source = strategyName(task.strategyId);
     item.lastCheck = nowStr();
 
     if (!item.appliedIp) item.status = 'detected';
@@ -2563,6 +2683,7 @@ async function detectSubset(items) {
   const tasks = targets.map(item => {
     const task = {
       id: 'd_' + (++state.taskSeq), kind: 'detect', itemId: item.id, name: labelOf(item),
+      strategyId: selectedStrategyIdForItem(item),
       status: 'waiting', phase: null, phaseText: '', duration: '', errorMsg: '',
       prevAppliedIp: item.appliedIp, startedAt: 0
     };
@@ -3441,6 +3562,7 @@ renderAll();
 renderSettingsThemeGrid();
 document.getElementById('banner').classList.add('show');
 
+setTimeout(() => { checkUpdate(); }, 1000);
 setTimeout(() => {
   runStartupAutomation().catch(err => {
     console.error('[startup] 自动化异常:', err);
