@@ -1,0 +1,3451 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub 加速助手</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --panel:#fff; --border:#e3e6eb; --border-strong:#d0d5dd;
+    --text:#1f2430; --text-2:#5b6474; --text-3:#8a93a3;
+    --primary:#2563eb; --primary-soft:#eaf0fe;
+    --green:#16a34a; --green-soft:#e8f7ee;
+    --amber:#d97706; --amber-soft:#fdf3e3;
+    --red:#dc2626; --red-soft:#fdecec;
+    --gold:#f59e0b; --gold-soft:#fef3c7; --gold-soft-2:#fffbeb; --gold-text:#92400e;
+    --radius:8px;
+    --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:13px;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+  button,input,select{font-family:inherit;font-size:13px}
+  .app{height:100vh;display:flex;flex-direction:column;overflow:hidden;position:relative}
+
+  .topbar{height:46px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--border)}
+  .logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#2563eb,#0ea5a4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px}
+  .topbar h1{font-size:14px;font-weight:600;margin:0}
+  .topbar .spacer{flex:1}
+  .perm{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);padding:4px 10px;border-radius:20px;background:#f0f2f5;cursor:pointer}
+  .perm .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+  .perm.warn .dot{background:var(--amber)}
+  .perm.warn{background:var(--amber-soft);color:var(--amber)}
+
+  .update-btn{height:26px;padding:0 10px;border-radius:6px;border:1px solid var(--border-strong);background:#fff;color:var(--text-2);cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:12px;position:relative;transition:background .12s,border-color .12s,color .12s}
+  .update-btn:hover:not(:disabled){background:#f5f6f8;border-color:var(--primary);color:var(--primary)}
+  .update-btn:disabled{opacity:.7;cursor:wait}
+  .update-btn .ico{font-size:13px;line-height:1}
+  .update-btn .upd-dot{display:none}
+  .update-btn.has-update .upd-dot{display:block;width:6px;height:6px;border-radius:50%;background:var(--red);position:absolute;top:-1px;right:-1px;border:1.5px solid var(--panel);animation:pulse 1.1s ease-in-out infinite}
+
+  .win-btns{display:flex;gap:4px;margin-left:6px}
+  .win-btns span{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:13px}
+  .win-btns span:hover{background:#eef0f4}
+
+  .banner{display:none;flex:none;align-items:center;gap:10px;padding:9px 16px;background:var(--primary-soft);border-bottom:1px solid #d6e2fb;font-size:12.5px;color:#1e40af}
+  .banner.show{display:flex}
+  .banner .ico{width:18px;height:18px;border-radius:50%;background:var(--primary);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+  .banner .spacer{flex:1}
+  .banner button{border:none;background:transparent;color:#1e40af;cursor:pointer;font-size:12px;padding:2px 6px;border-radius:4px}
+  .banner button:hover{background:rgba(37,99,235,.1)}
+
+  .toolbar{height:54px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--border);position:relative}
+  .btn{height:30px;padding:0 12px;border-radius:6px;border:1px solid var(--border-strong);background:#fff;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;transition:background .12s,border-color .12s,color .12s}
+  .btn:hover:not(:disabled){background:#f5f6f8}
+  .btn:active:not(:disabled){transform:translateY(.5px)}
+  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+  .btn.primary:hover:not(:disabled){background:#1d55d0}
+  .btn.ghost{border-color:transparent;background:transparent;color:var(--text-2)}
+  .btn.ghost:hover:not(:disabled){background:#f0f2f5}
+  .btn.danger{color:var(--red)}
+  .btn.danger:hover:not(:disabled){background:var(--red-soft)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.btn-sm{height:24px;padding:0 8px;font-size:11.5px;margin-left:8px;font-weight:500}
+  .btn.btn-sm.restore{color:var(--amber);border-color:#f0d8b0}
+  .btn.btn-sm.restore:hover:not(:disabled){background:var(--amber-soft)}
+  .divider-v{width:1px;height:20px;background:var(--border);margin:0 4px}
+
+  .search{position:relative;flex:none}
+  .search input{width:210px;height:30px;padding:0 10px 0 30px;border-radius:6px;border:1px solid var(--border-strong);background:#fff;outline:none;transition:border-color .12s,box-shadow .12s}
+  .search input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  .search::before{content:"";position:absolute;left:10px;top:50%;width:11px;height:11px;transform:translateY(-60%);border:1.6px solid var(--text-3);border-radius:50%;pointer-events:none}
+  .search::after{content:"";position:absolute;left:19px;top:19px;width:5px;height:1.6px;background:var(--text-3);transform:rotate(45deg);pointer-events:none}
+
+  select.mode{height:30px;border-radius:6px;border:1px solid var(--border-strong);background:#fff;padding:0 8px;outline:none;cursor:pointer}
+  .toolbar .spacer{flex:1}
+
+  /* 挂在工具栏里面，位置跟着工具栏下沿走，不再写死像素（写死会压到按钮上） */
+  .global-progress{
+    position:absolute;top:100%;left:0;right:0;height:3px;
+    background:transparent;z-index:30;pointer-events:none;
+    opacity:0;transition:opacity .15s ease, background .15s ease;overflow:hidden;
+  }
+  .global-progress.show{opacity:1;background:#e8ecf2}
+  .global-progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,#2563eb,#0ea5a4);transition:width .3s ease}
+
+  .main{flex:1;min-height:0;display:flex}
+
+  .sidebar{width:240px;flex:none;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-width:200px;max-width:600px}
+  .tree-scroll{flex:1;min-height:0;overflow-y:auto;padding:8px 0 16px}
+  .tree-empty{padding:40px 20px;text-align:center;color:var(--text-3);font-size:12px}
+
+  .sidebar-footer{flex:none;display:flex;gap:6px;padding:8px;border-top:1px solid var(--border);background:#fbfcfd}
+  .sf-btn{flex:1;height:32px;border-radius:6px;border:1px solid var(--border-strong);background:#fff;color:var(--text-2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;font-size:12px;transition:background .12s,border-color .12s,color .12s;white-space:nowrap}
+  .sf-btn:hover{background:#f5f6f8;border-color:var(--primary);color:var(--primary)}
+  .sf-btn .ico{font-size:13px;line-height:1}
+
+  .sidebar-resizer{width:6px;flex:none;background:var(--border);cursor:col-resize;position:relative;transition:background .12s;user-select:none}
+  .sidebar-resizer:hover,.sidebar-resizer.dragging{background:var(--primary)}
+  .sidebar-resizer::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:2px;height:34px;border-radius:1px;background:var(--text-3);transition:background .12s}
+  .sidebar-resizer:hover::before,.sidebar-resizer.dragging::before{background:#fff}
+
+  .node{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    padding:0 12px;
+    height:32px;
+    cursor:pointer;
+    user-select:none;
+    position:relative;
+    transition:background .18s;
+    box-sizing:border-box;
+  }
+  .node:hover{background:#f5f6f8}
+  .node.cat{font-weight:600;color:var(--text);margin-top:4px}
+  .node.item{padding-left:34px;height:30px;color:var(--text-2)}
+  .node.item.active{background:var(--primary-soft);color:var(--text)}
+  .node.item.active::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:0 2px 2px 0;background:var(--primary)}
+
+  .node.item.detecting{background:var(--gold-soft) !important;color:var(--gold-text) !important;font-weight:500}
+  .node.item.detecting::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold);border-radius:0 2px 2px 0;box-shadow:0 0 8px rgba(245,158,11,.6)}
+  .node.item.active.detecting::before{display:none}
+
+  .node.item.applying{background:var(--primary-soft) !important;color:var(--primary) !important;font-weight:500}
+  .node.item.applying::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--primary);border-radius:0 2px 2px 0;box-shadow:0 0 8px rgba(37,99,235,.6)}
+  .node.item.active.applying::before{display:none}
+
+  .node.cat.has-detecting{background:var(--gold-soft-2);color:var(--gold-text)}
+  .node.cat.has-detecting::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,transparent 0%,var(--gold) 50%,transparent 100%);background-size:200% 100%;animation:goldSlide 1.6s linear infinite;pointer-events:none}
+  @keyframes goldSlide{0%{background-position:100% 0}100%{background-position:-100% 0}}
+
+  .node.cat.has-applying{background:var(--primary-soft);color:var(--primary)}
+  .node.cat.has-applying::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,transparent 0%,var(--primary) 50%,transparent 100%);background-size:200% 100%;animation:goldSlide 1.6s linear infinite;pointer-events:none}
+
+  .cb{width:14px;height:14px;flex:none;border:1.5px solid #c3c9d4;border-radius:3px;background:#fff;display:inline-flex;align-items:center;justify-content:center;transition:background .12s,border-color .12s}
+  .cb[data-state="checked"],.cb[data-state="indeterminate"]{background:var(--primary);border-color:var(--primary)}
+  .cb[data-state="checked"]::after{content:"";width:7px;height:4px;border-left:1.8px solid #fff;border-bottom:1.8px solid #fff;transform:rotate(-45deg) translate(0,-1px)}
+  .cb[data-state="indeterminate"]::after{content:"";width:7px;height:1.8px;background:#fff;border-radius:1px}
+
+  .caret{
+    width:14px;height:14px;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--text-3);transition:transform .15s;font-size:9px;
+  }
+  .caret.collapsed{transform:rotate(-90deg)}
+
+  .caret-slot{width:14px;height:14px;flex:none}
+
+  .node .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .node .name .hl{background:#fff3a3;border-radius:2px}
+
+  .info-area{width:58px;flex:none;display:flex;align-items:center;gap:7px}
+  .info-count{justify-content:flex-end}
+  .info-status{justify-content:flex-start}
+
+  .count{font-size:11px;color:var(--text-3);background:#f0f2f5;border-radius:10px;padding:1px 7px;font-weight:500;white-space:nowrap}
+
+  .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .dot.applied{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+  .dot.stale{background:var(--amber);box-shadow:0 0 0 3px var(--amber-soft)}
+  .dot.unset{background:#cbd5e1}
+  .dot.error{background:var(--red);box-shadow:0 0 0 3px var(--red-soft)}
+  .dot.pending{background:var(--primary);animation:pulse 1.1s ease-in-out infinite}
+  .dot.detected{background:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.35)}50%{box-shadow:0 0 0 4px rgba(37,99,235,0)}}
+
+  .stext{
+    width:44px;flex:none;
+    font-size:11px;color:var(--text-3);
+    text-align:right;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .stext.error{color:var(--red)}
+  .stext.pending{color:var(--primary)}
+  .stext.stale{color:var(--amber)}
+  .stext.detected{color:var(--primary)}
+
+  .restore-slot{width:20px;height:20px;flex:none;display:inline-flex;align-items:center;justify-content:center}
+  .tree-restore-btn{
+    width:20px;height:20px;
+    padding:0;border:none;border-radius:4px;
+    background:transparent;color:var(--text-3);
+    cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+    font-size:12px;line-height:1;
+    transition:background .12s,color .12s;
+  }
+  .tree-restore-btn:hover{background:var(--amber-soft);color:var(--amber)}
+  .tree-restore-btn:active{transform:translateY(.5px)}
+
+  .children.hidden{display:none}
+
+  .right{display:flex;flex-direction:column;min-width:0;min-height:0;flex:1}
+  .detail{flex:1;min-height:0;overflow-y:auto;padding:16px 18px}
+
+  .resizer{height:6px;flex:none;background:var(--border);cursor:row-resize;position:relative;transition:background .12s;user-select:none}
+  .resizer:hover,.resizer.dragging{background:var(--primary)}
+  .resizer::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:34px;height:2px;border-radius:1px;background:var(--text-3);transition:background .12s}
+  .resizer:hover::before,.resizer.dragging::before{background:#fff}
+
+  .detail-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-3);gap:10px}
+  .detail-empty .big{width:52px;height:52px;border-radius:14px;background:#eef1f6;display:flex;align-items:center;justify-content:center;font-size:22px}
+  .detail-empty .hint{font-size:12px}
+
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
+  .card-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .card-head h3{margin:0;font-size:14px;font-weight:600}
+  .card-head .crumb{color:var(--text-3);font-weight:400;font-size:13px}
+  .card-head .spacer{flex:1}
+  .badge{font-size:11px;padding:2px 9px;border-radius:20px;font-weight:500;white-space:nowrap}
+  .badge.applied{background:var(--green-soft);color:var(--green)}
+  .badge.stale{background:var(--amber-soft);color:var(--amber)}
+  .badge.unset{background:#eef1f6;color:var(--text-2)}
+  .badge.error{background:var(--red-soft);color:var(--red)}
+  .badge.pending{background:var(--primary-soft);color:var(--primary)}
+  .badge.detected{background:var(--primary-soft);color:var(--primary)}
+
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--border)}
+  .metric{background:var(--panel);padding:12px 16px}
+  .metric label{display:block;font-size:11px;color:var(--text-3);margin-bottom:5px}
+  .metric b{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+  .metric b.dim{color:var(--text-3);font-weight:400}
+  .metric b.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+
+  .domains-line{padding:10px 16px;font-size:12px;color:var(--text-2);border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .domains-line .lbl{color:var(--text-3);margin-right:2px}
+  .chip{background:#f0f2f5;border-radius:4px;padding:2px 7px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;color:var(--text-2)}
+
+  .error-box{margin:0;padding:10px 16px;background:var(--red-soft);border-top:1px solid #fbd5d5;font-size:12px;color:#991b1b;display:flex;gap:8px;align-items:flex-start}
+  .error-box .ico{flex:none;font-weight:700}
+  .error-box.warn{background:var(--amber-soft);border-top-color:#f0d8b0;color:#92400e}
+
+  table.cands{width:100%;border-collapse:collapse;table-layout:fixed}
+  table.cands th{text-align:left;font-size:11px;font-weight:500;color:var(--text-3);padding:9px 16px;background:#fafbfc;border-bottom:1px solid var(--border)}
+  table.cands td{padding:9px 16px;border-bottom:1px solid #f0f2f5;font-variant-numeric:tabular-nums}
+  table.cands tr:last-child td{border-bottom:none}
+  table.cands tr:hover td{background:#fafbfc}
+
+  table.cands th:nth-child(1),table.cands td:nth-child(1){width:44px}
+  table.cands th:nth-child(3),table.cands td:nth-child(3){width:64px}
+  table.cands th:nth-child(4),table.cands td:nth-child(4){width:80px}
+  table.cands th:nth-child(5),table.cands td:nth-child(5){width:100px}
+  table.cands th:nth-child(6),table.cands td:nth-child(6){width:120px}
+
+  table.cands td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  table.cands tr.best td:first-child{color:var(--green);font-weight:600}
+  table.cands tr.current td{background:var(--green-soft)}
+  table.cands tr.current:hover td{background:#dcf3e6}
+
+  table.cands td.tags-cell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tag{display:inline-block;font-size:10px;background:var(--green);color:#fff;border-radius:3px;padding:1px 5px;vertical-align:middle}
+
+  .score-bar{display:inline-block;width:46px;height:5px;background:#eef1f6;border-radius:3px;overflow:hidden;vertical-align:middle;margin-right:7px}
+  .score-bar i{display:block;height:100%;background:linear-gradient(90deg,#34d399,#16a34a);border-radius:3px}
+
+  .actions{display:flex;gap:8px;padding:0 0 6px;flex-wrap:wrap}
+  .actions .hint{color:var(--text-3);font-size:12px;align-self:center;margin-left:4px}
+
+  .queue{height:252px;flex:none;background:var(--panel);border-top:1px solid var(--border);display:flex;flex-direction:column;min-height:120px;transition:height .18s ease}
+  .queue.collapsed{height:45px !important;min-height:45px !important}
+  .queue.collapsed .queue-list{display:none}
+
+  .queue-head{display:flex;align-items:center;gap:8px;padding:0 16px;height:44px;flex:none;border-bottom:1px solid var(--border)}
+  .queue-head h3{margin:0;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;flex:none}
+  .qcount{font-size:11px;background:#eef1f6;color:var(--text-2);border-radius:10px;padding:1px 8px;font-weight:500}
+  .qsummary{font-size:11.5px;color:var(--text-3);flex:none}
+
+  .q-current{display:inline-flex;align-items:center;gap:6px;flex:none;max-width:360px;height:22px;padding:0 9px;font-size:12px;color:var(--primary);background:var(--primary-soft);border:1px solid #d6e2fb;border-radius:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .2s,color .2s,border-color .2s}
+  .q-current:empty{display:none}
+  .q-current .spin{width:9px;height:9px;flex:none;border:1.5px solid var(--primary);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite}
+  .q-current.detecting{color:var(--gold-text);background:var(--gold-soft);border-color:#fcd34d}
+  .q-current.detecting .spin{border-color:var(--gold);border-top-color:transparent}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .q-current .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .q-current .ph{color:var(--text-3);font-size:11px;flex:none}
+
+  .queue-head .spacer{flex:1}
+  .queue-head .btn{height:26px;padding:0 10px;font-size:12px}
+  .queue-head .toggle-btn{width:26px;padding:0;justify-content:center;font-size:11px;color:var(--text-2)}
+
+  .queue-list{flex:1;overflow-y:auto;min-width:0}
+  .queue-empty{height:100%;display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;color:var(--text-3);font-size:12px}
+  .queue-empty .small{font-size:11.5px}
+
+  table.qtable{width:100%;border-collapse:collapse;table-layout:fixed}
+  table.qtable th{text-align:left;font-size:11px;font-weight:500;color:var(--text-3);padding:8px 12px;background:#fafbfc;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+  table.qtable td{padding:8px 12px;border-bottom:1px solid #f4f5f7;font-size:12px}
+  table.qtable tr:last-child td{border-bottom:none}
+  table.qtable th:nth-child(1),table.qtable td:nth-child(1){width:40px}
+  table.qtable th:nth-child(3),table.qtable td:nth-child(3){width:104px}
+  table.qtable th:nth-child(4),table.qtable td:nth-child(4){width:64px}
+  table.qtable th:nth-child(5),table.qtable td:nth-child(5){width:142px}
+
+  table.qtable .q-task{display:flex;flex-direction:column;gap:2px;min-width:0}
+  table.qtable .q-task > span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  table.qtable .q-task .phase{font-size:11px;color:var(--primary)}
+  table.qtable .q-task .err{font-size:11px;color:var(--red)}
+
+  .q-kind{display:inline-block;font-size:10px;padding:0 4px;border-radius:3px;margin-right:4px;line-height:1.4;vertical-align:1px}
+  .q-kind.detect{background:var(--gold-soft);color:var(--gold-text)}
+  .q-kind.apply{background:var(--primary-soft);color:var(--primary)}
+  .q-kind.restore{background:var(--amber-soft);color:var(--amber)}
+
+  .q-col-op{text-align:right;white-space:nowrap;display:flex;align-items:center;justify-content:flex-end;gap:4px}
+  .q-col-op .lbl{color:var(--text-3);font-weight:500}
+
+  .q-scroll{width:18px;height:18px;padding:0;border:1px solid var(--border-strong);border-radius:3px;background:#fff;color:var(--text-2);cursor:pointer;font-size:10px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+  .q-scroll:hover{background:#f0f2f5;color:var(--text)}
+  .q-scroll:active{transform:translateY(.5px)}
+
+  .qstatus{display:inline-flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap}
+  .qstatus .dot{width:6px;height:6px;box-shadow:none}
+  .qstatus.waiting{color:var(--text-3)}
+  .qstatus.running{color:var(--primary)}
+  .qstatus.done{color:var(--green)}
+  .qstatus.failed{color:var(--red)}
+  .qstatus.skipped{color:var(--text-3)}
+  .qstatus.rolledback{color:var(--amber)}
+  .qstatus.cancelled{color:var(--text-3)}
+  .qstatus.restoring{color:var(--primary)}
+  .qstatus.restored{color:var(--amber)}
+  .qstatus.detecting{color:var(--gold)}
+  .qstatus.detected{color:var(--green)}
+  .qstatus.detect-failed{color:var(--red)}
+  .qstatus.running .dot,.qstatus.restoring .dot,.qstatus.detecting .dot{animation:pulse 1.1s ease-in-out infinite}
+
+  .q-act{height:22px;padding:0 9px;font-size:11px;border-radius:4px;border:1px solid var(--border-strong);background:#fff;color:var(--text-2);cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+  .q-act:hover{background:#f5f6f8}
+  .q-act.retry{color:var(--primary);border-color:#c9d8fb}
+  .q-act.retry:hover{background:var(--primary-soft)}
+  .q-act.restore{color:var(--amber);border-color:#f0d8b0}
+  .q-act.restore:hover{background:var(--amber-soft)}
+
+  .statusbar{height:28px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:#fbfcfd;border-top:1px solid var(--border);font-size:11.5px;color:var(--text-3)}
+  .statusbar .item{display:flex;align-items:center;gap:6px}
+  .statusbar .item b{color:var(--text-2);font-weight:500}
+  .statusbar .spacer{flex:1}
+  .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+
+  .modal-mask{position:fixed;inset:0;background:rgba(15,23,42,.4);display:none;align-items:center;justify-content:center;z-index:60;animation:fadeIn .15s ease}
+  .modal-mask.show{display:flex}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  .modal{background:#fff;border-radius:12px;box-shadow:0 12px 32px rgba(16,24,40,.14);width:420px;max-width:calc(100vw - 40px);overflow:hidden;animation:popIn .18s ease}
+  @keyframes popIn{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
+  .modal-head{padding:18px 20px 0}
+  .modal-head h3{margin:0 0 6px;font-size:15px;font-weight:600}
+  .modal-body{padding:6px 20px 4px;color:var(--text-2);font-size:13px;line-height:1.6;max-height:50vh;overflow-y:auto}
+  .modal-body .warn-line{color:var(--red);font-weight:500;margin-top:8px}
+  .modal-foot{padding:16px 20px 18px;display:flex;justify-content:flex-end;gap:8px}
+  .modal-foot .btn{height:32px}
+
+  .settings-mask{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:70;animation:fadeIn .15s ease}
+  .settings-mask.show{display:flex}
+  .settings-panel{width:780px;height:580px;max-width:calc(100vw - 40px);max-height:calc(100vh - 60px);background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(16,24,40,.25);display:flex;flex-direction:column;animation:popIn .2s ease}
+  .settings-head{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--border);flex:none}
+  .settings-head h2{margin:0;font-size:16px;font-weight:600}
+  .settings-head .sub{font-size:12px;color:var(--text-3)}
+  .settings-head .spacer{flex:1}
+  .settings-head .close-btn{width:28px;height:28px;border-radius:6px;border:none;background:transparent;color:var(--text-3);cursor:pointer;font-size:18px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+  .settings-head .close-btn:hover{background:#f0f2f5;color:var(--text)}
+  .settings-body{flex:1;min-height:0;display:flex}
+  .settings-nav{width:168px;flex:none;background:#fafbfc;border-right:1px solid var(--border);padding:10px 8px;overflow-y:auto}
+  .nav-group{padding:8px 10px 4px;font-size:11px;color:var(--text-3);font-weight:500;letter-spacing:.3px}
+  .nav-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text-2);position:relative;transition:background .12s,color .12s;user-select:none}
+  .nav-item:hover{background:#eef1f6}
+  .nav-item.active{background:var(--primary-soft);color:var(--primary);font-weight:500}
+  .nav-item.active::before{content:"";position:absolute;left:-8px;top:8px;bottom:8px;width:3px;border-radius:0 2px 2px 0;background:var(--primary)}
+  .nav-item .ico{width:16px;text-align:center;font-size:13px;flex:none}
+  .nav-item .badge-dot{width:6px;height:6px;border-radius:50%;background:var(--red);margin-left:auto;flex:none}
+  .settings-content{flex:1;min-width:0;overflow-y:auto;padding:20px 24px}
+  .settings-pane{display:none}
+  .settings-pane.active{display:block}
+  .pane-title{margin:0 0 4px;font-size:15px;font-weight:600}
+  .pane-title.mt{margin-top:28px;padding-top:20px;border-top:1px solid var(--border)}
+  .pane-desc{margin:0 0 18px;font-size:12.5px;color:var(--text-3);line-height:1.5}
+  .set-card{border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:#fff;transition:border-color .12s,opacity .12s}
+  .set-card:last-child{margin-bottom:0}
+  .set-card:hover{border-color:#d6dbe3}
+  .set-card.disabled{opacity:.55;background:#fbfcfd}
+  .set-card-title{display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:13px;font-weight:600;color:var(--text)}
+  .set-card-title .ico{font-size:14px;color:var(--primary)}
+  .set-card-desc{margin:0 0 12px;font-size:12px;color:var(--text-3);line-height:1.5}
+  .set-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden;background:#fff;flex:none}
+  .seg button{border:none;background:transparent;height:28px;padding:0 12px;font-size:12px;color:var(--text-2);cursor:pointer;border-right:1px solid var(--border);transition:background .12s,color .12s}
+  .seg button:last-child{border-right:none}
+  .seg button:hover{background:#f5f6f8}
+  .seg button.active{background:var(--primary);color:#fff}
+  .switch{position:relative;display:inline-block;width:36px;height:20px;flex:none}
+  .switch input{opacity:0;width:0;height:0}
+  .switch .slider{position:absolute;cursor:pointer;inset:0;background:#cbd5e1;border-radius:20px;transition:.2s}
+  .switch .slider::before{content:"";position:absolute;height:16px;width:16px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .switch input:checked + .slider{background:var(--primary)}
+  .switch input:checked + .slider::before{transform:translateX(16px)}
+  .switch input:disabled + .slider{opacity:.45;cursor:not-allowed}
+  .sel{padding:5px 8px;border-radius:5px;border:1px solid var(--border-strong);background:#fff;outline:none;font-size:12.5px;cursor:pointer;min-width:140px}
+  .sel:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  .ver-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-radius:6px;overflow:hidden;margin-bottom:14px}
+  .ver-block{background:#fff;padding:12px 14px}
+  .ver-label{font-size:11px;color:var(--text-3);margin-bottom:4px}
+  .ver-value{font-size:15px;font-weight:600;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--text)}
+  .ver-value.latest-ok{color:var(--green)}
+  .ver-value.latest-new{color:var(--primary)}
+  .update-action{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .update-status{font-size:12px;color:var(--text-3)}
+  .update-status.ok{color:var(--green)}
+  .update-status.has-new{color:var(--primary)}
+  .update-status.err{color:var(--red)}
+  .changelog{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--text-2);line-height:1.8}
+  .changelog li::marker{color:var(--primary)}
+  .dl-area{margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)}
+  .dl-progress{display:none;margin-top:10px}
+  .dl-progress.show{display:block}
+  .dl-bar{height:6px;background:#eef1f6;border-radius:3px;overflow:hidden;margin-bottom:6px}
+  .dl-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#2563eb,#0ea5a4);border-radius:3px;transition:width .2s ease}
+  .dl-text{font-size:11.5px;color:var(--text-3);display:flex;justify-content:space-between}
+  .ver-history{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+  .ver-h-item{display:flex;align-items:flex-start;gap:10px;font-size:12.5px;padding:6px 0;border-bottom:1px dashed #f0f2f5}
+  .ver-h-item:last-child{border-bottom:none}
+  .ver-h-tag{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;background:#eef1f6;color:var(--text-2);padding:2px 7px;border-radius:4px;flex:none}
+  .ver-h-tag.current{background:var(--primary-soft);color:var(--primary)}
+  .ver-h-date{color:var(--text-3);font-size:11.5px;flex:none;width:88px}
+  .ver-h-desc{color:var(--text-2);line-height:1.5}
+  .about-hero{display:flex;gap:16px;align-items:center;padding:6px 0 16px}
+  .about-logo-lg{width:60px;height:60px;border-radius:16px;flex:none;background:linear-gradient(135deg,#2563eb,#0ea5a4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:20px;box-shadow:0 6px 16px rgba(37,99,235,.25)}
+  .about-hero-info{flex:1}
+  .about-hero-info h3{margin:0 0 4px;font-size:16px;font-weight:600}
+  .about-hero-info p{margin:0;font-size:12.5px;color:var(--text-3)}
+  .about-links{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .settings-foot{flex:none;display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border);background:#fbfcfd}
+  .settings-foot .btn{height:32px;min-width:76px;justify-content:center}
+
+  /* 设置中心 → 外观 → 主题平铺网格（需求②）：
+     · 独立滚动（max-height + overflow-y:auto），不用打开弹窗；
+     · 每张卡片点一下即时换肤，无需「选择主题…」按钮。 */
+  .settings-theme-grid{
+    margin-top:12px;
+    padding:8px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    background:var(--bg);
+    max-height:340px;
+    overflow-y:auto;
+    grid-template-columns:repeat(auto-fill,minmax(min(100%,160px),1fr));
+    gap:10px;
+  }
+  .settings-theme-grid .theme-card{padding:10px}
+
+  #toast{position:fixed;left:50%;bottom:48px;transform:translate(-50%,12px);background:#1f2430;color:#fff;padding:9px 16px;border-radius:7px;font-size:12.5px;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:99;box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:70vw;text-align:center}
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#d4d9e1;border-radius:6px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#bcc3ce;background-clip:content-box}
+
+  .skeleton{display:inline-block;height:12px;width:60px;background:linear-gradient(90deg,#eef1f6 25%,#e1e6ee 37%,#eef1f6 63%);background-size:400% 100%;border-radius:4px;animation:shimmer 1.2s ease-in-out infinite}
+  @keyframes shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+    }
+  }
+  body.reduce-motion .dot.pending,
+  body.reduce-motion .qstatus.running .dot,
+  body.reduce-motion .qstatus.restoring .dot,
+  body.reduce-motion .qstatus.detecting .dot,
+  body.reduce-motion .q-current .spin,
+  body.reduce-motion .skeleton,
+  body.reduce-motion .node.cat.has-detecting::after,
+  body.reduce-motion .node.cat.has-applying::after{animation:none !important}
+  body.reduce-motion .dot.pending{background:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  body.reduce-motion .q-current .spin{border-top-color:var(--primary)}
+
+  /* ===== 主题：6 套配色照 ~/phpo 那份原型搬过来（只新增这一整块，上面浅色的一个字符没动）。
+     做法：给 <html> 挂 data-theme，每套主题整块覆盖同一批颜色变量。
+     下面每条点名规则前面都带 html[data-theme]:not([data-theme="light"])，比原规则更具体，所以盖得住，原规则不用改。
+     晨光白（light）就是本文件原来的浅色，一个值都没改，所以它不参与任何覆盖。
+     托盘胶囊和主题弹窗是新组件，浅色也要用，所以先把它们要的变量按浅色的值垫在 html 上，其余五套再各自覆盖。 */
+  html{--ctl:#fff;--hov:#f5f6f8;--hov2:#eef1f5;--band:#f0f2f5;--line-a:#c9d9f4;--line-w:#eddcb8;
+       --line-d:#f2c6c6;--mask:rgba(15,23,42,.4);--toast:#2b3441;--pop:0 12px 32px rgba(16,24,40,.14)}
+  html[data-theme="midnight"]{color-scheme:dark;--bg:#0a0c10; --panel:#11141b; --border:#222835; --border-strong:#3d4757;
+    --text:#e7ecf5; --text-2:#8b95ab; --text-3:#5b6578;
+    --primary:#5b9cff; --primary-soft:rgba(91,156,255,.13);
+    --green:#3dd68c; --green-soft:rgba(61,214,140,.13);
+    --amber:#f5a623; --amber-soft:rgba(245,166,35,.13);
+    --red:#ff5c5c; --red-soft:rgba(255,92,92,.13);
+    --gold:#f5b642; --gold-soft:#2a2213; --gold-soft-2:#241d10; --gold-text:#f0c674;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.45)}
+  html[data-theme="oled"]{color-scheme:dark;--bg:#000; --panel:#08090b; --border:#1a1e26; --border-strong:#333a45;
+    --text:#f5f7fa; --text-2:#98a1b3; --text-3:#5e6776;
+    --primary:#60a5fa; --primary-soft:rgba(96,165,250,.14);
+    --green:#34d399; --green-soft:rgba(52,211,153,.14);
+    --amber:#fbbf24; --amber-soft:rgba(251,191,36,.14);
+    --red:#f87171; --red-soft:rgba(248,113,113,.14);
+    --gold:#fbbf24; --gold-soft:#241d08; --gold-soft-2:#1b1606; --gold-text:#fcd34d;
+    --shadow:0 1px 2px rgba(0,0,0,.7),0 1px 3px rgba(0,0,0,.6)}
+  html[data-theme="forest"]{color-scheme:dark;--bg:#0b1512; --panel:#101d18; --border:#22392f; --border-strong:#3a5a4b;
+    --text:#e3efe9; --text-2:#8aa89a; --text-3:#5a7267;
+    --primary:#4ade80; --primary-soft:rgba(74,222,128,.14);
+    --green:#22c55e; --green-soft:rgba(34,197,94,.14);
+    --amber:#facc15; --amber-soft:rgba(250,204,21,.14);
+    --red:#f87171; --red-soft:rgba(248,113,113,.14);
+    --gold:#facc15; --gold-soft:#232a12; --gold-soft-2:#1d230f; --gold-text:#e7d78f;
+    --shadow:0 1px 2px rgba(0,0,0,.55),0 1px 3px rgba(0,0,0,.5)}
+  html[data-theme="ocean"]{color-scheme:dark;--bg:#080e1a; --panel:#0d1625; --border:#1e3252; --border-strong:#35547e;
+    --text:#e0e8f5; --text-2:#8ba3c7; --text-3:#5a7194;
+    --primary:#38bdf8; --primary-soft:rgba(56,189,248,.14);
+    --green:#2dd4bf; --green-soft:rgba(45,212,191,.14);
+    --amber:#fbbf24; --amber-soft:rgba(251,191,36,.14);
+    --red:#fb7185; --red-soft:rgba(251,113,133,.14);
+    --gold:#fbbf24; --gold-soft:#2a2517; --gold-soft-2:#232013; --gold-text:#f0d494;
+    --shadow:0 1px 2px rgba(0,0,0,.55),0 1px 3px rgba(0,0,0,.5)}
+  html[data-theme="sakura"]{color-scheme:light;--bg:#fdf7f8; --panel:#fff; --border:#f0d8e0; --border-strong:#e0bccb;
+    --text:#3a2530; --text-2:#7a5563; --text-3:#a88793;
+    --primary:#ec4899; --primary-soft:rgba(236,72,153,.10);
+    --green:#059669; --green-soft:rgba(5,150,105,.12);
+    --amber:#d97706; --amber-soft:rgba(217,119,6,.12);
+    --red:#e11d48; --red-soft:rgba(225,29,72,.10);
+    --gold:#d97706; --gold-soft:#fdf1e0; --gold-soft-2:#fef7ec; --gold-text:#92400e;
+    --shadow:0 1px 2px rgba(190,120,150,.10),0 1px 3px rgba(190,120,150,.14)}
+  html[data-theme="midnight"]{--ctl:#171b24; --hov:#1c2130; --hov2:#232838; --band:#1f2430;
+    --line-a:rgba(91,156,255,.35); --line-w:rgba(245,166,35,.34); --line-d:rgba(255,92,92,.34);
+    --mask:rgba(0,0,0,.62); --toast:#1c2130; --pop:0 12px 32px rgba(0,0,0,.55);--on-primary:#0a0c10; --on-green:#0a0c10}
+  html[data-theme="oled"]{--ctl:#0f1115; --hov:#15181f; --hov2:#1c2027; --band:#12151b;
+    --line-a:rgba(96,165,250,.38); --line-w:rgba(251,191,36,.36); --line-d:rgba(248,113,113,.36);
+    --mask:rgba(0,0,0,.8); --toast:#15181f; --pop:0 12px 32px rgba(0,0,0,.85);--on-primary:#000000; --on-green:#000000}
+  html[data-theme="forest"]{--ctl:#15241e; --hov:#1a2c25; --hov2:#213630; --band:#172a22;
+    --line-a:rgba(74,222,128,.32); --line-w:rgba(250,204,21,.32); --line-d:rgba(248,113,113,.32);
+    --mask:rgba(0,10,6,.66); --toast:#1a2c25; --pop:0 12px 32px rgba(0,0,0,.6);--on-primary:#0b1512; --on-green:#0b1512}
+  html[data-theme="ocean"]{--ctl:#122035; --hov:#182a44; --hov2:#1e3453; --band:#152539;
+    --line-a:rgba(56,189,248,.34); --line-w:rgba(251,191,36,.32); --line-d:rgba(251,113,133,.34);
+    --mask:rgba(0,6,18,.66); --toast:#182a44; --pop:0 12px 32px rgba(0,0,0,.6);--on-primary:#080e1a; --on-green:#080e1a}
+  html[data-theme="sakura"]{--ctl:#fff; --hov:#fbeef2; --hov2:#f7e4eb; --band:#f9eff3;
+    --line-a:rgba(236,72,153,.35); --line-w:rgba(217,119,6,.4); --line-d:rgba(225,29,72,.35);
+    --mask:rgba(80,40,60,.35); --toast:#fff; --pop:0 12px 32px rgba(190,120,150,.3);--on-primary:#2a1a22; --on-green:#ffffff}
+  html[data-theme]:not([data-theme="light"]) .update-btn,
+  html[data-theme]:not([data-theme="light"]) .btn:not(.primary):not(.ghost),
+  html[data-theme]:not([data-theme="light"]) .search input,
+  html[data-theme]:not([data-theme="light"]) select.mode,
+  html[data-theme]:not([data-theme="light"]) .sf-btn,
+  html[data-theme]:not([data-theme="light"]) .cb,
+  html[data-theme]:not([data-theme="light"]) .q-scroll,
+  html[data-theme]:not([data-theme="light"]) .q-act,
+  html[data-theme]:not([data-theme="light"]) .seg,
+  html[data-theme]:not([data-theme="light"]) .sel,
+  html[data-theme]:not([data-theme="light"]) .modal,
+  html[data-theme]:not([data-theme="light"]) .settings-panel,
+  html[data-theme]:not([data-theme="light"]) .set-card,
+  html[data-theme]:not([data-theme="light"]) .ver-block{background:var(--ctl)}
+html[data-theme]:not([data-theme="light"]) .update-btn:hover:not(:disabled),
+  html[data-theme]:not([data-theme="light"]) .btn:hover:not(:disabled),
+  html[data-theme]:not([data-theme="light"]) .sf-btn:hover,
+  html[data-theme]:not([data-theme="light"]) .node:hover,
+  html[data-theme]:not([data-theme="light"]) .seg button:hover{background:var(--hov)}
+html[data-theme]:not([data-theme="light"]) .perm,
+  html[data-theme]:not([data-theme="light"]) .btn.ghost:hover:not(:disabled),
+  html[data-theme]:not([data-theme="light"]) .count,
+  html[data-theme]:not([data-theme="light"]) .chip,
+  html[data-theme]:not([data-theme="light"]) .settings-head .close-btn:hover,
+  html[data-theme]:not([data-theme="light"]) .q-scroll:hover{background:var(--hov2)}
+html[data-theme]:not([data-theme="light"]) .detail-empty .big,
+  html[data-theme]:not([data-theme="light"]) .badge.unset,
+  html[data-theme]:not([data-theme="light"]) .score-bar,
+  html[data-theme]:not([data-theme="light"]) .dl-bar,
+  html[data-theme]:not([data-theme="light"]) .ver-h-tag,
+  html[data-theme]:not([data-theme="light"]) .qcount,
+  html[data-theme]:not([data-theme="light"]) .nav-item:hover,
+  html[data-theme]:not([data-theme="light"]) .win-btns span:hover{background:var(--band)}
+html[data-theme]:not([data-theme="light"]) table.cands th,
+  html[data-theme]:not([data-theme="light"]) table.cands tr:hover td,
+  html[data-theme]:not([data-theme="light"]) table.qtable th,
+  html[data-theme]:not([data-theme="light"]) .settings-nav{background:var(--ctl)}
+html[data-theme]:not([data-theme="light"]) .sidebar-footer,
+  html[data-theme]:not([data-theme="light"]) .statusbar,
+  html[data-theme]:not([data-theme="light"]) .set-card.disabled,
+  html[data-theme]:not([data-theme="light"]) .settings-foot{background:var(--band)}
+html[data-theme]:not([data-theme="light"]) .global-progress.show{background:var(--toast)}
+html[data-theme]:not([data-theme="light"]) table.cands tr.current:hover td{background:var(--green-soft)}
+html[data-theme]:not([data-theme="light"]) .banner,
+  html[data-theme]:not([data-theme="light"]) .q-current{border-color:var(--line-a)}
+html[data-theme]:not([data-theme="light"]) .q-act.retry{border-color:var(--line-a)}
+html[data-theme]:not([data-theme="light"]) .btn.btn-sm.restore,
+  html[data-theme]:not([data-theme="light"]) .q-act.restore{border-color:var(--line-w)}
+html[data-theme]:not([data-theme="light"]) .error-box.warn{border-top-color:var(--line-w)}
+html[data-theme]:not([data-theme="light"]) .error-box{border-top-color:var(--line-d)}
+html[data-theme]:not([data-theme="light"]) .q-current.detecting{border-color:var(--line-w)}
+html[data-theme]:not([data-theme="light"]) .cb{border-color:var(--border-strong)}
+html[data-theme]:not([data-theme="light"]) .set-card:hover{border-color:var(--border-strong)}
+html[data-theme]:not([data-theme="light"]) .dot.unset{background:var(--border-strong)}
+html[data-theme]:not([data-theme="light"]) .switch .slider{background:var(--border-strong)}
+html[data-theme]:not([data-theme="light"]) table.cands td,
+  html[data-theme]:not([data-theme="light"]) table.qtable td{border-bottom-color:var(--band)}
+html[data-theme]:not([data-theme="light"]) .ver-h-item{border-bottom-color:var(--hov2)}
+html[data-theme]:not([data-theme="light"]) .banner,
+  html[data-theme]:not([data-theme="light"]) .banner button{color:var(--primary)}
+html[data-theme]:not([data-theme="light"]) .error-box{color:var(--red)}
+html[data-theme]:not([data-theme="light"]) .error-box.warn{color:var(--amber)}
+html[data-theme]:not([data-theme="light"]) .node .name .hl{background:var(--gold);color:var(--bg)}
+html[data-theme]:not([data-theme="light"]) .modal-mask{background:var(--mask)}
+html[data-theme]:not([data-theme="light"]) .settings-mask{background:var(--mask)}
+html[data-theme]:not([data-theme="light"]) .modal{box-shadow:var(--pop)}
+html[data-theme]:not([data-theme="light"]) .settings-panel{box-shadow:var(--pop)}
+html[data-theme]:not([data-theme="light"]) #toast{background:var(--toast);color:var(--text);border:1px solid var(--border-strong)}
+html[data-theme]:not([data-theme="light"]) ::-webkit-scrollbar-thumb{background:var(--border-strong);background-clip:content-box}
+html[data-theme]:not([data-theme="light"]) ::-webkit-scrollbar-thumb:hover{background:var(--hov2);background-clip:content-box}
+html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(90deg,var(--band) 25%,var(--hov2) 37%,var(--band) 63%)}
+  .tray-pill{position:fixed;top:9px;left:50%;transform:translateX(-50%);z-index:55;display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:20px;background:var(--ctl);border:1px solid var(--border);box-shadow:var(--shadow);opacity:.55;transition:opacity .2s ease;font-size:11.5px;color:var(--text-2);cursor:pointer;user-select:none}
+  .tray-pill:hover{opacity:1}
+  .tray-pill .pill-dot{width:8px;height:8px;border-radius:50%;background:var(--primary);flex:none}
+  .tray-pill .pill-dot.running{animation:pulse 1.4s ease-in-out infinite}
+  .tray-pill .pill-label{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .tray-menu{position:fixed;top:44px;left:50%;transform:translateX(-50%);z-index:56;background:var(--ctl);border:1px solid var(--border);border-radius:8px;box-shadow:var(--pop);padding:6px;min-width:220px;display:none}
+  .tray-menu.show{display:block}
+  .theme-dots{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 12px;margin:2px 0;border-radius:6px;background:var(--bg);border:1px solid var(--band)}
+  .theme-dot{width:18px;height:18px;border-radius:50%;padding:0;flex:none;background:var(--dot-accent);border:2px solid var(--dot-bg);box-shadow:0 0 0 1px var(--border-strong);cursor:pointer;transition:transform .13s ease,box-shadow .13s ease}
+  .theme-dot:hover{transform:scale(1.22)}
+  .theme-dot.active{box-shadow:0 0 0 2px var(--primary);transform:scale(1.12)}
+  .tray-menu-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;font-size:12.5px;color:var(--text-2);cursor:pointer;transition:background .13s ease,color .13s ease}
+  .tray-menu-item:hover{background:var(--hov);color:var(--text)}
+  .tray-menu-sep{height:1px;background:var(--band);margin:4px 0}
+  .theme-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr));gap:12px}
+  .theme-card{padding:14px;border-radius:var(--radius);border:2px solid var(--border);background:var(--band);cursor:pointer;transition:border-color .13s ease,transform .13s ease,box-shadow .13s ease;position:relative;overflow:hidden}
+  .theme-card:hover{border-color:var(--primary);transform:translateY(-2px)}
+  .theme-card.selected{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  .theme-card.selected::after{content:'✓';position:absolute;top:8px;right:10px;width:20px;height:20px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
+  .theme-preview{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+  .theme-swatch{height:22px;border-radius:5px;border:1px solid rgba(0,0,0,.12)}
+  .theme-swatch-bg{grid-column:span 2;height:32px;border-radius:6px}
+  .theme-name{font-size:13px;font-weight:600;color:var(--text)}
+  .theme-desc{font-size:11.5px;color:var(--text-3);margin-top:2px}
+  html[data-theme]:not([data-theme="light"]) .btn.primary,
+  html[data-theme]:not([data-theme="light"]) .banner .ico,
+  html[data-theme]:not([data-theme="light"]) .seg button.active,
+  html[data-theme]:not([data-theme="light"]) .theme-card.selected::after{color:var(--on-primary)}
+  html[data-theme]:not([data-theme="light"]) .tag{color:var(--on-green)}
+</style>
+</head>
+<body>
+
+<div class="tray-pill" id="trayPill" title="托盘图标（演示）">
+  <span class="pill-dot running" id="pillDot"></span>
+  <span class="pill-label" id="pillLabel">GitHub 加速助手</span>
+</div>
+<div class="tray-menu" id="trayMenu">
+  <div class="theme-dots" id="trayDots"></div>
+  <div class="tray-menu-sep"></div>
+  <div class="tray-menu-item" data-action="minimize"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 19h12"/><path d="M4 5h16v10H4z"/></svg>最小化到托盘</div>
+  <div class="tray-menu-item" data-action="quit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>退出</div>
+</div>
+
+<div class="app">
+  <div class="topbar">
+    <div class="logo">GH</div>
+    <h1>GitHub 加速助手</h1>
+    <div class="spacer"></div>
+    <div class="perm warn" id="permBadge" title="网页原型未连接系统权限检测">
+      <span class="dot"></span>权限未检测（原型）
+    </div>
+    <button class="update-btn" id="btnCheckUpdate" title="检查更新">
+      <span class="ico">⟳</span>
+      <span class="lbl">检查更新</span>
+      <span class="upd-dot"></span>
+    </button>
+    <div class="win-btns"><span>—</span><span>□</span><span>×</span></div>
+  </div>
+
+  <div class="banner" id="banner">
+    <span class="ico">i</span>
+    <span>前端交互演示：检测、应用与更新均为模拟，不会联网或修改系统 Hosts。勾选类目后可体验队列流程。</span>
+    <div class="spacer"></div>
+    <button id="bannerClose">知道了</button>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn" id="btnSelectToggle" title="全选 / 全不选（Ctrl+A）">全选</button>
+    <button class="btn" id="btnInvert">反选</button>
+    <button class="btn" id="btnFoldToggle" title="折叠 / 展开所有类目">折叠</button>
+    <div class="divider-v"></div>
+    <div class="search"><input id="searchInput" type="text" placeholder="搜索类目、域名或平台"></div>
+    <select class="mode" id="modeSelect">
+      <option value="hosts" selected>模式：Hosts</option>
+      <option value="proxy" disabled>系统代理（未启用）</option>
+      <option value="pac" disabled>PAC（未启用）</option>
+    </select>
+    <!-- 需求④：modeSelect 后新增「打开Hosts」按钮 -->
+    <button class="btn" id="btnOpenHosts" title="打开系统 hosts 文件">打开Hosts</button>
+    <div class="spacer"></div>
+    <button class="btn" id="btnDetectAll">检测全部</button>
+    <button class="btn primary" id="btnApplyQueue">应用队列</button>
+    <button class="btn danger" id="btnRestore">恢复</button>
+    <div class="global-progress" id="globalProgress"><i></i></div>
+  </div>
+
+  <div class="main">
+    <aside class="sidebar" id="sidebar">
+      <div class="tree-scroll" id="tree"></div>
+      <div class="sidebar-footer">
+        <button class="sf-btn" id="btnSyncState" title="根据当前演示数据重新计算状态；不会读取系统 Hosts 或后端">
+          <span class="ico">⟳</span>重算演示状态
+        </button>
+        <button class="sf-btn" id="btnSettings" title="打开设置中心">
+          <span class="ico">⚙</span>设置中心
+        </button>
+      </div>
+    </aside>
+
+    <div class="sidebar-resizer" id="sidebarResizer" title="拖动调整主菜单宽度"></div>
+
+    <div class="right">
+      <div class="detail" id="detail"></div>
+
+      <div class="resizer" id="queueResizer" title="拖动调整队列高度"></div>
+
+      <div class="queue" id="queuePanel">
+        <div class="queue-head">
+          <h3>队列 <span class="qcount" id="queueCount">0</span></h3>
+          <span class="qsummary" id="queueSummary"></span>
+          <span class="q-current" id="queueCurrent" title=""></span>
+          <div class="spacer"></div>
+          <button class="btn" id="btnPause" disabled>暂停队列</button>
+          <button class="btn" id="btnCancel" disabled>取消等待</button>
+          <button class="btn" id="btnClearDone" disabled>清空已完成</button>
+          <button class="btn danger" id="btnClearQueue" disabled>清空队列</button>
+          <button class="btn" id="btnRetryFailed" disabled>重试失败</button>
+          <button class="btn toggle-btn" id="btnToggleQueue" title="收起/展开队列">▾</button>
+        </div>
+        <div class="queue-list" id="queueList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <div class="item"><span class="live-dot" style="background:var(--amber)"></span>前端演示（未连接网络 / 系统 Hosts）</div>
+    <div class="item" id="startupStatus" style="display:none">
+      <span class="live-dot" style="background:var(--gold)"></span><b>启动自动化中</b>
+    </div>
+    <div class="item">模式 <b>Hosts</b></div>
+    <div class="item">DNS <b id="dnsService">未连接（原型）</b></div>
+    <div class="item">上次检测 <b id="lastDetect">—</b></div>
+    <div class="spacer"></div>
+    <div class="item" id="selectionInfo">已选 <b>0</b> / 0 项</div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modalMask">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head"><h3 id="modalTitle">确认操作</h3></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot">
+      <button class="btn" id="modalCancel">取消</button>
+      <button class="btn primary" id="modalConfirm">确认</button>
+    </div>
+  </div>
+</div>
+
+<div class="settings-mask" id="settingsMask">
+  <div class="settings-panel" role="dialog" aria-modal="true">
+    <div class="settings-head">
+      <h2>设置中心</h2>
+      <span class="sub" id="settingsSub">调整应用偏好与版本</span>
+      <div class="spacer"></div>
+      <button class="close-btn" id="settingsClose" title="关闭">×</button>
+    </div>
+
+    <div class="settings-body">
+      <nav class="settings-nav" id="settingsNav">
+        <div class="nav-group">偏好</div>
+        <div class="nav-item active" data-pane="layout"><span class="ico">▦</span>布局</div>
+        <div class="nav-item" data-pane="zoom"><span class="ico">⤢</span>界面缩放</div>
+        <div class="nav-item" data-pane="appearance"><span class="ico">◐</span>外观</div>
+        <div class="nav-item" data-pane="tray"><span class="ico">▣</span>托盘</div>
+        <div class="nav-item" data-pane="startup"><span class="ico">▶</span>开机自启动</div>
+        <div class="nav-group" style="margin-top:8px">信息</div>
+        <div class="nav-item" data-pane="update"><span class="ico">⭯</span>检测升级<span class="badge-dot" id="navUpdateDot" style="display:none"></span></div>
+        <div class="nav-item" data-pane="about"><span class="ico">ⓘ</span>关于我们</div>
+      </nav>
+
+      <div class="settings-content" id="settingsContent">
+        <section class="settings-pane active" data-pane="layout">
+          <h3 class="pane-title">布局</h3>
+          <p class="pane-desc">调整主界面主要区域的尺寸。拖动主界面边缘也可以直接调整，两者会同步。</p>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">▤</span>主菜单宽度</div>
+            <p class="set-card-desc">左侧类目树的宽度，范围 200–600 px。拖动侧栏右边缘也可以调整。</p>
+            <div class="set-row">
+              <div class="seg" id="segSidebar">
+                <button data-w="240">窄</button>
+                <button data-w="340">标准</button>
+                <button data-w="480">宽</button>
+              </div>
+              <span class="update-status" id="sidebarWidthLabel">240 px</span>
+            </div>
+          </div>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">▥</span>队列高度</div>
+            <p class="set-card-desc">底部任务队列面板的高度。拖动队列顶部的横条也可以调整。</p>
+            <div class="set-row">
+              <div class="seg" id="segQueue">
+                <button data-h="180">小</button>
+                <button data-h="252">中</button>
+                <button data-h="360">大</button>
+              </div>
+              <span class="update-status" id="queueHeightLabel">252 px</span>
+            </div>
+          </div>
+
+          <h3 class="pane-title mt">检测与应用</h3>
+          <p class="pane-desc">控制执行检测或应用时，主菜单是否自动展开当前项所在类目。</p>
+
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">◎</span>检测时焦点跟随</div>
+            <p class="set-card-desc">
+              开启后，点击「检测全部」时会自动收起其他类目，只展开当前正在检测的项所在类目；
+              检测完成后恢复检测前的折叠状态。
+              关闭时保持用户当前的折叠状态不变，仅通过金色高亮提示当前检测项。
+            </p>
+            <div class="set-row">
+              <label class="switch">
+                <input type="checkbox" id="chkDetectFocusFollow">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">◎</span>应用时焦点跟随</div>
+            <p class="set-card-desc">
+              开启后，点击「应用队列」时会自动收起其他类目，只展开当前正在应用的项所在类目；
+              应用完成后恢复应用前的折叠状态。
+              关闭时保持用户当前的折叠状态不变，仅通过蓝色高亮提示当前应用项。
+            </p>
+            <div class="set-row">
+              <label class="switch">
+                <input type="checkbox" id="chkApplyFocusFollow">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-pane" data-pane="zoom">
+          <h3 class="pane-title">界面缩放</h3>
+          <p class="pane-desc">整体缩放比例，影响所有文字与控件。高 DPI 屏幕建议 110%–125%。</p>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">⤢</span>缩放比例</div>
+            <p class="set-card-desc">通过 CSS zoom 实现，仅本机生效。如需更精细的缩放，可在操作系统层面调整显示比例。</p>
+            <div class="set-row">
+              <div class="seg" id="segZoom">
+                <button data-z="0.9">90%</button>
+                <button data-z="1">100%</button>
+                <button data-z="1.1">110%</button>
+                <button data-z="1.25">125%</button>
+              </div>
+              <span class="update-status" id="zoomLabel">100%</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-pane" data-pane="appearance">
+          <h3 class="pane-title">外观</h3>
+          <p class="pane-desc">主题点一下就换；繁体中文选项已预留，界面翻译将在后续版本补齐。</p>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">◐</span>语言</div>
+            <p class="set-card-desc">可选择简体中文或繁体中文。繁体中文界面翻译尚未完成，当前界面文案仍为简体中文。</p>
+            <div class="set-row">
+              <select class="sel" id="selLanguage">
+                <option value="zh-CN">简体中文</option>
+                <option value="zh-TW">繁体中文</option>
+              </select>
+            </div>
+          </div>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">◑</span>主题</div>
+            <p class="set-card-desc">一共 6 套配色：晨光白、樱花粉、森林绿、深海蓝、午夜蓝、极夜黑。点下方任意卡片立即切换，不用重启。</p>
+            <div class="set-row">
+              <span class="update-status" id="themeName">当前：晨光白</span>
+            </div>
+            <!-- 需求②：去掉「选择主题…」按钮，改为平铺卡片（可向下滚动选择） -->
+            <div class="theme-grid settings-theme-grid" id="settingsThemeGrid"></div>
+          </div>
+        </section>
+
+        <section class="settings-pane" data-pane="tray">
+          <h3 class="pane-title">托盘</h3>
+          <p class="pane-desc">系统托盘区的显示与窗口关闭行为。</p>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">▣</span>关闭窗口时最小化到托盘</div>
+            <p class="set-card-desc">点击窗口关闭按钮时隐藏到系统托盘，不退出程序。只有通过托盘菜单「退出」才真正退出。</p>
+            <div class="set-row">
+              <label class="switch"><input type="checkbox" id="chkTrayMinimize" checked><span class="slider"></span></label>
+            </div>
+          </div>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">▤</span>显示托盘图标</div>
+            <p class="set-card-desc">在系统托盘区显示图标，右键可快速访问常用操作。</p>
+            <div class="set-row">
+              <label class="switch"><input type="checkbox" id="chkShowTrayIcon" checked><span class="slider"></span></label>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-pane" data-pane="startup">
+          <h3 class="pane-title">开机自启动</h3>
+          <p class="pane-desc">系统登录后自动拉起后台 daemon，让 GitHub 加速始终生效。</p>
+
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">▶</span>登录时自动启动</div>
+            <!-- 需求①：默认关闭（移除了 checked）；同时补 Mac 支持说明 -->
+            <p class="set-card-desc">在用户登录后通过计划任务（Windows）、LaunchAgent（macOS）或 systemd（Linux）自动启动后台服务。</p>
+            <div class="set-row">
+              <label class="switch"><input type="checkbox" id="chkAutoStart"><span class="slider"></span></label>
+            </div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">▾</span>启动后最小化</div>
+            <p class="set-card-desc">自启动时隐藏主窗口，只在托盘显示，避免每次登录都弹窗。</p>
+            <div class="set-row">
+              <label class="switch"><input type="checkbox" id="chkStartMinimized"><span class="slider"></span></label>
+            </div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">◎</span>自动检测已选</div>
+            <p class="set-card-desc">
+              应用启动后，自动对所有已勾选的项执行一次检测。
+              没有勾选项时跳过本次自动化。
+              检测过程中的焦点跟随由「检测时焦点跟随」开关决定。
+            </p>
+            <div class="set-row">
+              <!-- 需求①：默认关闭（移除了 checked） -->
+              <label class="switch">
+                <input type="checkbox" id="chkAutoDetectOnStartup">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="set-card disabled" id="cardAutoApplyOnStartup">
+            <div class="set-card-title"><span class="ico">◎</span>自动应用队列</div>
+            <p class="set-card-desc">
+              检测完成后，自动把检测成功的项加入应用队列并执行。
+              <b>依赖「自动检测已选」</b>，未开启检测时此项不可用。
+              检测失败或没有可用 IP 的项会自动跳过。
+            </p>
+            <div class="set-row">
+              <!-- 需求①：默认关闭（移除了 checked，且默认 disabled 由 JS 联动） -->
+              <label class="switch">
+                <input type="checkbox" id="chkAutoApplyOnStartup" disabled>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-pane" data-pane="update">
+          <h3 class="pane-title">检测升级</h3>
+          <p class="pane-desc">检查是否有新版本可用。检查过程不会影响正在运行的加速任务。</p>
+          <div class="set-card">
+            <div class="ver-grid">
+              <div class="ver-block"><div class="ver-label">当前版本</div><div class="ver-value" id="curVer">v1.0.0</div></div>
+              <div class="ver-block"><div class="ver-label">构建日期</div><div class="ver-value" style="font-size:13px;font-weight:500">2026-10-18</div></div>
+              <div class="ver-block"><div class="ver-label">最新版本</div><div class="ver-value" id="latestVer">—</div></div>
+            </div>
+            <div class="update-action">
+              <button class="btn primary" id="btnCheckUpdateInSettings">检查更新</button>
+              <span class="update-status" id="updateStatus">尚未检查</span>
+            </div>
+          </div>
+          <div class="set-card" id="updateDetailCard" style="display:none">
+            <div class="set-card-title"><span class="ico">✦</span>本次更新内容</div>
+            <ul class="changelog" id="changelog"></ul>
+            <div class="dl-area">
+              <div class="set-row">
+                <span class="update-status" id="dlHint">更新包大小约 28 MB，预计 1 分钟</span>
+                <button class="btn primary" id="btnDownload">立即更新</button>
+              </div>
+              <div class="dl-progress" id="dlProgress">
+                <div class="dl-bar"><i></i></div>
+                <div class="dl-text"><span id="dlPct">0%</span><span id="dlSpeed">—</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">▤</span>版本历史</div>
+            <div class="ver-history">
+              <div class="ver-h-item"><span class="ver-h-tag current">v1.0.0</span><span class="ver-h-date">2026-10-18</span><span class="ver-h-desc">首个稳定版本：Hosts 模式、候选 IP 测速、队列应用与恢复。</span></div>
+              <div class="ver-h-item"><span class="ver-h-tag">v0.9.0</span><span class="ver-h-date">2026-09-20</span><span class="ver-h-desc">Beta 版本：完成队列引擎与失败回滚机制。</span></div>
+              <div class="ver-h-item"><span class="ver-h-tag">v0.5.0</span><span class="ver-h-date">2026-08-15</span><span class="ver-h-desc">Alpha 版本：打通 DoH 查询与 TCP 测速核心链路。</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-pane" data-pane="about">
+          <h3 class="pane-title">关于我们</h3>
+          <p class="pane-desc">应用信息与反馈入口。</p>
+          <div class="set-card">
+            <div class="about-hero">
+              <div class="about-logo-lg">GH</div>
+              <div class="about-hero-info">
+                <h3>GitHub 加速助手</h3>
+                <p>让 GitHub 访问更稳定、更快速。开源、跨平台、无侵入。</p>
+                <div class="about-links">
+                  <button class="btn ghost" id="btnOpenRepo">项目主页</button>
+                  <button class="btn ghost" id="btnFeedback">反馈问题</button>
+                  <button class="btn ghost" id="btnLicense">许可协议</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">ⓘ</span>版本信息</div>
+            <div class="set-row" style="padding:4px 0"><span style="color:var(--text-2)">当前版本</span><b style="font-family:ui-monospace,monospace">v1.0.0</b></div>
+            <div class="set-row" style="padding:4px 0"><span style="color:var(--text-2)">构建日期</span><b style="font-family:ui-monospace,monospace">2026-10-18</b></div>
+            <div class="set-row" style="padding:4px 0"><span style="color:var(--text-2)">许可协议</span><b>CC BY-SA 4.0</b></div>
+            <div class="set-row" style="padding:4px 0"><span style="color:var(--text-2)">数据目录</span><code style="font-size:11.5px;color:var(--text-2)">~/.config/github-net</code></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="settings-foot">
+      <button class="btn" id="settingsCancel">取消</button>
+      <button class="btn primary" id="settingsSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ============================================================================
+ * 数据结构
+ * ============================================================================ */
+
+const CATEGORY_DEFS = [
+  { id:'github', name:'GitHub', items:[
+    { id:'gh-main', name:'主站与 API', domains:['github.com','api.github.com','gist.github.com'], init:'applied' },
+    { id:'gh-raw', name:'Raw 文件', domains:['raw.githubusercontent.com'], init:'applied' },
+    { id:'gh-rel', name:'Release 资产', domains:['objects.githubusercontent.com'], init:'stale' },
+    { id:'gh-img', name:'图片与头像', domains:['avatars.githubusercontent.com','user-images.githubusercontent.com'], init:'applied' },
+    { id:'gh-cdn', name:'静态资源 CDN', domains:['github.githubassets.com','github.global.ssl.fastly.net'], init:'applied' },
+    { id:'gh-pages', name:'GitHub Pages', domains:['pages.github.com'], init:'unset' },
+    { id:'gh-gist', name:'Gist', domains:['gist.githubusercontent.com'], init:'unset' },
+    { id:'gh-act', name:'Actions', domains:['pipelines.actions.githubusercontent.com'], init:'unset' }
+  ]},
+  { id:'jetbrains', name:'JetBrains', items:[
+    { id:'jb-plug', name:'插件市场', domains:['plugins.jetbrains.com','downloads.marketplace.jetbrains.com'], init:'unset' },
+    { id:'jb-ide', name:'IDE 下载', domains:['download.jetbrains.com','download-cdn.jetbrains.com'], init:'unset' },
+    { id:'jb-acc', name:'账号验证', domains:['account.jetbrains.com'], init:'unset' },
+    { id:'jb-tool', name:'Toolbox', domains:['toolbox.jetbrains.com'], init:'unset' },
+    { id:'jb-res', name:'文档与资源', domains:['resources.jetbrains.com','www.jetbrains.com'], init:'unset' },
+    { id:'jb-upd', name:'更新检查', domains:['updates.jetbrains.com'], init:'unset' }
+  ]},
+  { id:'ai', name:'AI 开发工具', items:[
+    { id:'ai-cursor', name:'Cursor', domains:['cursor.com','cursorapi.com','cursor-cdn.com'], init:'unset' },
+    { id:'ai-windsurf', name:'Windsurf', domains:['windsurf.com','codeium.com'], init:'unset' },
+    { id:'ai-copilot', name:'GitHub Copilot', domains:['api.individual.githubcopilot.com'], init:'unset' },
+    { id:'ai-trae', name:'Trae', domains:['trae.ai','trae-api.com'], init:'unset' },
+    { id:'ai-gemini', name:'Gemini', domains:['daily-cloudcode-pa.googleapis.com'], init:'unset' },
+    { id:'ai-claude', name:'Claude / MCP', domains:['api.anthropic.com'], init:'unset' }
+  ]},
+  { id:'steam', name:'Steam', items:[
+    { id:'st-store', name:'商店', domains:['store.steampowered.com'], init:'applied' },
+    { id:'st-comm', name:'社区', domains:['steamcommunity.com'], init:'error' },
+    { id:'st-cdn', name:'CDN', domains:['cdn.steampowered.com'], init:'applied' },
+    { id:'st-dl', name:'下载节点', domains:['ext1-hkg1.steamserver.net'], init:'stale' },
+    { id:'st-img', name:'图片与头像', domains:['avatars.steamstatic.com'], init:'unset' }
+  ]},
+  { id:'gameplat', name:'游戏平台', items:[
+    { id:'gp-epic', name:'Epic Games', domains:['download.epicgames.com'], init:'unset' },
+    { id:'gp-ea', name:'EA / Origin', domains:['origin.com','akamai.cdn.ea.com'], init:'unset' },
+    { id:'gp-bnet', name:'Battle.net', domains:['battle.net'], init:'unset' },
+    { id:'gp-ubi', name:'Ubisoft Connect', domains:['ubisoft.com','uplay.com'], init:'unset' },
+    { id:'gp-riot', name:'Riot Games', domains:['riotgames.com'], init:'unset' },
+    { id:'gp-gog', name:'GOG', domains:['gog.com'], init:'unset' }
+  ]},
+  { id:'gamespec', name:'特定游戏专项', items:[
+    { id:'gs-pubg', name:'绝地求生', domains:['pubg.com'], init:'unset' },
+    { id:'gs-bf', name:'战地系列', domains:['battlefield.com','ea.com'], init:'unset' },
+    { id:'gs-r6', name:'彩虹六号', domains:['ubisoft.com'], init:'unset' },
+    { id:'gs-ff14', name:'FF14 国际版', domains:['finalfantasyxiv.com'], init:'unset' },
+    { id:'gs-tark', name:'逃离塔科夫', domains:['escapefromtarkov.com'], init:'unset' },
+    { id:'gs-gta', name:'GTA V', domains:['rockstargames.com'], init:'unset' }
+  ]},
+  { id:'cdn', name:'公共 CDN', items:[
+    { id:'cdn-jsdelivr', name:'jsDelivr', domains:['cdn.jsdelivr.net'], init:'unset' },
+    { id:'cdn-unpkg', name:'unpkg', domains:['unpkg.com'], init:'unset' },
+    { id:'cdn-cdnjs', name:'cdnjs', domains:['cdnjs.cloudflare.com'], init:'unset' },
+    { id:'cdn-gfonts', name:'Google Fonts', domains:['fonts.googleapis.com','fonts.gstatic.com'], init:'unset' },
+    { id:'cdn-bootstrap', name:'Bootstrap', domains:['stackpath.bootstrapcdn.com'], init:'unset' }
+  ]},
+  { id:'ms', name:'微软 / Xbox', items:[
+    { id:'ms-store', name:'Microsoft Store', domains:['storeedgefd.dsx.mp.microsoft.com'], init:'unset' },
+    { id:'ms-xbox', name:'Xbox Live', domains:['xboxlive.com'], init:'unset' },
+    { id:'ms-winup', name:'Windows Update', domains:['update.microsoft.com'], init:'unset' },
+    { id:'ms-office', name:'Office', domains:['officeapps.live.com'], init:'unset' }
+  ]},
+  { id:'coursera', name:'Coursera', items:[
+    { id:'co-video', name:'视频 CDN', domains:['d3c33hcgiwev3.cloudfront.net'], init:'unset' },
+    { id:'co-main', name:'主站资源', domains:['d1a3f4spazzrp4.cloudfront.net'], init:'unset' }
+  ]},
+  { id:'block', name:'去广告与屏蔽', items:[
+    { id:'bl-antiad', name:'anti-AD', domains:['anti-ad.net'], init:'unset' },
+    { id:'bl-adrules', name:'AdRules', domains:['adrules.top'], init:'unset' },
+    { id:'bl-steven', name:'StevenBlack', domains:['raw.githubusercontent.com/StevenBlack/hosts'], init:'unset' }
+  ]},
+  { id:'custom', name:'自定义 / 订阅源', items:[
+    { id:'cu-manual', name:'手动映射', domains:['自定义域名'], init:'unset' },
+    { id:'cu-gh520', name:'GitHub520', domains:['raw.hellogithub.com'], init:'unset' },
+    { id:'cu-china', name:'china-hosts', domains:['github.com/zhouzhehong/china-hosts-accelerator'], init:'unset' }
+  ]}
+];
+
+const ItemMeta = {
+  unset:      { text:'未替换', dot:'unset',    badge:'unset' },
+  detecting:  { text:'检测中', dot:'pending',  badge:'pending' },
+  detected:   { text:'待应用', dot:'detected', badge:'detected' },
+  applying:   { text:'应用中', dot:'pending',  badge:'pending' },
+  applied:    { text:'已替换', dot:'applied',  badge:'applied' },
+  stale:      { text:'待更新', dot:'stale',    badge:'stale' },
+  error:      { text:'异常',   dot:'error',    badge:'error' },
+  rolledback: { text:'已回滚', dot:'error',    badge:'error' }
+};
+
+const TaskMeta = {
+  waiting:    { text:'等待',   cls:'waiting',    dot:'unset' },
+  running:    { text:'执行中', cls:'running',    dot:'pending' },
+  done:       { text:'完成',   cls:'done',       dot:'applied' },
+  failed:     { text:'失败',   cls:'failed',     dot:'error' },
+  skipped:    { text:'跳过',   cls:'skipped',    dot:'unset' },
+  rolledback: { text:'已回滚', cls:'rolledback', dot:'error' },
+  cancelled:  { text:'已取消', cls:'cancelled',  dot:'unset' },
+  restoring:  { text:'恢复中', cls:'restoring',  dot:'pending' },
+  restored:   { text:'已恢复', cls:'restored',   dot:'stale' }
+};
+
+const PHASES = [
+  { key:'backup', text:'备份 hosts…' },
+  { key:'write',  text:'写入域名映射…' },
+  { key:'flush',  text:'刷新 DNS 缓存…' },
+  { key:'verify', text:'验证终端可用性…' }
+];
+const RESTORE_PHASES = [
+  { key:'backup', text:'备份当前 hosts…' },
+  { key:'write',  text:'写回应用前映射…' },
+  { key:'flush',  text:'刷新 DNS 缓存…' },
+  { key:'verify', text:'验证恢复结果…' }
+];
+
+const state = {
+  categories: [],
+  selectedId: null,
+  filter: '',
+  collapsed: new Set(),
+  queue: [],
+  paused: false,
+  queueRunning: false,
+  batchDetecting: false,
+  startupAutomationRunning: false,
+  taskSeq: 0,
+  lastDetect: null,
+  bannerDismissed: false,
+  appStatus: { dnsService: '未连接（原型）' },
+  queueCollapsed: false,
+
+  detectOriginalCollapsed: null,
+  detectCurrentCatId: null,
+  applyOriginalCollapsed: null,
+  applyCurrentCatId: null,
+
+  settings: {
+    sidebarWidth: 240,
+    queueHeight: 252,
+    zoom: 1,
+    language: 'zh-CN',
+    theme: 'light',
+    trayMinimize: true,
+    showTrayIcon: true,
+    /* 需求①：登录时自动启动默认关闭 */
+    autoStart: false,
+    startMinimized: false,
+    detectFocusFollow: false,
+    applyFocusFollow: false,
+    /* 需求①：自动检测 / 自动应用默认关闭 */
+    autoDetectOnStartup: false,
+    autoApplyOnStartup: false
+  },
+  update: {
+    current: 'v1.0.0',
+    latest: null,
+    checking: false,
+    hasUpdate: false,
+    downloading: false,
+    downloaded: false,
+    log: []
+  }
+};
+
+/* ============ 工具函数 ============ */
+function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function randIP(rng){const seg=()=>1+Math.floor(rng()*254);return`${seg()}.${seg()}.${seg()}.${seg()}`;}
+function nowStr(){return new Date().toLocaleTimeString('zh-CN',{hour12:false});}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function escapeRegExp(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+
+/* ============ 数据初始化 ============ */
+function buildData() {
+  state.categories = CATEGORY_DEFS.map(cat => ({
+    id: cat.id, name: cat.name,
+    items: cat.items.map(def => createItem(def))
+  }));
+}
+
+function createItem(def) {
+  const item = {
+    id: def.id, name: def.name, domains: def.domains.slice(),
+    /* 需求⑥：菜单全部默认未选中。
+       def.init 仅用于演示「初始状态 / 已有 IP」，不参与勾选默认值。 */
+    checked: false,
+    status: def.init,
+    appliedIp: null, bestIp: null,
+    prevAppliedIp: undefined,
+    latency: 0, speed: '', score: 0, source: '', lastCheck: '',
+    candidates: [], errorMsg: ''
+  };
+  if (def.init === 'applied' || def.init === 'stale') {
+    generateCandidates(item);
+    const best = item.candidates[0];
+    item.bestIp = best.ip;
+    item.appliedIp = def.init === 'applied' ? best.ip : item.candidates[1].ip;
+    item.latency = best.latency;
+    item.speed = best.speed + ' MB/s';
+    item.score = best.score;
+    item.source = '本地缓存';
+    item.lastCheck = '—';
+  }
+  if (def.init === 'error') {
+    item.errorMsg = 'TLS 握手失败：当前网络对 steamcommunity.com 存在 SNI 阻断，hosts 方案无法绕过。';
+  }
+  return item;
+}
+
+function generateCandidates(item) {
+  const seed = hashStr(item.id) ^ (Date.now() & 0xffff);
+  const rng = mulberry32(seed);
+  const n = 3 + Math.floor(rng() * 3);
+  const list = [];
+  for (let i = 0; i < n; i++) {
+    const latency = 28 + Math.floor(rng() * 175);
+    const speed = +(1 + rng() * 19).toFixed(1);
+    let score = Math.round(100 - latency * 0.26 + speed * 1.3);
+    score = Math.max(40, Math.min(99, score));
+    list.push({ ip: randIP(rng), latency, speed, score });
+  }
+  list.sort((a, b) => b.score - a.score);
+  item.candidates = list;
+}
+
+/* ============ 查询辅助 ============ */
+function allItems() { return state.categories.flatMap(c => c.items); }
+function findItem(id) {
+  for (const c of state.categories) {
+    const it = c.items.find(i => i.id === id);
+    if (it) return it;
+  }
+  return null;
+}
+function findCategoryOfItem(id) {
+  return state.categories.find(c => c.items.some(i => i.id === id)) || null;
+}
+function categoryCheckState(cat) {
+  const total = cat.items.length;
+  const checked = cat.items.filter(i => i.checked).length;
+  if (checked === 0) return 'unchecked';
+  if (checked === total) return 'checked';
+  return 'indeterminate';
+}
+function labelOf(item) {
+  const cat = findCategoryOfItem(item.id);
+  return cat ? `${cat.name} / ${item.name}` : item.name;
+}
+function checkedItems() { return allItems().filter(i => i.checked); }
+function canApply(item) { return !!item.bestIp; }
+function canRestoreHosts(item) { return item && item.prevAppliedIp !== undefined; }
+function hasRestorableInCategory(cat) { return cat.items.some(it => canRestoreHosts(it)); }
+
+/**
+ * 需求⑤配套：判断给定 item 是否就是当前详情面板正在展示的那一项。
+ *   · 有选中项 → 看选中项
+ *   · 无选中项 → 看兜底项 allItems()[0]
+ * 用于决定异步任务推进时，是否要立即刷新详情面板（避免兜底项显示不更新）。
+ */
+function isCurrentlyDisplayed(itemId) {
+  if (state.selectedId) return state.selectedId === itemId;
+  const fallback = allItems()[0];
+  return !!fallback && fallback.id === itemId;
+}
+
+function allCheckedState() {
+  const items = allItems();
+  if (!items.length) return false;
+  return items.every(i => i.checked);
+}
+function allCollapsedState() {
+  const cats = state.categories;
+  if (!cats.length) return false;
+  return cats.every(c => state.collapsed.has(c.id));
+}
+function syncToggleButtons() {
+  const selBtn = document.getElementById('btnSelectToggle');
+  const foldBtn = document.getElementById('btnFoldToggle');
+  if (selBtn) {
+    const isAll = allCheckedState();
+    selBtn.textContent = isAll ? '全不选' : '全选';
+    selBtn.title = isAll ? '取消所有勾选（Ctrl+A）' : '全选所有项（Ctrl+A）';
+  }
+  if (foldBtn) {
+    const isAllCollapsed = allCollapsedState();
+    foldBtn.textContent = isAllCollapsed ? '展开' : '折叠';
+    foldBtn.title = isAllCollapsed ? '展开所有类目' : '折叠所有类目';
+  }
+}
+
+/* ============ 主菜单宽度拖动 ============ */
+const sidebarEl = document.getElementById('sidebar');
+const sidebarResizer = document.getElementById('sidebarResizer');
+let sidebarDragState = null;
+let sidebarRafPending = false;
+const SIDEBAR_MIN_W = 200;
+const SIDEBAR_MAX_W = 600;
+
+sidebarResizer.addEventListener('mousedown', e => {
+  e.preventDefault();
+  sidebarDragState = { startX: e.clientX, startWidth: sidebarEl.offsetWidth, lastX: e.clientX };
+  sidebarResizer.classList.add('dragging');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+});
+document.addEventListener('mousemove', e => {
+  if (!sidebarDragState) return;
+  sidebarDragState.lastX = e.clientX;
+  if (sidebarRafPending) return;
+  sidebarRafPending = true;
+  requestAnimationFrame(() => {
+    sidebarRafPending = false;
+    if (!sidebarDragState) return;
+    const delta = sidebarDragState.lastX - sidebarDragState.startX;
+    const newW = Math.max(SIDEBAR_MIN_W, Math.min(SIDEBAR_MAX_W, sidebarDragState.startWidth + delta));
+    sidebarEl.style.width = newW + 'px';
+  });
+});
+function endSidebarDrag() {
+  if (!sidebarDragState) return;
+  sidebarDragState = null;
+  sidebarRafPending = false;
+  sidebarResizer.classList.remove('dragging');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  state.settings.sidebarWidth = sidebarEl.offsetWidth;
+  persistSettings();
+  syncLayoutLabels();
+  syncLayoutSegButtons();
+}
+document.addEventListener('mouseup', endSidebarDrag);
+window.addEventListener('blur', endSidebarDrag);
+
+/* ============ 队列高度拖动 ============ */
+const queueResizer = document.getElementById('queueResizer');
+const queuePanel = document.getElementById('queuePanel');
+let dragState = null;
+let queueRafPending = false;
+const QUEUE_MIN_H = 120;
+function calcQueueMaxH() { return Math.min(window.innerHeight * 0.7, window.innerHeight - 200); }
+
+queueResizer.addEventListener('mousedown', e => {
+  if (state.queueCollapsed) return;
+  e.preventDefault();
+  dragState = { startY: e.clientY, startHeight: queuePanel.offsetHeight, lastY: e.clientY };
+  queueResizer.classList.add('dragging');
+  document.body.style.cursor = 'row-resize';
+  document.body.style.userSelect = 'none';
+});
+document.addEventListener('mousemove', e => {
+  if (!dragState) return;
+  dragState.lastY = e.clientY;
+  if (queueRafPending) return;
+  queueRafPending = true;
+  requestAnimationFrame(() => {
+    queueRafPending = false;
+    if (!dragState) return;
+    const delta = dragState.startY - dragState.lastY;
+    const maxH = calcQueueMaxH();
+    const newH = Math.max(QUEUE_MIN_H, Math.min(maxH, dragState.startHeight + delta));
+    queuePanel.style.height = newH + 'px';
+  });
+});
+document.addEventListener('mouseup', () => {
+  if (!dragState) return;
+  dragState = null;
+  queueRafPending = false;
+  queueResizer.classList.remove('dragging');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  if (!state.queueCollapsed) {
+    state.settings.queueHeight = queuePanel.offsetHeight;
+    persistSettings();
+    syncLayoutLabels();
+    syncLayoutSegButtons();
+  }
+});
+window.addEventListener('blur', () => {
+  if (!dragState) return;
+  dragState = null;
+  queueRafPending = false;
+  queueResizer.classList.remove('dragging');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+});
+window.addEventListener('resize', () => {
+  if (state.queueCollapsed) return;
+  const maxH = calcQueueMaxH();
+  const curH = queuePanel.offsetHeight;
+  if (curH > maxH) queuePanel.style.height = maxH + 'px';
+  if (curH < QUEUE_MIN_H) queuePanel.style.height = QUEUE_MIN_H + 'px';
+});
+
+/* ============ 队列折叠 ============ */
+const btnToggleQueue = document.getElementById('btnToggleQueue');
+function toggleQueueCollapsed() {
+  if (state.queueCollapsed) {
+    queuePanel.classList.remove('collapsed');
+    queueResizer.style.display = '';
+    queuePanel.style.height = state.settings.queueHeight + 'px';
+    state.queueCollapsed = false;
+    btnToggleQueue.textContent = '▾';
+    btnToggleQueue.title = '收起队列';
+  } else {
+    queuePanel.classList.add('collapsed');
+    queueResizer.style.display = 'none';
+    state.queueCollapsed = true;
+    btnToggleQueue.textContent = '▴';
+    btnToggleQueue.title = '展开队列';
+  }
+}
+btnToggleQueue.onclick = toggleQueueCollapsed;
+
+/* ============ 设置持久化 ============ */
+const SETTINGS_KEY = 'gh-accel-settings-v1';
+function persistSettings() {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings)); } catch (e) {}
+}
+const SELECTION_KEY = 'gh-accel-selection-v1';
+function persistSelection() {
+  try {
+    localStorage.setItem(SELECTION_KEY, JSON.stringify(checkedItems().map(item => item.id)));
+  } catch (err) {
+    console.error('[persistSelection] 无法保存勾选项:', err);
+  }
+}
+function loadSelection() {
+  try {
+    const raw = localStorage.getItem(SELECTION_KEY);
+    if (!raw) return;
+    const ids = JSON.parse(raw);
+    if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string')) {
+      throw new Error('勾选项存档格式无效');
+    }
+    const selected = new Set(ids);
+    allItems().forEach(item => { item.checked = selected.has(item.id); });
+  } catch (err) {
+    console.error('[loadSelection] 无法读取勾选项:', err);
+  }
+}
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+      const s = JSON.parse(raw);
+      Object.keys(state.settings).forEach(k => {
+        if (s[k] !== undefined) state.settings[k] = s[k];
+      });
+      if (!['zh-CN', 'zh-TW'].includes(state.settings.language)) {
+        state.settings.language = 'zh-CN';
+      }
+    }
+  } catch (e) {}
+  if (!state.settings.autoDetectOnStartup) state.settings.autoApplyOnStartup = false;
+}
+function applyLayoutFromSettings() {
+  sidebarEl.style.width = state.settings.sidebarWidth + 'px';
+  if (!state.queueCollapsed) {
+    queuePanel.style.height = state.settings.queueHeight + 'px';
+  }
+  applyZoom(state.settings.zoom);
+  syncLayoutLabels();
+  syncLayoutSegButtons();
+}
+function applyZoom(z) { document.body.style.zoom = String(z); }
+
+function syncLayoutLabels() {
+  const sl = document.getElementById('sidebarWidthLabel');
+  const ql = document.getElementById('queueHeightLabel');
+  const zl = document.getElementById('zoomLabel');
+  if (sl) sl.textContent = state.settings.sidebarWidth + ' px';
+  if (ql) ql.textContent = state.settings.queueHeight + ' px';
+  if (zl) zl.textContent = Math.round(state.settings.zoom * 100) + '%';
+}
+function syncLayoutSegButtons() {
+  document.querySelectorAll('#segSidebar button').forEach(b => b.classList.toggle('active', +b.dataset.w === state.settings.sidebarWidth));
+  document.querySelectorAll('#segQueue button').forEach(b => b.classList.toggle('active', +b.dataset.h === state.settings.queueHeight));
+  document.querySelectorAll('#segZoom button').forEach(b => b.classList.toggle('active', +b.dataset.z === state.settings.zoom));
+}
+
+/* ============ 自动应用开关的联动可用性 ============ */
+function syncAutoApplyAvailability() {
+  const detectCb = document.getElementById('chkAutoDetectOnStartup');
+  const applyCb = document.getElementById('chkAutoApplyOnStartup');
+  const applyCard = document.getElementById('cardAutoApplyOnStartup');
+  if (!detectCb || !applyCb) return;
+
+  if (!detectCb.checked) {
+    applyCb.checked = false;
+    applyCb.disabled = true;
+    if (applyCard) applyCard.classList.add('disabled');
+  } else {
+    applyCb.disabled = false;
+    if (applyCard) applyCard.classList.remove('disabled');
+  }
+}
+document.getElementById('chkAutoDetectOnStartup').addEventListener('change', syncAutoApplyAvailability);
+
+/* ============ 设置中心 ============ */
+const settingsMask = document.getElementById('settingsMask');
+const settingsNav = document.getElementById('settingsNav');
+const settingsContent = document.getElementById('settingsContent');
+const settingsSub = document.getElementById('settingsSub');
+
+const PANE_SUBTITLES = {
+  layout: '调整主界面元素尺寸', zoom: '调整整体缩放比例',
+  appearance: '语言与主题', tray: '系统托盘与窗口关闭行为',
+  startup: '登录时自动启动后台服务', update: '检查新版本与更新日志',
+  about: '应用信息与反馈'
+};
+
+function switchPane(paneName) {
+  settingsNav.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.pane === paneName));
+  settingsContent.querySelectorAll('.settings-pane').forEach(el => el.classList.toggle('active', el.dataset.pane === paneName));
+  settingsSub.textContent = PANE_SUBTITLES[paneName] || '调整应用偏好与版本';
+  const saveBtn = document.getElementById('settingsSave');
+  if (paneName === 'update' || paneName === 'about') saveBtn.style.visibility = 'hidden';
+  else saveBtn.style.visibility = 'visible';
+}
+settingsNav.addEventListener('click', e => {
+  const item = e.target.closest('.nav-item');
+  if (!item) return;
+  switchPane(item.dataset.pane);
+});
+
+function openSettings(paneName) {
+  syncLayoutSegButtons();
+  document.getElementById('selLanguage').value = state.settings.language;
+  document.getElementById('chkTrayMinimize').checked = state.settings.trayMinimize;
+  document.getElementById('chkShowTrayIcon').checked = state.settings.showTrayIcon;
+  document.getElementById('chkAutoStart').checked = state.settings.autoStart;
+  document.getElementById('chkStartMinimized').checked = state.settings.startMinimized;
+  document.getElementById('chkDetectFocusFollow').checked = state.settings.detectFocusFollow;
+  document.getElementById('chkApplyFocusFollow').checked = state.settings.applyFocusFollow;
+  document.getElementById('chkAutoDetectOnStartup').checked = state.settings.autoDetectOnStartup;
+  document.getElementById('chkAutoApplyOnStartup').checked = state.settings.autoApplyOnStartup;
+  syncAutoApplyAvailability();
+  syncUpdatePane();
+  /* 需求②：打开设置就刷新一次主题平铺网格，保证选中态与 state 一致 */
+  renderSettingsThemeGrid();
+  switchPane(paneName || 'layout');
+  settingsMask.classList.add('show');
+}
+function closeSettings() { settingsMask.classList.remove('show'); }
+
+document.getElementById('btnSettings').onclick = () => openSettings('layout');
+document.getElementById('settingsClose').onclick = closeSettings;
+document.getElementById('settingsCancel').onclick = closeSettings;
+settingsMask.addEventListener('click', e => { if (e.target === settingsMask) closeSettings(); });
+
+document.getElementById('segSidebar').addEventListener('click', e => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  const w = +btn.dataset.w;
+  sidebarEl.style.width = w + 'px';
+  state.settings.sidebarWidth = w;
+  syncLayoutLabels();
+  syncLayoutSegButtons();
+  persistSettings();
+});
+document.getElementById('segQueue').addEventListener('click', e => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  if (state.queueCollapsed) toggleQueueCollapsed();
+  const h = +btn.dataset.h;
+  queuePanel.style.height = h + 'px';
+  state.settings.queueHeight = h;
+  syncLayoutLabels();
+  syncLayoutSegButtons();
+  persistSettings();
+});
+document.getElementById('segZoom').addEventListener('click', e => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  const z = +btn.dataset.z;
+  state.settings.zoom = z;
+  applyZoom(z);
+  syncLayoutLabels();
+  syncLayoutSegButtons();
+  persistSettings();
+});
+document.getElementById('settingsSave').onclick = () => {
+  const language = document.getElementById('selLanguage').value;
+  state.settings.language = ['zh-CN', 'zh-TW'].includes(language) ? language : 'zh-CN';
+  state.settings.trayMinimize = document.getElementById('chkTrayMinimize').checked;
+  state.settings.showTrayIcon = document.getElementById('chkShowTrayIcon').checked;
+  state.settings.autoStart = document.getElementById('chkAutoStart').checked;
+  state.settings.startMinimized = document.getElementById('chkStartMinimized').checked;
+  state.settings.detectFocusFollow = document.getElementById('chkDetectFocusFollow').checked;
+  state.settings.applyFocusFollow = document.getElementById('chkApplyFocusFollow').checked;
+  state.settings.autoDetectOnStartup = document.getElementById('chkAutoDetectOnStartup').checked;
+  state.settings.autoApplyOnStartup = state.settings.autoDetectOnStartup
+    ? document.getElementById('chkAutoApplyOnStartup').checked
+    : false;
+  persistSettings();
+  closeSettings();
+  toast(state.settings.language === 'zh-TW'
+    ? '繁体中文选项已保存；界面翻译将在后续版本补齐'
+    : '设置已保存');
+};
+
+/* ============ 检测升级 ============ */
+const UPDATE_CHECK_DELAY = 900;
+async function checkUpdate() {
+  if (state.update.checking) return null;
+  state.update.checking = true;
+  syncUpdatePane();
+  await sleep(UPDATE_CHECK_DELAY);
+  const hasUpdate = Math.random() < 0.4;
+  if (hasUpdate) {
+    state.update.latest = 'v1.1.0';
+    state.update.hasUpdate = true;
+    state.update.log = ['新增系统代理模式', '优化 DNS 刷新逻辑', '修复队列恢复偶发失败', '设置中心增加检测升级页面'];
+  } else {
+    state.update.latest = state.update.current;
+    state.update.hasUpdate = false;
+    state.update.log = [];
+  }
+  state.update.checking = false;
+  syncUpdatePane();
+  return { hasUpdate, latest: state.update.latest, log: state.update.log };
+}
+function syncUpdatePane() {
+  const u = state.update;
+  const latestEl = document.getElementById('latestVer');
+  if (latestEl) {
+    if (u.checking) latestEl.textContent = '检查中…';
+    else if (!u.latest) { latestEl.textContent = '—'; latestEl.className = 'ver-value'; }
+    else { latestEl.textContent = u.latest; latestEl.className = 'ver-value ' + (u.hasUpdate ? 'latest-new' : 'latest-ok'); }
+  }
+  const statusEl = document.getElementById('updateStatus');
+  if (statusEl) {
+    if (u.checking) { statusEl.textContent = '正在检查…'; statusEl.className = 'update-status'; }
+    else if (u.downloading) { statusEl.textContent = '正在下载更新包…'; statusEl.className = 'update-status has-new'; }
+    else if (u.downloaded) { statusEl.textContent = '更新包已就绪，重启后安装'; statusEl.className = 'update-status ok'; }
+    else if (u.hasUpdate) { statusEl.textContent = '发现新版本 ' + u.latest; statusEl.className = 'update-status has-new'; }
+    else if (u.latest) { statusEl.textContent = '已是最新版本'; statusEl.className = 'update-status ok'; }
+    else { statusEl.textContent = '尚未检查'; statusEl.className = 'update-status'; }
+  }
+  const checkBtn = document.getElementById('btnCheckUpdateInSettings');
+  if (checkBtn) { checkBtn.disabled = u.checking || u.downloading; checkBtn.textContent = u.checking ? '检查中…' : '检查更新'; }
+  const detailCard = document.getElementById('updateDetailCard');
+  if (detailCard) {
+    if (u.hasUpdate) {
+      detailCard.style.display = '';
+      document.getElementById('changelog').innerHTML = u.log.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+      const dlBtn = document.getElementById('btnDownload');
+      const dlProgress = document.getElementById('dlProgress');
+      const dlHint = document.getElementById('dlHint');
+      if (u.downloading) { dlBtn.disabled = true; dlBtn.textContent = '下载中…'; dlProgress.classList.add('show'); dlHint.textContent = '正在下载更新包…'; }
+      else if (u.downloaded) { dlBtn.disabled = false; dlBtn.textContent = '重启安装'; dlProgress.classList.add('show'); dlHint.textContent = '下载完成，点击重启安装'; }
+      else { dlBtn.disabled = false; dlBtn.textContent = '立即更新'; dlProgress.classList.remove('show'); dlHint.textContent = '更新包大小约 28 MB，预计 1 分钟'; }
+    } else detailCard.style.display = 'none';
+  }
+  const navDot = document.getElementById('navUpdateDot');
+  if (navDot) navDot.style.display = u.hasUpdate ? '' : 'none';
+  const topBtn = document.getElementById('btnCheckUpdate');
+  if (topBtn) topBtn.classList.toggle('has-update', u.hasUpdate);
+}
+document.getElementById('btnCheckUpdateInSettings').onclick = async () => {
+  await checkUpdate();
+  if (state.update.hasUpdate) toast(`发现新版本 ${state.update.latest}`);
+  else toast(`已是最新版本 ${state.update.current}`);
+};
+document.getElementById('btnDownload').onclick = async () => {
+  const u = state.update;
+  if (u.downloaded) { toast('重启后自动安装（模拟）'); return; }
+  if (u.downloading) return;
+  u.downloading = true;
+  syncUpdatePane();
+  const bar = document.querySelector('#dlProgress .dl-bar i');
+  for (let p = 0; p <= 100; p += 4) {
+    bar.style.width = p + '%';
+    document.getElementById('dlPct').textContent = p + '%';
+    document.getElementById('dlSpeed').textContent = (1.8 + Math.random() * 2.6).toFixed(1) + ' MB/s';
+    await sleep(90);
+  }
+  u.downloading = false; u.downloaded = true;
+  syncUpdatePane();
+  toast('更新包下载完成，重启后安装');
+};
+document.getElementById('btnCheckUpdate').onclick = () => {
+  openSettings('update');
+  if (!state.update.checking) checkUpdate();
+};
+
+document.getElementById('btnOpenRepo').onclick = () => toast('打开项目主页（模拟）');
+document.getElementById('btnFeedback').onclick = () => toast('打开反馈页面（模拟）');
+document.getElementById('btnLicense').onclick = () => toast('打开许可协议（模拟）');
+
+/* ============ 重算演示状态 ============ */
+document.getElementById('btnSyncState').onclick = async () => {
+  const btn = document.getElementById('btnSyncState');
+  if (btn.dataset.busy) return;
+  btn.dataset.busy = '1';
+  const original = btn.innerHTML;
+  btn.innerHTML = '<span class="ico" style="animation:spin .8s linear infinite;display:inline-block">⟳</span>重算中…';
+  await sleep(600);
+  let changed = 0;
+  allItems().forEach(item => {
+    if (item.appliedIp) {
+      if (item.bestIp && item.bestIp !== item.appliedIp) { item.status = 'stale'; changed++; }
+      else item.status = 'applied';
+    } else {
+      item.status = item.bestIp ? 'detected' : 'unset';
+    }
+  });
+  renderAll();
+  btn.innerHTML = original;
+  delete btn.dataset.busy;
+  toast(changed > 0
+    ? `演示状态已重算，${changed} 项与当前演示映射不一致（未读取系统 Hosts）`
+    : '演示状态已重算（未读取系统 Hosts 或后端）');
+};
+
+/* ============================================================================
+ * 渲染层
+ * ============================================================================ */
+const treeEl = document.getElementById('tree');
+const detailEl = document.getElementById('detail');
+const queueListEl = document.getElementById('queueList');
+const queueCountEl = document.getElementById('queueCount');
+const queueSummaryEl = document.getElementById('queueSummary');
+const queueCurrentEl = document.getElementById('queueCurrent');
+const selectionInfoEl = document.getElementById('selectionInfo');
+
+function renderToolbar() {
+  const btnDetect = document.getElementById('btnDetectAll');
+  const btnApply = document.getElementById('btnApplyQueue');
+  const btnRestore = document.getElementById('btnRestore');
+  if (!btnDetect) return;
+  const busy = state.startupAutomationRunning || state.batchDetecting || state.queueRunning;
+  btnDetect.disabled = busy;
+  btnApply.disabled = busy;
+  btnRestore.disabled = busy;
+}
+
+function renderTree() {
+  const f = state.filter.trim();
+  const fLow = f.toLowerCase();
+  const re = f ? new RegExp('(' + escapeRegExp(f) + ')', 'ig') : null;
+  const hl = s => re ? escapeHtml(s).replace(re, '<span class="hl">$1</span>') : escapeHtml(s);
+  const prevScrollTop = treeEl.scrollTop;
+
+  const html = state.categories.map(cat => {
+    const catMatch = cat.name.toLowerCase().includes(fLow);
+    const visibleItems = (f && !catMatch)
+      ? cat.items.filter(it => it.name.toLowerCase().includes(fLow) || it.domains.some(d => d.toLowerCase().includes(fLow)))
+      : cat.items;
+    if (f && !catMatch && visibleItems.length === 0) return '';
+
+    const collapsed = state.collapsed.has(cat.id);
+    const cs = categoryCheckState(cat);
+    const hasDetecting = cat.items.some(i => i.status === 'detecting');
+    const hasApplying = cat.items.some(i => i.status === 'applying');
+    let catHl = '';
+    if (hasDetecting) catHl = ' has-detecting';
+    else if (hasApplying) catHl = ' has-applying';
+    const showCatRestore = hasRestorableInCategory(cat);
+
+    const itemsHtml = visibleItems.map(it => {
+      const active = state.selectedId === it.id ? ' active' : '';
+      const detecting = it.status === 'detecting' ? ' detecting' : '';
+      const applying = it.status === 'applying' ? ' applying' : '';
+      const meta = ItemMeta[it.status];
+      const showItemRestore = canRestoreHosts(it);
+      return `
+        <div class="node item${active}${detecting}${applying}" data-kind="item" data-id="${it.id}">
+          <span class="cb" data-state="${it.checked ? 'checked' : 'unchecked'}"></span>
+          <span class="caret-slot"></span>
+          <span class="name" title="${escapeHtml(it.domains.join(', '))}">${hl(it.name)}</span>
+          <span class="info-area info-status">
+            <span class="dot ${meta.dot}"></span>
+            <span class="stext ${meta.dot}">${meta.text}</span>
+          </span>
+          <span class="restore-slot">${
+            showItemRestore
+              ? `<button class="tree-restore-btn" data-restore-item="${it.id}" title="还原到本次应用前的 Hosts 状态">↺</button>`
+              : ''
+          }</span>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="node cat${catHl}" data-kind="cat" data-id="${cat.id}">
+        <span class="cb" data-state="${cs}"></span>
+        <span class="caret ${collapsed ? 'collapsed' : ''}">▼</span>
+        <span class="name">${hl(cat.name)}</span>
+        <span class="info-area info-count">
+          <span class="count">${cat.items.length}</span>
+        </span>
+        <span class="restore-slot">${
+          showCatRestore
+            ? `<button class="tree-restore-btn" data-restore-cat="${cat.id}" title="还原「${escapeHtml(cat.name)}」下所有可还原项到本次应用前的 Hosts 状态">↺</button>`
+            : ''
+        }</span>
+      </div>
+      <div class="children ${collapsed ? 'hidden' : ''}">${itemsHtml}</div>`;
+  }).join('');
+
+  treeEl.innerHTML = html || `<div class="tree-empty">没有匹配的类目或域名</div>`;
+  treeEl.scrollTop = prevScrollTop;
+
+  syncToggleButtons();
+}
+
+function scrollTreeToItem(itemId) {
+  if (!itemId) return;
+  const node = treeEl.querySelector(`.node.item[data-id="${itemId}"]`);
+  if (!node) return;
+  const nodeRect = node.getBoundingClientRect();
+  const treeRect = treeEl.getBoundingClientRect();
+  if (nodeRect.top < treeRect.top || nodeRect.bottom > treeRect.bottom) {
+    node.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function patchTreeItem(item) {
+  if (!item) return;
+  const node = treeEl.querySelector(`.node.item[data-id="${item.id}"]`);
+  if (node) {
+    const meta = ItemMeta[item.status];
+    node.classList.toggle('detecting', item.status === 'detecting');
+    node.classList.toggle('applying', item.status === 'applying');
+    const dot = node.querySelector('.dot');
+    const stext = node.querySelector('.stext');
+    if (dot) dot.className = 'dot ' + meta.dot;
+    if (stext) { stext.className = 'stext ' + meta.dot; stext.textContent = meta.text; }
+    const restoreSlot = node.querySelector('.restore-slot');
+    if (restoreSlot) {
+      const hasBtn = !!restoreSlot.querySelector('.tree-restore-btn');
+      const shouldShow = canRestoreHosts(item);
+      if (shouldShow && !hasBtn) {
+        restoreSlot.innerHTML = `<button class="tree-restore-btn" data-restore-item="${item.id}" title="还原到本次应用前的 Hosts 状态">↺</button>`;
+      } else if (!shouldShow && hasBtn) {
+        restoreSlot.innerHTML = '';
+      }
+    }
+  }
+  const cat = findCategoryOfItem(item.id);
+  if (cat) {
+    const catNode = treeEl.querySelector(`.node.cat[data-id="${cat.id}"]`);
+    if (catNode) {
+      const hasDetecting = cat.items.some(i => i.status === 'detecting');
+      const hasApplying = cat.items.some(i => i.status === 'applying');
+      catNode.classList.toggle('has-detecting', hasDetecting);
+      catNode.classList.toggle('has-applying', hasApplying && !hasDetecting);
+      const restoreSlot = catNode.querySelector('.restore-slot');
+      if (restoreSlot) {
+        const hasBtn = !!restoreSlot.querySelector('.tree-restore-btn');
+        const shouldShow = hasRestorableInCategory(cat);
+        if (shouldShow && !hasBtn) {
+          restoreSlot.innerHTML = `<button class="tree-restore-btn" data-restore-cat="${cat.id}" title="还原「${escapeHtml(cat.name)}」下所有可还原项到本次应用前的 Hosts 状态">↺</button>`;
+        } else if (!shouldShow && hasBtn) {
+          restoreSlot.innerHTML = '';
+        }
+      }
+    }
+  }
+}
+
+/* 详情面板这几行的名字只在这里写一遍。
+   空闲时和检测/应用中必须列同一批行，否则一进入检测状态面板就会多一行或少一行，跟着抖一下。 */
+const DETAIL_METRICS = [
+  { label: '当前写入 IP', cls: it => it.appliedIp ? 'mono' : 'dim', text: it => it.appliedIp || '—' },
+  { label: '检测最优 IP', cls: it => it.bestIp ? 'mono' : 'dim', text: it => it.bestIp || '—' },
+  { label: '延迟', cls: it => it.latency ? '' : 'dim', text: it => it.latency ? it.latency + ' ms' : '—' },
+  { label: '下载速度', cls: it => it.speed ? '' : 'dim', text: it => it.speed || '—' },
+  { label: '综合评分', cls: it => it.score ? '' : 'dim', text: it => it.score || '—' },
+  { label: 'IP 来源', cls: it => it.source ? '' : 'dim', text: it => it.source || '—', style: 'font-size:12.5px' },
+  { label: '上次检测', cls: () => 'dim', text: it => it.lastCheck || '尚未检测', style: 'font-size:12px' }
+];
+
+/* 需求⑤：详情面板无真实数据时的完整空模板。
+   它不在 state.categories 里，只用于「树还没选中 + 数据还没加载」这一瞬间的兜底显示。
+   一旦 state.categories 有真实数据，renderDetail() 会立刻切换成真实的第一条。 */
+const EMPTY_DETAIL_ITEM = {
+  id: '', name: '—', domains: [], checked: false, status: 'unset',
+  appliedIp: null, bestIp: null, prevAppliedIp: undefined,
+  latency: 0, speed: '', score: 0, source: '', lastCheck: '',
+  candidates: [], errorMsg: ''
+};
+
+/* ============================================================================
+ * 详情面板显示策略（重要：修改此函数前请先读懂下面几条约定，方便后续 AI / 维护者接手）
+ * ----------------------------------------------------------------------------
+ * ① 详情面板始终渲染完整的卡片结构（标题 / 状态徽章 / 指标网格 / 域名行 / 候选 IP 表格 /
+ *    操作按钮），不再因为「未选中」而提前 return 空提示页。
+ * ② 未选中任何项（state.selectedId 为 null）时，默认渲染 allItems()[0]。
+ *    这里只是「展示兜底」，不会写回 state.selectedId —— 所以左侧树不会出现选中高亮，
+ *    与需求「菜单全部默认未选中」保持一致。
+ * ③ 如果连 allItems()[0] 都没有（数据尚未加载 / 数据为空），使用 EMPTY_DETAIL_ITEM
+ *    渲染完整空详情：所有区块保留，值显示为「—」，表格显示「暂无数据」。
+ * ④ 一旦 state.categories 有真实数据，renderDetail() 会立即拿到第一条真实项；
+ *    用户点击左侧项后，state.selectedId 有值，则优先渲染选中项（不再走兜底）。
+ * ⑤ 兜底项（isRealItem === false）上的「单独检测 / 仅应用此项 / 查看日志」按钮全部禁用，
+ *    避免对不存在的 item 执行检测/应用逻辑。
+ * ⑥ 配合 isCurrentlyDisplayed(itemId) 使用：异步任务推进到兜底项时也会实时刷新详情面板，
+ *    不会出现「树里显示检测中、详情还停在未替换」的错位。
+ * ========================================================================== */
+function renderDetail() {
+  const fallbackItem = allItems()[0] || EMPTY_DETAIL_ITEM;
+  const selectedItem = state.selectedId ? findItem(state.selectedId) : null;
+  const item = selectedItem || fallbackItem;
+  const isRealItem = !!item.id && !!findItem(item.id);
+  const cat = isRealItem ? findCategoryOfItem(item.id) : null;
+  const meta = ItemMeta[item.status] || ItemMeta.unset;
+  const isBusy = item.status === 'detecting' || item.status === 'applying';
+  const showRestoreHosts = isRealItem && canRestoreHosts(item) && item.appliedIp !== null;
+
+  const metricsHtml = DETAIL_METRICS.map(m => isBusy
+    ? `<div class="metric"><label>${m.label}</label><b><span class="skeleton"></span></b></div>`
+    : `<div class="metric"><label>${m.label}</label><b class="${m.cls(item)}"${m.style ? ` style="${m.style}"` : ''}>${m.text(item)}</b></div>`
+  ).join('');
+
+  const candRows = item.candidates.length ? item.candidates.map((c, i) => {
+    const isCurrent = item.appliedIp === c.ip;
+    const isBest = item.bestIp === c.ip;
+    const tagHtml = isBest ? '<span class="tag">最优</span>' : '';
+    return `
+      <tr class="${isCurrent?'current':(i===0?'best':'')}">
+        <td>${i+1}</td>
+        <td class="mono">${c.ip}</td>
+        <td class="tags-cell">${tagHtml}</td>
+        <td>${c.latency} ms</td>
+        <td>${c.speed} MB/s</td>
+        <td><span class="score-bar"><i style="width:${c.score}%"></i></span>${c.score}</td>
+      </tr>`;
+  }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px 0">${
+    isRealItem ? '尚未检测，点击下方「单独检测」获取候选 IP' : '暂无数据'
+  }</td></tr>`;
+
+  const isWarn = !!item.bestIp;
+  const errorHtml = item.errorMsg
+    ? `<div class="error-box ${isWarn?'warn':''}"><span class="ico">!</span><span>${escapeHtml(item.errorMsg)}</span></div>`
+    : '';
+
+  const canDetect = isRealItem && !isBusy && !state.batchDetecting && !state.queueRunning && !state.startupAutomationRunning;
+  const canApplyOne = canDetect && canApply(item);
+  const applyHint = !isRealItem
+    ? '暂无数据'
+    : (!canApply(item)
+      ? '需先检测生成候选 IP'
+      : (state.batchDetecting
+        ? '正在批量检测…'
+        : (state.queueRunning
+          ? '队列执行中…'
+          : (state.startupAutomationRunning ? '启动自动化中…' : ''))));
+
+  const displayCatName = cat ? escapeHtml(cat.name) : '—';
+  const displayItemName = escapeHtml(item.name || '—');
+
+  detailEl.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h3>${displayCatName} <span class="crumb">/ ${displayItemName}</span></h3>
+        <div class="spacer"></div>
+        <span class="badge ${meta.badge}">${meta.text}</span>
+        ${showRestoreHosts ? `<button class="btn btn-sm restore" id="btnRestoreHosts" title="还原到本次应用前的 Hosts 状态">还原Hosts</button>` : ''}
+      </div>
+      <div class="metrics">${metricsHtml}</div>
+      <div class="domains-line">
+        <span class="lbl">域名</span>
+        ${item.domains.length ? item.domains.map(d=>`<span class="chip">${escapeHtml(d)}</span>`).join('') : '<span class="chip" style="opacity:.5">—</span>'}
+      </div>
+      ${errorHtml}
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h3>候选 IP</h3>
+        <div class="spacer"></div>
+        <span class="badge unset">${item.candidates.length} 个候选</span>
+      </div>
+      <table class="cands">
+        <thead><tr>
+          <th>#</th>
+          <th>IP 地址</th>
+          <th>标记</th>
+          <th>延迟</th>
+          <th>速度</th>
+          <th>评分</th>
+        </tr></thead>
+        <tbody>${candRows}</tbody>
+      </table>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnDetectOne" ${canDetect?'':'disabled'}>单独检测</button>
+      <button class="btn primary" id="btnApplyOne" ${canApplyOne?'':'disabled'}>仅应用此项</button>
+      <button class="btn ghost" id="btnViewLog" ${isRealItem?'':'disabled'}>查看日志</button>
+      ${applyHint?`<span class="hint">${applyHint}</span>`:''}
+    </div>
+  `;
+
+  const dOne = document.getElementById('btnDetectOne');
+  const aOne = document.getElementById('btnApplyOne');
+  if (dOne) dOne.onclick = () => { if (isRealItem) detectSingle(item); };
+  if (aOne) aOne.onclick = () => { if (isRealItem) applySingle(item); };
+  const rHosts = document.getElementById('btnRestoreHosts');
+  if (rHosts) rHosts.onclick = () => restoreItemHosts(item);
+  const logBtn = document.getElementById('btnViewLog');
+  if (logBtn) logBtn.onclick = () => { if (isRealItem) toast(`已打开 ${item.name} 的操作日志（模拟）`); };
+}
+
+function taskStatusText(task) {
+  if (task.kind === 'detect') {
+    const map = { waiting:'待检测', running:'检测中', done:'已检测', failed:'检测失败', cancelled:'已取消' };
+    return map[task.status] || TaskMeta[task.status].text;
+  }
+  return TaskMeta[task.status].text;
+}
+function taskStatusDot(task) {
+  if (task.kind === 'detect') {
+    const map = { waiting:'unset', running:'pending', done:'applied', failed:'error', cancelled:'unset' };
+    return map[task.status] || TaskMeta[task.status].dot;
+  }
+  return TaskMeta[task.status].dot;
+}
+function taskStatusCls(task) {
+  if (task.kind === 'detect') {
+    const map = { waiting:'waiting', running:'detecting', done:'detected', failed:'detect-failed', cancelled:'cancelled' };
+    return map[task.status] || TaskMeta[task.status].cls;
+  }
+  return TaskMeta[task.status].cls;
+}
+
+/* ============ 队列渲染 ============ */
+let queueTableSignature = '';
+
+function renderQueueHeader() {
+  const total = state.queue.length;
+  const waiting = state.queue.filter(t=>t.status==='waiting').length;
+  const done = state.queue.filter(t=>t.status==='done').length;
+  const failed = state.queue.filter(t=>['failed','rolledback'].includes(t.status)).length;
+  const skipped = state.queue.filter(t=>t.status==='skipped').length;
+  const finished = done + failed + skipped;
+
+  queueCountEl.textContent = total;
+
+  const detectTasks = state.queue.filter(t => t.kind === 'detect');
+  const applyTasks = state.queue.filter(t => t.kind === 'apply');
+  const detectFinished = detectTasks.filter(t => ['done','failed','cancelled'].includes(t.status)).length;
+  const applyFinished = applyTasks.filter(t => ['done','failed','skipped','rolledback'].includes(t.status)).length;
+
+  const summaryParts = [];
+  if (detectTasks.length > 0) {
+    summaryParts.push(`检测完成 ${detectFinished}/${detectTasks.length}`);
+  }
+  if (applyTasks.length > 0) {
+    summaryParts.push(`写入完成 ${applyFinished}/${applyTasks.length}`);
+  }
+  queueSummaryEl.textContent = summaryParts.join(' · ');
+
+  const runningTask = state.queue.find(t=>t.status==='running' || t.status==='restoring');
+  if (runningTask) {
+    const isDetecting = runningTask.kind === 'detect';
+    const isRestoring = runningTask.status === 'restoring';
+    const prefix = isRestoring ? '恢复中' : (isDetecting ? '检测中' : '执行中');
+    const phaseText = runningTask.phaseText ? `<span class="ph">· ${escapeHtml(runningTask.phaseText)}</span>` : '';
+    queueCurrentEl.className = 'q-current' + (isDetecting ? ' detecting' : '');
+    queueCurrentEl.innerHTML = `<span class="spin"></span><span>${prefix}：</span><span class="nm">${escapeHtml(runningTask.name)}</span>${phaseText}`;
+    queueCurrentEl.title = `${prefix}：${runningTask.name}${runningTask.phaseText?' · '+runningTask.phaseText:''}`;
+  } else {
+    queueCurrentEl.className = 'q-current';
+    queueCurrentEl.innerHTML = '';
+    queueCurrentEl.title = '';
+  }
+
+  document.getElementById('btnPause').disabled = state.batchDetecting || !(state.queueRunning || waiting>0);
+  document.getElementById('btnPause').textContent = state.paused ? '继续队列' : '暂停队列';
+  document.getElementById('btnCancel').disabled = waiting === 0;
+  document.getElementById('btnClearDone').disabled = (done + skipped) === 0;
+  document.getElementById('btnClearQueue').disabled = total === 0 || state.queueRunning || state.batchDetecting || state.startupAutomationRunning
+    || state.queue.some(t => t.status === 'running' || t.status === 'restoring')
+    || allItems().some(item => item.status === 'detecting' || item.status === 'applying');
+  document.getElementById('btnRetryFailed').disabled = failed === 0;
+
+  const el = document.getElementById('globalProgress');
+  const bar = el.querySelector('i');
+  if (total > 0 && (state.queueRunning || state.batchDetecting || finished < total)) {
+    el.classList.add('show');
+    bar.style.width = total ? (finished / total * 100) + '%' : '0';
+  } else if (finished > 0 && finished === total) {
+    el.classList.add('show');
+    bar.style.width = '100%';
+    setTimeout(() => { if (!state.queueRunning && !state.batchDetecting) el.classList.remove('show'); }, 1400);
+  } else {
+    el.classList.remove('show');
+    bar.style.width = '0';
+  }
+}
+
+function patchQueueRow(task) {
+  const tr = queueListEl.querySelector(`tr[data-task-id="${task.id}"]`);
+  if (!tr) return;
+  const cells = tr.children;
+  if (cells.length < 5) return;
+
+  const cls = taskStatusCls(task);
+  const dot = taskStatusDot(task);
+  const text = taskStatusText(task);
+  const phaseText = (task.status==='running' || task.status==='restoring') && task.phaseText
+    ? `<span class="phase">${escapeHtml(task.phaseText)}</span>` : '';
+  const errText = task.errorMsg ? `<span class="err">${escapeHtml(task.errorMsg)}</span>` : '';
+
+  const kindLabel = task.kind === 'detect'
+    ? '<span class="q-kind detect">检测</span>'
+    : (task.kind === 'restore' ? '<span class="q-kind restore">恢复</span>' : '<span class="q-kind apply">应用</span>');
+
+  cells[1].innerHTML = `<div class="q-task"><span>${kindLabel}${escapeHtml(task.name)}</span>${phaseText}${errText}</div>`;
+  cells[2].innerHTML = `<span class="qstatus ${cls}"><span class="dot ${dot}"></span>${text}</span>`;
+  cells[3].textContent = task.duration || '—';
+
+  let actionHtml = '';
+  if (task.kind === 'apply' && task.status === 'done') {
+    const item = findItem(task.itemId);
+    if (item && canRestoreHosts(item)) {
+      actionHtml = `<button class="q-act restore" data-restore-id="${task.id}" title="恢复到应用前的 hosts 状态">恢复</button>`;
+    }
+  } else if (task.kind === 'apply' && (task.status === 'failed' || task.status === 'rolledback')) {
+    actionHtml = `<button class="q-act retry" data-retry-id="${task.id}" title="重新入队执行">重试</button>`;
+  }
+  cells[4].innerHTML = actionHtml;
+
+  const retryBtn = cells[4].querySelector('.q-act.retry');
+  if (retryBtn) retryBtn.onclick = () => retrySingle(task.id);
+  const restoreBtn = cells[4].querySelector('.q-act.restore');
+  if (restoreBtn) restoreBtn.onclick = () => restoreTask(task.id);
+}
+
+function renderQueue() {
+  renderQueueHeader();
+
+  const total = state.queue.length;
+  if (total === 0) {
+    queueTableSignature = '';
+    queueListEl.innerHTML = `<div class="queue-empty"><div>队列为空</div><div class="small">勾选类目后点击「检测全部」或「应用队列」</div></div>`;
+    return;
+  }
+
+  const signature = state.queue.map(t => t.id).join('|');
+  if (signature === queueTableSignature && queueListEl.querySelector('table.qtable')) {
+    state.queue.forEach(patchQueueRow);
+    return;
+  }
+
+  queueTableSignature = signature;
+  const prevScrollTop = queueListEl.scrollTop;
+
+  const rows = state.queue.map((t, i) => {
+    const cls = taskStatusCls(t);
+    const dot = taskStatusDot(t);
+    const text = taskStatusText(t);
+    const phaseText = (t.status==='running' || t.status==='restoring') && t.phaseText
+      ? `<span class="phase">${escapeHtml(t.phaseText)}</span>` : '';
+    const errText = t.errorMsg ? `<span class="err">${escapeHtml(t.errorMsg)}</span>` : '';
+    const kindLabel = t.kind === 'detect'
+      ? '<span class="q-kind detect">检测</span>'
+      : (t.kind === 'restore' ? '<span class="q-kind restore">恢复</span>' : '<span class="q-kind apply">应用</span>');
+    let actionHtml = '';
+    if (t.kind === 'apply' && t.status === 'done') {
+      const item = findItem(t.itemId);
+      if (item && canRestoreHosts(item)) {
+        actionHtml = `<button class="q-act restore" data-restore-id="${t.id}" title="恢复到应用前的 hosts 状态">恢复</button>`;
+      }
+    } else if (t.kind === 'apply' && (t.status === 'failed' || t.status === 'rolledback')) {
+      actionHtml = `<button class="q-act retry" data-retry-id="${t.id}" title="重新入队执行">重试</button>`;
+    }
+    return `
+      <tr data-task-id="${t.id}">
+        <td style="color:var(--text-3)">${i+1}</td>
+        <td><div class="q-task"><span>${kindLabel}${escapeHtml(t.name)}</span>${phaseText}${errText}</div></td>
+        <td><span class="qstatus ${cls}"><span class="dot ${dot}"></span>${text}</span></td>
+        <td style="color:var(--text-3)">${t.duration||'—'}</td>
+        <td style="text-align:right">${actionHtml}</td>
+      </tr>`;
+  }).join('');
+
+  queueListEl.innerHTML = `
+    <table class="qtable">
+      <thead>
+        <tr>
+          <th>#</th><th>任务</th><th>状态</th><th>耗时</th>
+          <th>
+            <div class="q-col-op">
+              <span class="lbl">操作</span>
+              <button class="q-scroll" data-scroll="top" title="回到顶部">↑</button>
+              <button class="q-scroll" data-scroll="bottom" title="滚到底部">↓</button>
+            </div>
+          </th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  queueListEl.scrollTop = Math.min(prevScrollTop, queueListEl.scrollHeight);
+
+  queueListEl.querySelectorAll('.q-act.retry').forEach(btn => btn.onclick = () => retrySingle(btn.dataset.retryId));
+  queueListEl.querySelectorAll('.q-act.restore').forEach(btn => btn.onclick = () => restoreTask(btn.dataset.restoreId));
+  queueListEl.querySelectorAll('.q-scroll').forEach(btn => {
+    btn.onclick = () => {
+      if (btn.dataset.scroll === 'top') queueListEl.scrollTo({ top: 0, behavior: 'smooth' });
+      else queueListEl.scrollTo({ top: queueListEl.scrollHeight, behavior: 'smooth' });
+    };
+  });
+}
+
+function renderStatus() {
+  document.getElementById('lastDetect').textContent = state.lastDetect || '—';
+  document.getElementById('dnsService').textContent = state.appStatus.dnsService;
+  const checked = checkedItems().length;
+  const total = allItems().length;
+  selectionInfoEl.innerHTML = `已选 <b>${checked}</b> / ${total} 项`;
+
+  const perm = document.getElementById('permBadge');
+  perm.classList.add('warn');
+  perm.innerHTML = '<span class="dot"></span>权限未检测（原型）';
+
+  const startupStatus = document.getElementById('startupStatus');
+  if (startupStatus) startupStatus.style.display = state.startupAutomationRunning ? '' : 'none';
+
+  renderQueue();
+  renderToolbar();
+  syncToggleButtons();
+}
+
+function renderAll() {
+  renderTree();
+  renderDetail();
+  renderStatus();
+}
+
+/* ============ 确认 Modal ============ */
+const modalMask = document.getElementById('modalMask');
+const modalTitle = document.getElementById('modalTitle');
+const modalBody = document.getElementById('modalBody');
+const modalConfirm = document.getElementById('modalConfirm');
+const modalCancel = document.getElementById('modalCancel');
+let modalResolve = null;
+
+function confirmDialog({ title, bodyHtml, confirmText='确认', danger=false }) {
+  return new Promise(resolve => {
+    modalResolve = resolve;
+    modalTitle.textContent = title;
+    modalBody.innerHTML = bodyHtml;
+    modalConfirm.textContent = confirmText;
+    modalConfirm.style.background = danger ? 'var(--red)' : '';
+    modalConfirm.style.borderColor = danger ? 'var(--red)' : '';
+    modalMask.classList.add('show');
+  });
+}
+function closeModal(result) {
+  modalMask.classList.remove('show');
+  if (modalResolve) { modalResolve(result); modalResolve = null; }
+}
+modalConfirm.onclick = () => closeModal(true);
+modalCancel.onclick = () => closeModal(false);
+modalMask.addEventListener('click', e => { if (e.target === modalMask) closeModal(false); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (modalMask.classList.contains('show')) closeModal(false);
+    else if (settingsMask.classList.contains('show')) closeSettings();
+  }
+});
+
+/* ============================================================================
+ * 检测逻辑
+ * ============================================================================ */
+
+async function detectSingle(item) {
+  if (state.startupAutomationRunning) { toast('启动自动化进行中，请稍候'); return; }
+  if (state.batchDetecting) { toast('批量检测进行中，请稍候'); return; }
+  if (state.queueRunning) { toast('队列正在执行中，请稍候'); return; }
+  if (item.status === 'detecting' || item.status === 'applying') return;
+  const hasPendingDetect = state.queue.some(t => t.kind === 'detect' && t.itemId === item.id && (t.status === 'waiting' || t.status === 'running'));
+  if (hasPendingDetect) { toast('该项已在检测队列中'); return; }
+  const inQueueRunning = state.queue.find(t => t.kind === 'apply' && t.itemId === item.id && t.status === 'running');
+  if (inQueueRunning) { toast('该项正在队列中执行'); return; }
+
+  const snap = {
+    status: item.status, bestIp: item.bestIp, latency: item.latency,
+    speed: item.speed, score: item.score, source: item.source,
+    lastCheck: item.lastCheck, errorMsg: item.errorMsg
+  };
+  item.status = 'detecting';
+  item.errorMsg = '';
+  patchTreeItem(item);
+  if (isCurrentlyDisplayed(item.id)) renderDetail();
+
+  try {
+    await sleep(180 + Math.random() * 200);
+    generateCandidates(item);
+    if (item.candidates.length === 0 || Math.random() < 0.05) throw new Error('DoH 查询超时，未获取到候选 IP');
+    const best = item.candidates[0];
+    item.bestIp = best.ip;
+    item.latency = best.latency;
+    item.speed = best.speed + ' MB/s';
+    item.score = best.score;
+    item.source = ['GitHub520', 'DoH 优选', '在线查询', '本地缓存'][Math.floor(Math.random() * 4)];
+    item.lastCheck = nowStr();
+    if (!item.appliedIp) item.status = 'detected';
+    else if (item.bestIp === item.appliedIp) item.status = 'applied';
+    else item.status = 'stale';
+    item.errorMsg = '';
+  } catch (err) {
+    item.status = snap.status;
+    item.bestIp = snap.bestIp; item.latency = snap.latency; item.speed = snap.speed;
+    item.score = snap.score; item.source = snap.source; item.lastCheck = snap.lastCheck;
+    if (snap.bestIp) item.errorMsg = `本次检测失败：${err.message}（已保留上次结果）`;
+    else { item.status = 'error'; item.errorMsg = `检测失败：${err.message}`; }
+  }
+  patchTreeItem(item);
+  if (isCurrentlyDisplayed(item.id)) renderDetail();
+  renderStatus();
+}
+
+async function detectAll({ allowStartupAutomation = false } = {}) {
+  if (state.batchDetecting) return null;
+  if (state.startupAutomationRunning && !allowStartupAutomation) return null;
+  if (state.queueRunning) { toast('队列正在执行中，请稍候再检测'); return null; }
+
+  const selected = checkedItems();
+  if (!selected.length) { toast('请先勾选要检测的项'); return null; }
+
+  const existingDetectItemIds = new Set(
+    state.queue
+      .filter(t => t.kind === 'detect' && (t.status === 'waiting' || t.status === 'running'))
+      .map(t => t.itemId)
+  );
+  const runningApplyItemIds = new Set(
+    state.queue.filter(t => t.kind === 'apply' && t.status === 'running').map(t => t.itemId)
+  );
+
+  const targets = selected.filter(it => {
+    if (it.status === 'detecting' || it.status === 'applying') return false;
+    if (existingDetectItemIds.has(it.id)) return false;
+    if (runningApplyItemIds.has(it.id)) return false;
+    return true;
+  });
+  if (!targets.length) { toast('没有可检测的项（可能已在队列中）'); return null; }
+
+  state.queue = state.queue.filter(t => !(t.kind === 'detect' && (t.status === 'done' || t.status === 'failed' || t.status === 'cancelled')));
+
+  const focusFollow = !!state.settings.detectFocusFollow;
+  if (focusFollow) {
+    state.detectOriginalCollapsed = new Set(state.collapsed);
+    state.collapsed.clear();
+    state.detectCurrentCatId = null;
+  }
+
+  const detectTasks = targets.map(item => {
+    const task = {
+      id: 'd_' + (++state.taskSeq),
+      kind: 'detect', itemId: item.id, name: labelOf(item),
+      status: 'waiting', phase: null, phaseText: '',
+      duration: '', errorMsg: '',
+      prevAppliedIp: item.appliedIp, startedAt: 0
+    };
+    state.queue.push(task);
+    return task;
+  });
+
+  state.batchDetecting = true;
+  toast(`开始检测 ${detectTasks.length} 项…`);
+  renderAll();
+
+  let successCount = 0;
+
+  try {
+    for (const task of detectTasks) {
+      if (task.status === 'cancelled') continue;
+      if (!state.queue.includes(task)) continue;
+
+      const item = findItem(task.itemId);
+      if (!item) continue;
+      if (!item.checked) {
+        task.status = 'cancelled';
+        patchQueueRow(task);
+        renderQueueHeader();
+        continue;
+      }
+
+      if (focusFollow) {
+        const cat = findCategoryOfItem(item.id);
+        const newCatId = cat ? cat.id : null;
+        if (newCatId !== state.detectCurrentCatId) {
+          state.categories.forEach(c => {
+            if (c.id === newCatId) state.collapsed.delete(c.id);
+            else state.collapsed.add(c.id);
+          });
+          state.detectCurrentCatId = newCatId;
+          renderTree();
+        }
+      }
+
+      const ok = await executeDetectTask(task);
+      if (ok) successCount++;
+    }
+  } catch (err) {
+    console.error('[detectAll] 异常:', err);
+    toast('检测流程异常：' + (err && err.message ? err.message : String(err)));
+  } finally {
+    state.batchDetecting = false;
+    if (successCount > 0) state.lastDetect = nowStr();
+
+    if (focusFollow) {
+      state.collapsed.clear();
+      if (state.detectOriginalCollapsed) {
+        state.detectOriginalCollapsed.forEach(id => state.collapsed.add(id));
+      }
+      state.detectOriginalCollapsed = null;
+      state.detectCurrentCatId = null;
+    }
+
+    renderAll();
+  }
+
+  const detected = targets.filter(i => i.status === 'detected').length;
+  const applied = targets.filter(i => i.status === 'applied').length;
+  const stale = targets.filter(i => i.status === 'stale').length;
+  const errs = targets.filter(i => i.status === 'error').length;
+  const parts = [];
+  if (detected) parts.push(`待应用 ${detected}`);
+  if (applied) parts.push(`已是最优 ${applied}`);
+  if (stale) parts.push(`待更新 ${stale}`);
+  if (errs) parts.push(`失败 ${errs}`);
+  toast(`检测完成：${parts.join(' · ') || '无变化'}`);
+
+  return targets;
+}
+
+async function executeDetectTask(task) {
+  if (task.status === 'cancelled') return false;
+  if (!state.queue.includes(task)) return false;
+
+  const item = findItem(task.itemId);
+  if (!item) {
+    task.status = 'failed';
+    task.errorMsg = '项目已不存在';
+    patchQueueRow(task);
+    renderQueueHeader();
+    return false;
+  }
+
+  const snap = {
+    status: item.status, bestIp: item.bestIp, latency: item.latency,
+    speed: item.speed, score: item.score, source: item.source,
+    lastCheck: item.lastCheck, errorMsg: item.errorMsg
+  };
+
+  task.status = 'running';
+  task.phaseText = '正在查询候选 IP…';
+  task.startedAt = performance.now();
+  item.status = 'detecting';
+  item.errorMsg = '';
+
+  patchTreeItem(item);
+  patchQueueRow(task);
+  renderQueueHeader();
+  if (isCurrentlyDisplayed(item.id)) renderDetail();
+  scrollTreeToItem(item.id);
+
+  let ok = false;
+
+  try {
+    await sleep(180 + Math.random() * 200);
+    generateCandidates(item);
+    if (item.candidates.length === 0 || Math.random() < 0.05) throw new Error('DoH 查询超时，未获取到候选 IP');
+    const best = item.candidates[0];
+    item.bestIp = best.ip;
+    item.latency = best.latency;
+    item.speed = best.speed + ' MB/s';
+    item.score = best.score;
+    item.source = ['GitHub520', 'DoH 优选', '在线查询', '本地缓存'][Math.floor(Math.random() * 4)];
+    item.lastCheck = nowStr();
+
+    if (!item.appliedIp) item.status = 'detected';
+    else if (item.bestIp === item.appliedIp) item.status = 'applied';
+    else item.status = 'stale';
+    item.errorMsg = '';
+
+    task.status = 'done';
+    task.duration = ((performance.now() - task.startedAt) / 1000).toFixed(1) + 's';
+    task.phaseText = '';
+    ok = true;
+  } catch (err) {
+    item.status = snap.status;
+    item.bestIp = snap.bestIp;
+    item.latency = snap.latency;
+    item.speed = snap.speed;
+    item.score = snap.score;
+    item.source = snap.source;
+    item.lastCheck = snap.lastCheck;
+
+    if (snap.bestIp) {
+      item.errorMsg = `本次检测失败：${err.message}（已保留上次结果）`;
+    } else {
+      item.status = 'error';
+      item.errorMsg = `检测失败：${err.message}`;
+    }
+
+    task.status = 'failed';
+    task.errorMsg = err.message;
+    task.duration = ((performance.now() - task.startedAt) / 1000).toFixed(1) + 's';
+    task.phaseText = '';
+  }
+
+  patchTreeItem(item);
+  patchQueueRow(task);
+  renderQueueHeader();
+  if (isCurrentlyDisplayed(item.id)) renderDetail();
+
+  return ok;
+}
+
+async function detectSubset(items) {
+  if (state.batchDetecting) return;
+  const targets = items.filter(it => it.status !== 'detecting' && it.status !== 'applying');
+  if (!targets.length) return;
+  state.queue = state.queue.filter(t => !(t.kind === 'detect' && (t.status === 'done' || t.status === 'failed' || t.status === 'cancelled')));
+
+  const focusFollow = !!state.settings.detectFocusFollow;
+  if (focusFollow) {
+    state.detectOriginalCollapsed = new Set(state.collapsed);
+    state.collapsed.clear();
+    state.detectCurrentCatId = null;
+  }
+
+  const tasks = targets.map(item => {
+    const task = {
+      id: 'd_' + (++state.taskSeq), kind: 'detect', itemId: item.id, name: labelOf(item),
+      status: 'waiting', phase: null, phaseText: '', duration: '', errorMsg: '',
+      prevAppliedIp: item.appliedIp, startedAt: 0
+    };
+    state.queue.push(task);
+    return task;
+  });
+  state.batchDetecting = true;
+  renderAll();
+
+  try {
+    for (const task of tasks) {
+      if (task.status === 'cancelled') continue;
+      if (!state.queue.includes(task)) continue;
+
+      const item = findItem(task.itemId);
+      if (!item) continue;
+
+      if (focusFollow) {
+        const cat = findCategoryOfItem(item.id);
+        const newCatId = cat ? cat.id : null;
+        if (newCatId !== state.detectCurrentCatId) {
+          state.categories.forEach(c => {
+            if (c.id === newCatId) state.collapsed.delete(c.id);
+            else state.collapsed.add(c.id);
+          });
+          state.detectCurrentCatId = newCatId;
+          renderTree();
+        }
+      }
+
+      await executeDetectTask(task);
+    }
+  } catch (err) {
+    console.error('[detectSubset] 异常:', err);
+  } finally {
+    state.batchDetecting = false;
+    if (focusFollow) {
+      state.collapsed.clear();
+      if (state.detectOriginalCollapsed) {
+        state.detectOriginalCollapsed.forEach(id => state.collapsed.add(id));
+      }
+      state.detectOriginalCollapsed = null;
+      state.detectCurrentCatId = null;
+    }
+    renderAll();
+  }
+}
+
+/* ============================================================================
+ * 应用 / 还原 Hosts
+ * ============================================================================ */
+
+async function runQueue() {
+  if (state.queueRunning) return;
+  state.queueRunning = true;
+  state.paused = false;
+  renderStatus();
+
+  const focusFollow = !!state.settings.applyFocusFollow;
+  if (focusFollow) {
+    state.applyOriginalCollapsed = new Set(state.collapsed);
+    state.collapsed.clear();
+    state.applyCurrentCatId = null;
+    renderTree();
+  }
+
+  try {
+    while (true) {
+      if (state.paused) break;
+      const task = state.queue.find(t => t.kind === 'apply' && t.status === 'waiting');
+      if (!task) break;
+
+      if (focusFollow) {
+        const item = findItem(task.itemId);
+        if (item) {
+          const cat = findCategoryOfItem(item.id);
+          const newCatId = cat ? cat.id : null;
+          if (newCatId !== state.applyCurrentCatId) {
+            state.categories.forEach(c => {
+              if (c.id === newCatId) state.collapsed.delete(c.id);
+              else state.collapsed.add(c.id);
+            });
+            state.applyCurrentCatId = newCatId;
+            renderTree();
+          }
+        }
+      }
+
+      await executeTask(task);
+    }
+  } catch (err) {
+    console.error('[runQueue] 异常:', err);
+  } finally {
+    state.queueRunning = false;
+    state.paused = false;
+    document.getElementById('btnPause').textContent = '暂停队列';
+
+    if (focusFollow) {
+      state.collapsed.clear();
+      if (state.applyOriginalCollapsed) {
+        state.applyOriginalCollapsed.forEach(id => state.collapsed.add(id));
+      }
+      state.applyOriginalCollapsed = null;
+      state.applyCurrentCatId = null;
+    }
+
+    renderAll();
+  }
+}
+
+function enqueue(items, { force = false } = {}) {
+  const active = new Set(state.queue.filter(t => ['waiting', 'running'].includes(t.status)).map(t => t.itemId));
+  let added = 0;
+  items.forEach(item => {
+    if (active.has(item.id)) return;
+    if (!canApply(item)) return;
+    const isNoop = !force && item.status === 'applied' && item.bestIp === item.appliedIp;
+    state.queue.push({
+      id: 't' + (++state.taskSeq),
+      kind: 'apply', itemId: item.id, name: labelOf(item),
+      status: isNoop ? 'skipped' : 'waiting',
+      phase: null,
+      phaseText: isNoop ? '当前已是最优，跳过' : '',
+      duration: '', errorMsg: '',
+      prevAppliedIp: item.appliedIp
+    });
+    added++;
+  });
+  renderStatus();
+  return added;
+}
+
+async function executeTask(task) {
+  const item = findItem(task.itemId);
+  if (!item) { task.status = 'failed'; task.errorMsg = '项目已不存在'; patchQueueRow(task); return; }
+  if (!canApply(item)) { task.status = 'failed'; task.errorMsg = '没有可用的候选 IP'; patchQueueRow(task); return; }
+
+  task.status = 'running';
+  item.status = 'applying';
+  patchTreeItem(item);
+  patchQueueRow(task);
+  renderQueueHeader();
+  if (isCurrentlyDisplayed(item.id)) renderDetail();
+  scrollTreeToItem(item.id);
+
+  const t0 = performance.now();
+  for (const phase of PHASES) {
+    if (state.paused) {
+      task.status = 'waiting'; task.phase = null; task.phaseText = '';
+      item.status = item.appliedIp
+        ? (item.bestIp === item.appliedIp ? 'applied' : 'stale')
+        : (item.bestIp ? 'detected' : 'unset');
+      patchTreeItem(item);
+      patchQueueRow(task);
+      return;
+    }
+    task.phase = phase.key;
+    task.phaseText = phase.text;
+    patchQueueRow(task);
+    if (isCurrentlyDisplayed(item.id)) renderDetail();
+    await sleep(phase.key === 'write' ? 320 : 200);
+  }
+  task.duration = ((performance.now() - t0) / 1000).toFixed(1) + 's';
+  task.phase = null; task.phaseText = '';
+
+  const roll = Math.random();
+  if (roll < 0.06) {
+    task.status = 'failed';
+    task.errorMsg = 'hosts 文件写入失败：权限不足或文件被占用';
+    item.status = 'error';
+    item.errorMsg = task.errorMsg;
+  } else if (roll < 0.11) {
+    task.status = 'rolledback';
+    task.errorMsg = '验证失败：本机解析出来的 IP 跟写进去的不一致，已自动回滚';
+    item.status = 'rolledback';
+    item.errorMsg = task.errorMsg;
+    item.appliedIp = task.prevAppliedIp;
+    item.prevAppliedIp = undefined;
+  } else {
+    task.status = 'done';
+    item.prevAppliedIp = item.appliedIp;
+    item.appliedIp = item.bestIp;
+    item.status = 'applied';
+    item.errorMsg = '';
+  }
+  patchTreeItem(item);
+  patchQueueRow(task);
+  renderQueueHeader();
+  if (isCurrentlyDisplayed(item.id)) renderDetail();
+}
+
+async function performRestoreHostsCore(item) {
+  if (!canRestoreHosts(item)) return false;
+
+  const prevAppliedIp = item.prevAppliedIp;
+
+  item.status = 'applying';
+  patchTreeItem(item);
+  if (isCurrentlyDisplayed(item.id)) renderDetail();
+
+  for (const phase of RESTORE_PHASES) {
+    await sleep(phase.key === 'write' ? 300 : 200);
+  }
+
+  if (Math.random() < 0.1) {
+    item.status = item.appliedIp
+      ? (item.bestIp === item.appliedIp ? 'applied' : 'stale')
+      : 'unset';
+    item.errorMsg = '还原失败：hosts 写入失败，可重试';
+    patchTreeItem(item);
+    if (isCurrentlyDisplayed(item.id)) renderDetail();
+    return false;
+  }
+
+  item.appliedIp = prevAppliedIp;
+  item.prevAppliedIp = undefined;
+
+  if (item.appliedIp === null) item.status = 'unset';
+  else if (item.bestIp === item.appliedIp) item.status = 'applied';
+  else item.status = 'stale';
+  item.errorMsg = '';
+
+  patchTreeItem(item);
+  if (isCurrentlyDisplayed(item.id)) renderDetail();
+
+  state.queue.forEach(t => {
+    if (t.kind === 'apply' && t.itemId === item.id && t.status === 'done') {
+      patchQueueRow(t);
+    }
+  });
+
+  return true;
+}
+
+async function restoreItemHosts(item) {
+  if (!item) return;
+  if (!canRestoreHosts(item)) { toast('没有可还原的状态'); return; }
+  if (state.startupAutomationRunning) { toast('启动自动化进行中，请稍候'); return; }
+  if (state.queueRunning) { toast('队列正在执行中，请稍候'); return; }
+  if (state.batchDetecting) { toast('正在批量检测，请稍候'); return; }
+
+  const prevIp = item.prevAppliedIp;
+  const curIp = item.appliedIp;
+
+  const ok = await confirmDialog({
+    title: '还原 Hosts',
+    bodyHtml: `
+      将把 <b>${escapeHtml(item.name)}</b> 的 hosts 记录还原到本次应用前的状态。<br><br>
+      <table style="font-size:12.5px;width:100%;border-collapse:collapse">
+        <tr><td style="color:var(--text-3);padding:3px 0">应用前 IP</td><td><b style="font-family:ui-monospace,monospace">${prevIp || '（无记录）'}</b></td></tr>
+        <tr><td style="color:var(--text-3);padding:3px 0">当前写入 IP</td><td><b style="font-family:ui-monospace,monospace">${curIp || '（无记录）'}</b></td></tr>
+      </table>
+      <br>${prevIp === null ? '<span style="color:var(--amber)">应用前 hosts 无记录，还原后相当于删除该项。</span>' : '还原后该项回到应用前的状态，还原按钮消失。'}
+    `,
+    confirmText: '确认还原',
+    danger: true
+  });
+  if (!ok) return;
+
+  const success = await performRestoreHostsCore(item);
+  if (success) toast(`${item.name} 已还原到应用前状态`);
+  else toast(`还原 ${item.name} 失败，可重试`);
+}
+
+async function restoreCategoryHosts(cat) {
+  if (!cat) return;
+  const restorable = cat.items.filter(it => canRestoreHosts(it));
+  if (!restorable.length) { toast('此类目下没有可还原项'); return; }
+  if (state.startupAutomationRunning) { toast('启动自动化进行中，请稍候'); return; }
+  if (state.queueRunning) { toast('队列正在执行中，请稍候'); return; }
+  if (state.batchDetecting) { toast('正在批量检测，请稍候'); return; }
+
+  const itemListHtml = restorable.map(it => {
+    const prev = it.prevAppliedIp;
+    const cur = it.appliedIp;
+    return `<li><b>${escapeHtml(it.name)}</b>：${prev || '（无记录）'} ← ${cur || '（无记录）'}</li>`;
+  }).join('');
+
+  const ok = await confirmDialog({
+    title: `还原「${cat.name}」下的 Hosts`,
+    bodyHtml: `
+      将把 <b>${restorable.length}</b> 项还原到应用前状态。<br>
+      还原后这些项的「还原Hosts」按钮会消失。<br><br>
+      <b>可还原项：</b>
+      <ul style="padding-left:18px;margin:6px 0;line-height:1.8;font-size:12px">${itemListHtml}</ul>
+    `,
+    confirmText: '确认还原',
+    danger: true
+  });
+  if (!ok) return;
+
+  let successCount = 0;
+  let failCount = 0;
+  for (const it of restorable) {
+    if (!canRestoreHosts(it)) continue;
+    const ok2 = await performRestoreHostsCore(it);
+    if (ok2) successCount++;
+    else failCount++;
+  }
+
+  renderAll();
+
+  if (failCount === 0) toast(`「${cat.name}」下 ${successCount} 项已全部还原`);
+  else if (successCount === 0) toast(`「${cat.name}」下全部 ${failCount} 项还原失败`);
+  else toast(`「${cat.name}」下 ${successCount} 项成功，${failCount} 项失败`);
+}
+
+async function applyQueue() {
+  if (state.startupAutomationRunning) { toast('启动自动化进行中，请稍候'); return; }
+  if (state.queueRunning) { toast('队列正在执行中'); return; }
+  if (state.batchDetecting) { toast('正在批量检测，请稍候'); return; }
+
+  const selected = checkedItems();
+  if (!selected.length) { toast('请先勾选要替换的项'); return; }
+
+  const notDetected = selected.filter(i => !canApply(i) && i.status !== 'error');
+  if (notDetected.length) {
+    const ok = await confirmDialog({
+      title: `有 ${notDetected.length} 项尚未检测`,
+      bodyHtml: `检测是应用的必经步骤。<br>是否先自动检测这 ${notDetected.length} 项，再统一应用？`,
+      confirmText: '先检测再应用'
+    });
+    if (!ok) return;
+    await detectSubset(notDetected);
+  }
+
+  const applicable = selected.filter(i => canApply(i));
+  if (!applicable.length) { toast('没有可应用的项（均未检测）'); return; }
+  const added = enqueue(applicable);
+  if (!added) { toast('所选项目已在队列中'); return; }
+  toast(`已加入队列 ${added} 项`);
+  runQueue();
+}
+
+async function applySingle(item) {
+  if (state.startupAutomationRunning) { toast('启动自动化进行中，请稍候'); return; }
+  if (state.queueRunning) { toast('队列正在执行中，请稍候'); return; }
+  if (!canApply(item)) { toast('请先检测生成候选 IP'); return; }
+  const added = enqueue([item], { force: true });
+  if (!added) { toast('该项已在队列中'); return; }
+  toast(`已加入队列：${item.name}`);
+  runQueue();
+}
+
+async function restoreTask(taskId) {
+  const task = state.queue.find(x => x.id === taskId);
+  if (!task || task.kind !== 'apply' || task.status !== 'done') return;
+  if (state.queueRunning) { toast('队列正在执行中，请稍后再恢复'); return; }
+
+  const item = findItem(task.itemId);
+  if (!item) return;
+
+  if (!canRestoreHosts(item)) {
+    toast('该项已还原，无需重复操作');
+    task.status = 'restored';
+    patchQueueRow(task);
+    renderQueueHeader();
+    return;
+  }
+
+  const prevIp = item.prevAppliedIp;
+  const curIp = item.appliedIp;
+
+  const ok = await confirmDialog({
+    title: '恢复到应用前状态',
+    bodyHtml: `
+      将把 <b>${escapeHtml(task.name)}</b> 在 hosts 中的记录恢复到本次应用前的状态。<br><br>
+      <table style="font-size:12.5px;width:100%;border-collapse:collapse">
+        <tr><td style="color:var(--text-3);padding:3px 0">应用前 IP</td><td><b style="font-family:ui-monospace,monospace">${prevIp || '（无记录）'}</b></td></tr>
+        <tr><td style="color:var(--text-3);padding:3px 0">当前写入 IP</td><td><b style="font-family:ui-monospace,monospace">${curIp || '（无记录）'}</b></td></tr>
+      </table>
+      <br>恢复流程：备份 → 写回 → 刷新 DNS → 验证。恢复成功后该任务标记为「已恢复」。
+    `,
+    confirmText: '确认恢复',
+    danger: true
+  });
+  if (!ok) return;
+
+  task.status = 'restoring';
+  task.errorMsg = '';
+  patchQueueRow(task);
+  renderQueueHeader();
+
+  const t0 = performance.now();
+  for (const phase of RESTORE_PHASES) {
+    task.phaseText = phase.text;
+    patchQueueRow(task);
+    if (isCurrentlyDisplayed(task.itemId)) renderDetail();
+    await sleep(phase.key === 'write' ? 300 : 200);
+  }
+  task.duration = ((performance.now() - t0) / 1000).toFixed(1) + 's';
+  task.phaseText = '';
+
+  if (Math.random() < 0.1) {
+    task.status = 'failed';
+    task.errorMsg = '恢复失败：hosts 写入失败，已保留当前配置';
+    patchQueueRow(task);
+    toast('恢复失败，请查看队列错误信息');
+    return;
+  }
+
+  if (item) {
+    item.appliedIp = item.prevAppliedIp;
+    item.prevAppliedIp = undefined;
+    if (item.appliedIp === null) item.status = 'unset';
+    else if (item.bestIp === item.appliedIp) item.status = 'applied';
+    else item.status = 'stale';
+    item.errorMsg = '';
+    patchTreeItem(item);
+    if (isCurrentlyDisplayed(item.id)) renderDetail();
+  }
+  task.status = 'restored';
+  task.phaseText = '已恢复到应用前状态';
+  patchQueueRow(task);
+  toast(`${task.name} 已恢复`);
+}
+
+async function runStartupAutomation() {
+  if (!state.settings.autoDetectOnStartup) return;
+
+  state.startupAutomationRunning = true;
+  renderStatus();
+
+  try {
+    const initialChecked = checkedItems();
+    if (!initialChecked.length) {
+      toast('启动自动化：没有勾选项，已跳过');
+      return;
+    }
+
+    const targets = initialChecked.filter(it => it.status !== 'detecting' && it.status !== 'applying');
+    if (!targets.length) {
+      toast('启动自动化：勾选项都在执行中，已跳过');
+      return;
+    }
+
+    toast(`启动自动化：开始检测 ${targets.length} 项…`);
+    await detectAll({ allowStartupAutomation: true });
+
+    if (!state.settings.autoApplyOnStartup) return;
+
+    const applicable = checkedItems().filter(canApply);
+    if (!applicable.length) {
+      toast('启动自动化：检测后没有可应用的项，已跳过');
+      return;
+    }
+
+    const active = new Set(
+      state.queue
+        .filter(t => t.kind === 'apply' && ['waiting', 'running'].includes(t.status))
+        .map(t => t.itemId)
+    );
+    const toEnqueue = applicable.filter(i => !active.has(i.id));
+    if (!toEnqueue.length) {
+      toast('启动自动化：所有项已在队列中，跳过入队');
+      return;
+    }
+
+    const added = enqueue(toEnqueue);
+    if (added > 0) {
+      toast(`启动自动化：入队 ${added} 项，开始应用…`);
+      await runQueue();
+    }
+  } catch (err) {
+    console.error('[runStartupAutomation] 异常:', err);
+    toast('启动自动化异常：' + (err && err.message ? err.message : String(err)));
+  } finally {
+    state.startupAutomationRunning = false;
+    renderStatus();
+  }
+}
+
+/* ============================================================================
+ * 树事件
+ * ============================================================================ */
+treeEl.addEventListener('click', e => {
+  const restoreBtn = e.target.closest('.tree-restore-btn');
+  if (restoreBtn) {
+    e.stopPropagation();
+    if (restoreBtn.dataset.restoreItem) {
+      const item = findItem(restoreBtn.dataset.restoreItem);
+      if (item) restoreItemHosts(item);
+    } else if (restoreBtn.dataset.restoreCat) {
+      const cat = state.categories.find(c => c.id === restoreBtn.dataset.restoreCat);
+      if (cat) restoreCategoryHosts(cat);
+    }
+    return;
+  }
+
+  const node = e.target.closest('.node');
+  if (!node) return;
+  const kind = node.dataset.kind;
+  const id = node.dataset.id;
+
+  if (e.target.closest('.cb')) {
+    if (kind === 'cat') {
+      const cat = state.categories.find(c => c.id === id);
+      if (cat) {
+        const next = categoryCheckState(cat) !== 'checked';
+        cat.items.forEach(i => { i.checked = next; });
+        persistSelection();
+      }
+    } else {
+      const item = findItem(id);
+      if (item) {
+        item.checked = !item.checked;
+        persistSelection();
+      }
+    }
+    renderAll();
+    return;
+  }
+
+  if (e.target.closest('.caret')) {
+    if (state.collapsed.has(id)) state.collapsed.delete(id);
+    else state.collapsed.add(id);
+    renderTree();
+    return;
+  }
+
+  if (kind === 'item') {
+    state.selectedId = id;
+    renderAll();
+  } else if (kind === 'cat') {
+    if (state.collapsed.has(id)) state.collapsed.delete(id);
+    else state.collapsed.add(id);
+    renderTree();
+  }
+});
+
+/* ============================================================================
+ * 工具栏事件
+ * ============================================================================ */
+document.getElementById('btnSelectToggle').onclick = () => {
+  const isAll = allCheckedState();
+  setAllChecked(!isAll);
+  renderAll();
+  toast(isAll ? '已取消所有勾选' : '已全选所有类目');
+};
+
+document.getElementById('btnInvert').onclick = () => {
+  invertAll();
+  renderAll();
+  toast('已反选');
+};
+
+document.getElementById('btnFoldToggle').onclick = () => {
+  const isAllCollapsed = allCollapsedState();
+  if (isAllCollapsed) {
+    state.categories.forEach(c => state.collapsed.delete(c.id));
+    toast('已展开所有类目');
+  } else {
+    state.categories.forEach(c => state.collapsed.add(c.id));
+    toast('已折叠所有类目');
+  }
+  renderTree();
+  syncToggleButtons();
+};
+
+let searchDebounceTimer = null;
+document.getElementById('searchInput').addEventListener('input', e => {
+  clearTimeout(searchDebounceTimer);
+  const value = e.target.value;
+  searchDebounceTimer = setTimeout(() => { state.filter = value; renderTree(); }, 150);
+});
+
+document.getElementById('btnDetectAll').onclick = () => detectAll();
+document.getElementById('btnApplyQueue').onclick = applyQueue;
+
+/* ============================================================================
+ * 需求④：打开 Hosts
+ * ----------------------------------------------------------------------------
+ * 原型运行在浏览器里，无法直接调系统默认编辑器；真实桌面端（Wails / Electron / Tauri）
+ * 需要在这里把 openPath 类接口接到后端，例如：
+ *   · Wails   : runtime.BrowserOpenURL 或自定义 Go 方法 openHostsFile
+ *   · Electron: shell.openPath('C:\\Windows\\System32\\drivers\\etc\\hosts')
+ *   · Tauri   : open(path)
+ * 当前实现里保留一段平台路径推断 + 确认对话框，方便后续替换。
+ * ========================================================================== */
+function detectHostsPath() {
+  const ua = navigator.userAgent || '';
+  if (/Windows/i.test(ua)) return 'C:\\Windows\\System32\\drivers\\etc\\hosts';
+  if (/Mac OS X|Macintosh/i.test(ua)) return '/etc/hosts';
+  return '/etc/hosts';
+}
+async function openHostsFile() {
+  if (state.queueRunning || state.batchDetecting || state.startupAutomationRunning) {
+    toast('有任务正在执行，请稍候再打开');
+    return;
+  }
+  const path = detectHostsPath();
+  const ok = await confirmDialog({
+    title: '打开 Hosts 文件',
+    bodyHtml: `将使用系统默认编辑器打开 Hosts 文件：<br>
+      <code style="font-size:12.5px;font-family:ui-monospace,monospace;word-break:break-all">${escapeHtml(path)}</code><br><br>
+      <span style="color:var(--text-3);font-size:11.5px">当前是网页原型，确认后仅模拟该操作；真实桌面端请把本方法接入后端 openPath 能力。</span>`,
+    confirmText: '模拟打开'
+  });
+  if (ok) toast('已请求后端打开 Hosts（模拟）');
+}
+document.getElementById('btnOpenHosts').onclick = openHostsFile;
+
+function setAllChecked(val){ allItems().forEach(i => { i.checked = val; }); persistSelection(); }
+function invertAll(){ allItems().forEach(i => { i.checked = !i.checked; }); persistSelection(); }
+
+document.getElementById('btnPause').onclick = () => {
+  if (state.paused) {
+    state.paused = false;
+    document.getElementById('btnPause').textContent = '暂停队列';
+    toast('队列已继续');
+    runQueue();
+  } else {
+    state.paused = true;
+    document.getElementById('btnPause').textContent = '继续队列';
+    toast('将在当前任务完成后暂停');
+  }
+};
+
+document.getElementById('btnCancel').onclick = async () => {
+  const waiting = state.queue.filter(t => t.status === 'waiting');
+  if (!waiting.length) return;
+  const ok = await confirmDialog({
+    title: '取消等待中的任务',
+    bodyHtml: `将取消 <b>${waiting.length}</b> 个等待中的任务，<br>正在执行的任务不受影响。`,
+    confirmText: '取消任务',
+    danger: true
+  });
+  if (!ok) return;
+  waiting.forEach(t => {
+    t.status = 'cancelled';
+    const item = findItem(t.itemId);
+    if (item && t.kind === 'apply') {
+      item.status = item.appliedIp
+        ? (item.bestIp === item.appliedIp ? 'applied' : 'stale')
+        : (item.bestIp ? 'detected' : 'unset');
+      patchTreeItem(item);
+    }
+    patchQueueRow(t);
+  });
+  renderQueueHeader();
+  toast(`已取消 ${waiting.length} 个等待任务`);
+};
+
+document.getElementById('btnClearDone').onclick = () => {
+  const before = state.queue.length;
+  state.queue = state.queue.filter(t => !['done', 'skipped', 'cancelled', 'restored'].includes(t.status));
+  renderAll();
+  toast(`已清理 ${before - state.queue.length} 条已完成任务`);
+};
+
+document.getElementById('btnClearQueue').onclick = async () => {
+  const active = state.queueRunning || state.batchDetecting || state.startupAutomationRunning
+    || state.queue.some(t => t.status === 'running' || t.status === 'restoring')
+    || allItems().some(item => item.status === 'detecting' || item.status === 'applying');
+  if (active) {
+    toast('任务正在执行，完成或取消后才能清空队列');
+    return;
+  }
+  if (!state.queue.length) return;
+
+  const count = state.queue.length;
+  const ok = await confirmDialog({
+    title: '清空全部队列记录',
+    bodyHtml: `将永久移除队列中的 <b>${count}</b> 条任务记录；不会修改当前 Hosts 或检测结果。`,
+    confirmText: '清空队列',
+    danger: true
+  });
+  if (!ok) return;
+
+  state.queue = [];
+  state.paused = false;
+  renderAll();
+  toast(`已清空 ${count} 条队列记录`);
+};
+
+document.getElementById('btnRetryFailed').onclick = () => {
+  const failed = state.queue.filter(t => t.kind === 'apply' && ['failed', 'rolledback'].includes(t.status));
+  if (!failed.length) { toast('没有需要重试的任务'); return; }
+  failed.forEach(t => resetTaskToWaiting(t));
+  renderAll();
+  toast(`已重新入队 ${failed.length} 项`);
+  runQueue();
+};
+
+function retrySingle(taskId) {
+  const t = state.queue.find(x => x.id === taskId);
+  if (!t || t.kind !== 'apply') return;
+  resetTaskToWaiting(t);
+  renderAll();
+  toast(`已重新入队：${t.name}`);
+  runQueue();
+}
+
+function resetTaskToWaiting(t) {
+  t.status = 'waiting';
+  t.phaseText = '';
+  t.errorMsg = '';
+  t.duration = '';
+  const item = findItem(t.itemId);
+  if (item) {
+    item.status = item.appliedIp
+      ? (item.bestIp === item.appliedIp ? 'applied' : 'stale')
+      : (item.bestIp ? 'detected' : 'unset');
+    item.errorMsg = '';
+  }
+}
+
+document.getElementById('btnRestore').onclick = async () => {
+  if (state.startupAutomationRunning) { toast('启动自动化进行中，无法恢复'); return; }
+  if (state.queueRunning) { toast('队列正在执行中，无法恢复'); return; }
+  if (state.batchDetecting) { toast('正在批量检测，无法恢复'); return; }
+  const ok = await confirmDialog({
+    title: '恢复默认 hosts',
+    bodyHtml: '将执行以下操作：<br>• 移除所有由本工具写入的域名映射<br>• 恢复修改前的 hosts 备份<br>• 清空当前队列<br><br><span class="warn-line">此操作不可撤销。</span>',
+    confirmText: '确认恢复',
+    danger: true
+  });
+  if (!ok) return;
+  state.queue = [];
+  state.paused = false;
+  state.queueRunning = false;
+  state.batchDetecting = false;
+  state.detectOriginalCollapsed = null;
+  state.detectCurrentCatId = null;
+  state.applyOriginalCollapsed = null;
+  state.applyCurrentCatId = null;
+  allItems().forEach(i => {
+    i.appliedIp = null;
+    i.prevAppliedIp = undefined;
+    i.status = 'unset';
+    i.errorMsg = '';
+    i.latency = 0; i.speed = ''; i.score = 0; i.source = ''; i.lastCheck = '';
+  });
+  renderAll();
+  toast('已恢复默认 hosts，所有项回到「未替换」');
+};
+
+document.getElementById('bannerClose').onclick = () => {
+  state.bannerDismissed = true;
+  document.getElementById('banner').classList.remove('show');
+};
+document.getElementById('permBadge').onclick = () => {
+  toast('网页原型未连接系统权限检测，无法确认 Hosts 权限');
+};
+
+document.addEventListener('keydown', e => {
+  if (modalMask.classList.contains('show')) return;
+  if (settingsMask.classList.contains('show')) return;
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    setAllChecked(true);
+    renderAll();
+    toast('已全选');
+  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+    e.preventDefault(); detectAll();
+  } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault(); applyQueue();
+  }
+});
+
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function initWailsEventListeners() { /* 原型留空 */ }
+
+(function detectPlatform() {
+  const ua = navigator.userAgent || '';
+  if (/Linux/i.test(ua) && !/Android/i.test(ua)) document.body.classList.add('reduce-motion');
+})();
+
+buildData();
+loadSelection();
+state.categories.forEach(cat => state.collapsed.add(cat.id));
+
+/* 主题引擎：6 套配色照 ~/phpo 那份原型搬过来；这里只负责接线。 */
+const THEMES = [
+  { id: 'light', name: '晨光白', desc: '清爽浅色 · 日间适用', colors: ['#f6f7f9', '#ffffff', '#3b82f6', '#16a34a'] },
+  { id: 'sakura', name: '樱花粉', desc: '柔和浅粉 · 温柔细腻', colors: ['#fdf7f8', '#ffffff', '#ec4899', '#059669'] },
+  { id: 'forest', name: '森林绿', desc: '自然深绿 · 静谧专注', colors: ['#0b1512', '#101d18', '#4ade80', '#22c55e'] },
+  { id: 'ocean', name: '深海蓝', desc: '冷色深海 · 沉静聚焦', colors: ['#080e1a', '#0d1625', '#38bdf8', '#2dd4bf'] },
+  { id: 'midnight', name: '午夜蓝', desc: '深蓝沉稳 · 夜间护眼', colors: ['#0a0c10', '#11141b', '#5b9cff', '#3dd68c'] },
+  { id: 'oled', name: '极夜黑', desc: '纯黑 OLED · 极致省电', colors: ['#000000', '#08090b', '#60a5fa', '#34d399'] }
+];
+const THEME_NAME = {};
+THEMES.forEach(t => { THEME_NAME[t.id] = t.name; });
+const THEME_IDS = THEMES.map(t => t.id);
+function fixThemeId(id) { return THEME_IDS.indexOf(id) >= 0 ? id : 'light'; }
+function applyThemeId(id) {
+  const ok = fixThemeId(id);
+  document.documentElement.dataset.theme = ok;
+  const label = document.getElementById('themeName');
+  if (label) label.textContent = '当前：' + THEME_NAME[ok];
+  return ok;
+}
+(function hookThemeSetting() {
+  let val = fixThemeId(state.settings.theme);
+  Object.defineProperty(state.settings, 'theme', {
+    configurable: true, enumerable: true,
+    get: () => val,
+    set: next => { val = applyThemeId(next); }
+  });
+  val = applyThemeId(val);
+})();
+
+/* 顶部托盘胶囊的圆点菜单：一排 6 个主题圆点 + 分隔线 + 最小化到托盘 / 退出（演示占位） */
+(function buildTrayPill() {
+  const pill = document.getElementById('trayPill');
+  const menu = document.getElementById('trayMenu');
+  const dots = document.getElementById('trayDots');
+  function renderDots() {
+    dots.innerHTML = THEMES.map(t => '<button class="theme-dot' + (t.id === state.settings.theme ? ' active' : '')
+      + '" type="button" data-dot="' + t.id + '" title="' + t.name + '" aria-label="' + t.name
+      + '" style="--dot-bg:' + t.colors[0] + ';--dot-accent:' + t.colors[2] + '"></button>').join('');
+    dots.querySelectorAll('[data-dot]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      if (b.dataset.dot === state.settings.theme) return;
+      state.settings.theme = b.dataset.dot;
+      persistSettings();
+      renderDots();
+    }));
+  }
+  menu.querySelectorAll('[data-action]').forEach(item => item.addEventListener('click', () => {
+    menu.classList.remove('show');
+    toast(item.dataset.action === 'quit' ? '退出：演示占位，这个原型里不会真关窗口。' : '最小化到托盘：演示占位，界面还开着。');
+  }));
+  pill.addEventListener('click', e => {
+    e.stopPropagation();
+    const show = !menu.classList.contains('show');
+    menu.classList.toggle('show', show);
+    if (show) renderDots();
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#trayPill') && !e.target.closest('#trayMenu')) menu.classList.remove('show');
+  });
+  renderDots();
+})();
+
+/* 需求②：设置中心外观面板里的主题平铺卡片（可向下滚动选择）。 */
+function renderSettingsThemeGrid() {
+  const grid = document.getElementById('settingsThemeGrid');
+  if (!grid) return;
+  grid.innerHTML = THEMES.map(t => `
+    <div class="theme-card${t.id === state.settings.theme ? ' selected' : ''}" data-settings-theme-id="${t.id}">
+      <div class="theme-preview">
+        <div class="theme-swatch theme-swatch-bg" style="background:${t.colors[0]}"></div>
+        <div class="theme-swatch" style="background:${t.colors[1]}"></div>
+        <div class="theme-swatch" style="background:${t.colors[2]}"></div>
+        <div class="theme-swatch" style="background:${t.colors[3]}"></div>
+      </div>
+      <div class="theme-name">${t.name}</div>
+      <div class="theme-desc">${t.desc}</div>
+    </div>`).join('');
+  grid.querySelectorAll('[data-settings-theme-id]').forEach(card => {
+    card.addEventListener('click', () => {
+      const id = card.dataset.settingsThemeId;
+      if (id === state.settings.theme) return;
+      state.settings.theme = id; /* setter 会触发 applyThemeId + 切换 data-theme */
+      persistSettings();
+      renderSettingsThemeGrid();
+    });
+  });
+}
+
+loadSettings();
+applyLayoutFromSettings();
+syncAutoApplyAvailability();
+renderAll();
+renderSettingsThemeGrid();
+document.getElementById('banner').classList.add('show');
+
+setTimeout(() => {
+  runStartupAutomation().catch(err => {
+    console.error('[startup] 自动化异常:', err);
+  });
+}, 500);
+</script>
+</body>
+</html>
