@@ -30,6 +30,7 @@ export function AppShell({
   sidebarWidth,
   toolbar,
   sidebar,
+  sidebarFooter,
   detail,
   statusbar,
 }: {
@@ -41,6 +42,7 @@ export function AppShell({
   sidebarWidth: number | null
   toolbar: ReactNode
   sidebar: ReactNode
+  sidebarFooter: ReactNode
   detail: ReactNode
   statusbar: ReactNode
 }) {
@@ -79,7 +81,8 @@ export function AppShell({
 
       <main className={styles.main}>
         <aside className={styles.sidebar} style={sidebarStyle}>
-          {sidebar}
+          <div className={styles.treeScroll}>{sidebar}</div>
+          <div className={styles.sideFoot}>{sidebarFooter}</div>
         </aside>
         <section className={styles.detail}>{detail}</section>
       </main>

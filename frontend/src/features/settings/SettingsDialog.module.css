@@ -1,0 +1,379 @@
+/* 设置对话框的样式逐条抄唯一原型：
+   .settings-mask(398) .settings-panel(400) .settings-head(401–406) .settings-body(407)
+   .settings-nav/.nav-group/.nav-item(408–415) .settings-content/.settings-pane(416–418)
+   .pane-title/.pane-desc(419–421) .set-card(422–427) .set-card-desc(428) .set-row(429)
+   .network-profile-*(96–112) .settings-foot(476–477) .btn(52)。
+   动效关键帧 fadeIn/popIn 抄原型 384–386 行。 */
+.mask {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 70;
+  background: rgba(15, 23, 42, 0.45);
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes popIn {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 780px;
+  height: 580px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 60px);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 20px 60px rgba(16, 24, 40, 0.25);
+  overflow: hidden;
+  animation: popIn 0.2s ease;
+}
+
+.head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sub {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--band);
+  color: var(--text);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.nav {
+  flex: none;
+  width: 168px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--border);
+  background: #fafbfc;
+  overflow-y: auto;
+}
+
+.navGroup {
+  padding: 8px 10px 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.navItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  user-select: none;
+}
+
+.navItem:hover {
+  background: #eef1f6;
+}
+
+.navOn {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.navOn::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--primary);
+}
+
+.ico {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+
+.paneTitle {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.paneDesc {
+  margin: 0 0 18px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.card {
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  transition: border-color 0.12s, opacity 0.12s;
+}
+
+.card:last-child {
+  margin-bottom: 0;
+}
+
+.card:hover {
+  border-color: #d6dbe3;
+}
+
+/* 后端还没有能应用这个值的地方，整卡按不可用呈现，不给能点但没作用的入口。 */
+.cardOff {
+  opacity: 0.55;
+  background: #fbfcfd;
+}
+
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cardTitle .ico {
+  color: var(--primary);
+  font-size: 14px;
+}
+
+.cardDesc {
+  margin: 0 0 12px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profileGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profileCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 132px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+
+.profileCard:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+
+.profileCard:focus-visible,
+.navItem:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.profileCard[aria-pressed='true'] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+  background: var(--primary-soft);
+}
+
+.profileCard:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.profileTitle {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.profileDesc {
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.profileLimit {
+  margin-top: auto;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.profileCheck {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.budgetRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.budgetRow input {
+  width: 100px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.budgetRow input:focus {
+  outline: 2px solid var(--primary-soft);
+  border-color: var(--primary);
+}
+
+.budgetRow input[aria-invalid='true'] {
+  border-color: var(--red);
+}
+
+.budgetPreview {
+  margin-top: 9px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.note {
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.foot {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: #fbfcfd;
+}
+
+.footBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--ctl);
+  color: var(--text);
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .profileGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .profileCard {
+    min-height: 0;
+  }
+}

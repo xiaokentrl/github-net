@@ -12,9 +12,13 @@ import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/int
 
 export type NetworkProfile = 'low' | 'standard' | 'full'
 
-// 目前界面上真正会改的设置只有流量档位；设置对话框那一屏再加其它字段。
+// 设置对话框那一屏会改的四类值：档位、每轮候选上限、侧栏宽度、队列高度。
+// 没列出来的字段（语言、主题、缩放、开机自启等）后端已接但界面还没有对应的真实控件，这里不加。
 export type SettingsPatch = {
   networkProfile?: NetworkProfile
+  maxCandidateProbesPerRun?: number
+  sidebarWidth?: number
+  queueHeight?: number
 }
 
 export function getAppStatus(): Promise<AppStatus> {
@@ -30,7 +34,13 @@ export function getSettings(): Promise<Config> {
 }
 
 // 保存必须带「你手上那份的 revision」和幂等键；后端比完版本才写，失败会明确 reject。
+// 没给的字段在 Patch 里是 null，后端按「这次不改」处理，不会清零。
 export function saveSettings(patch: SettingsPatch, expectedRevision: number, mutationID: string): Promise<Config> {
-  const body = new Patch({ networkProfile: patch.networkProfile })
+  const body = new Patch({
+    networkProfile: patch.networkProfile ?? null,
+    maxCandidateProbesPerRun: patch.maxCandidateProbesPerRun ?? null,
+    sidebarWidth: patch.sidebarWidth ?? null,
+    queueHeight: patch.queueHeight ?? null,
+  })
   return SaveSettings(body, expectedRevision, mutationID)
 }

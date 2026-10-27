@@ -29,10 +29,13 @@
 | `ProgressBar` | 展示可确定的任务进度 | 工具栏、更新页面 |
 | `EmptyState` | 展示没有项目、搜索无结果或没有候选数据 | 分类树、详情、队列 |
 | `SettingsSection` | 统一设置页标题、说明和内容区域 | 设置中心 |
+| `Segmented` | 一组互斥预设按钮，点一下即生效并高亮当前值；整组可禁用并同时说明禁用原因 | 设置中心布局页的宽度与队列高度预设 |
 | `NetworkProfileControl` | 显示省流/标准/完整检测档位、每档实际候选/并发上限和保存状态；可用于设置页和检测区快速入口 | 网络与流量设置、检测工具栏 |
 | `ThemePicker` | 平铺显示主题卡片，支持滚动和当前主题状态 | 设置中心 |
 | `LanguageSelect` | 提供受支持语言选项；繁体中文未通过完整性测试和人工审校前明确显示“翻译未完成” | 设置中心 |
 | `Table` | 统一表头、空状态和键盘可访问性；具体列由业务页面提供 | 详情、队列 |
+
+现状（2026-10-28，页面迁移第二屏）：本表里已建的是 `InlineStatus`、`EmptyState`、`ErrorMessage`、`Select`、`StatusBadge`、`Segmented` 六个，其余仍是对应功能的待接项，没有为空表放空壳。`Segmented` 建好就有两处真实调用（设置中心的侧栏宽度、队列高度），队列高度那处整组禁用并写明「任务队列面板还没迁进界面」。`NetworkProfileControl` 这一轮的落点是业务页 `frontend/src/features/settings/NetworkPane.tsx` 里的三张档位卡，不是通用控件——档位数字（每域名候选数、并发上限）的唯一来源是 `features/settings/profileOptions.ts`，工具栏那条三档解释和设置页卡片共用同一份；等检测区快速入口出现第三个复用点再抽成公共控件。
 
 组件只接收所需数据和事件回调。例如状态徽章接收状态值，负责显示；它不自行判断检测或应用规则。
 
@@ -73,7 +76,7 @@
 
 | 文件 | 方法或内容 | 责任与边界 |
 |---|---|---|
-| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`getTasks`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则。现状（2026-10-27，正式页面迁移第一屏）：这一层已建，包了后端已接的 4 个命令（`getAppStatus`、`getItems`、`getSettings`、`saveSettings`），纵向样例面板连同它对绑定的直接 `import` 一起删掉了，工程里只剩这一处调用入口；本表其余 14 个命令在后端仍是契约，所以没有为它们写空壳封装 |
+| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`getTasks`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则。现状（2026-10-27，正式页面迁移第一屏）：这一层已建，包了后端已接的 4 个命令（`getAppStatus`、`getItems`、`getSettings`、`saveSettings`），纵向样例面板连同它对绑定的直接 `import` 一起删掉了，工程里只剩这一处调用入口；本表其余 14 个命令在后端仍是契约，所以没有为它们写空壳封装。现状（2026-10-28，设置中心第二屏）：`saveSettings` 的入参从「只有档位」扩成 `SettingsPatch` 四个可缺省字段（`networkProfile`、`maxCandidateProbesPerRun`、`sidebarWidth`、`queueHeight`），没给的字段在后端 `Patch` 里是 `null`＝这次不改，所以改宽度不会清零网络设置；仍然只传 `expectedRevision` 和 `mutationID`，写入链路没变 |
 | `frontend/src/api/errors.ts` | `toAppError`、`getErrorMessage` | 把调用异常整理成稳定错误码和可展示文案；保留原错误供日志，不能改成成功或空数据。现状（2026-10-27）：已建，按后端线格式 `code: message[: 原因]` 拆码，认得全部 7 个稳定错误码，认不出的归 `unknown` 并保留原文；组件只拿到码和可展示文案 |
 | `frontend/src/api/events.ts` | `subscribeTaskProgress` | 订阅带单调递增 `sequence` 的 `TaskProgress` 事件（不是命令接口）并返回取消订阅函数；组件或 hook 销毁时必须调用。现状（2026-10-27）：文件已建，但里面是运行状态事件 `subscribeRuntimeStatus`（事件名 `app:runtime-status` 只在这一处出现，组件不再直接 `import` `@wailsio/runtime`）；`subscribeTaskProgress` 等任务队列接通后端再加，不提前放空壳 |
 | `frontend/src/utils/format.ts` | `formatLatency`、`formatBytes`、`formatDuration`、`formatTimestamp` | 统一数值和时间格式，单位明确，日期数字走 `Intl`；不显示没有下载实测依据的“下载速度” |
@@ -83,8 +86,11 @@
 | `frontend/src/i18n/formatters.ts` | `formatLocaleDate`、`formatLocaleNumber` | 用当前语言和 `Intl` 格式化日期、数字；不自建日期格式规则。现状（2026-10-27）：文件已建，但只有页面真正用到的 `formatInteger`（状态栏计数）；日期和耗时格式化等对应功能接上再加，不放空壳 |
 | `frontend/src/hooks/useAppStatus.ts` | `useAppStatus` | 读取并订阅权限、平台和服务状态；负责加载反馈和取消订阅，不复制全局状态 |
 | `frontend/src/hooks/useDebouncedValue.ts` | `useDebouncedValue` | 仅合并搜索等高频输入；组件卸载时清理计时器，不用来掩盖慢请求 |
+| `frontend/src/hooks/useSettingsSave.ts` | `useSettingsSave` | 所有设置写入的唯一通道：带 `expectedRevision` 与 `mutationID` 提交 patch，返回「保存中 / 已保存（第几版·改的哪一项）/ 保存失败」三态，失败后重新读后端快照，只认最后一次请求的结果。工具栏档位、设置中心各控件都走它，组件不再各自拼保存逻辑（2026-10-28 第二屏建） |
+| `frontend/src/components/ui/Segmented.tsx` | `Segmented` | 互斥预设按钮组，选中态用 `aria-pressed` 表达；`onChange` 可缺省（整组禁用时不传），禁用原因用同一套说明文字渲染。不含任何业务规则，样式取自原型 `.seg`（2026-10-28 第二屏建） |
+| `frontend/src/features/settings/profileOptions.ts` | `PROFILE_IDS`、`PROFILE_SPECS`、`profileLabel`、`profileSpec`、`profileNote`、`profileLimitText` | 三档的每域名候选数与并发上限（2/8/16、2/8/8）在界面上的唯一来源；工具栏下拉的选项与解释、设置页卡片文案和「一轮全量需要多少次」的预算预览都从这里取数，不再各处手写数字（2026-10-28 第二屏改成这份单一来源） |
 | `frontend/src/features/tasks/taskEvents.ts` | 任务事件到 task store 的映射 | `api/events.ts` 负责底层订阅和取消；任务事件映射留在任务功能内，不额外建立通用 `useTaskEvents` hook |
-| `frontend/src/stores/settingsStore.ts` | 持久配置快照、draft、保存状态和更新 action | 所有需跨重启保留的设置（包括独立的 `detectFocusFollow`、`applyFocusFollow`）通过后端 `GetSettings`、`SaveSettings` 保存；前端不得以 `localStorage` 建立副本 |
+| `frontend/src/stores/settingsStore.ts` | 持久配置快照、draft、保存状态和更新 action | 所有需跨重启保留的设置（包括独立的 `detectFocusFollow`、`applyFocusFollow`）通过后端 `GetSettings`、`SaveSettings` 保存；前端不得以 `localStorage` 建立副本。现状（2026-10-28，设置中心第二屏）：文件还没建，也不打算为空表放空壳——配置快照目前只有 `app/App.tsx` 一个持有者（`useState`），保存状态与冲突处理抽进了 `hooks/useSettingsSave.ts`；等出现第二个需要跨功能共享同一份配置快照的调用方（任务队列、检测区）再落成 store，届时这一份快照仍只有一个来源 |
 | `frontend/src/features/tasks/taskStore.ts` | `replaceTaskSnapshot`、`upsertTask`、`removeTask`、`markTaskCancelled`、`removeFinishedTasks`、`tasksForItem` | 任务状态唯一来源；终态集合为成功、跳过、失败、回滚、取消、已恢复。快照和事件按 sequence 合并；“查看日志”只筛选当前内存队列中该项目的记录，不承诺跨清理或重启保留 |
 | `internal/detector/probe.go` | `ProbeTCP`、`ProbeHTTPS` | 单候选探测接收 `context` 截止时间；HTTPS 保留 SNI/主机名和证书校验。多个候选由策略层提交给共享有界 worker pool，不在每个策略中另造并发框架 |
 | `frontend/src/features/*/*Selectors.ts` | 功能内纯查询方法 | 仅放同一功能里被多个组件复用的筛选、排序和派生状态，不建跨功能万能 selector |
@@ -205,7 +211,7 @@
 - 配置原子保存和 Hosts 写入事务不是同一种业务；不能为少量重复代码合成可写任意路径的通用文件工具。
 - 首期配置使用一个带 `schemaVersion`、`revision` 的 JSON 文件；不引入 SQLite、浏览器 `localStorage` 副本或云同步。Go 配置服务负责默认值、迁移、校验、revision 比较和同目录临时文件原子替换。
 - `SaveSettings` 按字段 patch 提交，并携带 `expectedRevision`、`mutationID`；配置服务串行化写入，冲突和持久化错误必须显式返回。新版本未知配置不得被旧版本重写；损坏配置保留一个受控副本并提示用户，不能静默覆写。
-- 设置中心表单以 draft 编辑，保存时一次提交 patch，取消时丢弃；检测区快速切换档位是单字段即时保存。两者都走同一个后端 API 和 revision 检查，不能各自写存储。
+- 设置中心控件按原型分两类，两类都走同一个后端 API 和 revision 检查，不能各自写存储。① 即时保存类：预设按钮与网络页（侧栏宽度、队列高度、界面缩放、检测档位、每轮候选上限），点一下提交一个字段并显示保存状态，页脚只有「关闭」，没有 draft——原型对 `segSidebar`/`segQueue`（第 1934–1952 行）和网络页档位/上限（第 1912–1932 行）就是这样处理的，并在网络页整块隐藏页脚（第 1875 行）。2026-10-28 第二屏已按此类接好布局与网络两页，失败时重新读后端权威快照、旧值继续生效。② draft 类：开关与下拉表单（外观的语言、托盘、开机自启动、布局页的焦点跟随）先写 draft，「保存」一次提交 patch、「取消」丢弃——原型页脚那对「取消 / 保存」（第 1117–1120 行）服务的正是这批控件。它们对应的界面本轮还没迁，所以这一类目前只是口径，没有实现；迁到哪一屏再按屏接，不提前放空的 draft 状态。
 - 持久化用户偏好包含网络档位/探测上限、按 `scopeID` 的默认策略、主题/语言/缩放/布局及启动选项。运行中的任务队列、检测结果、当前勾选项、搜索词和展开项首期不持久化；任务启动时冻结配置快照。
 - 配置只存非秘密数据；未来若有令牌/凭据，使用操作系统凭据库，配置 JSON 只保存引用。日志不得记录配置原文或秘密。
 - 接口只在需要替换平台实现、模拟外部依赖或维持跨包契约时引入；不为每个结构体机械地定义接口。
@@ -322,7 +328,7 @@ internal/
 
 1. 拆出 `Modal`、`Toast`、`Button` 等重复使用最多的前端组件。
 2. 统一状态徽章、空状态、进度条和任务表格。
-3. 将设置中心的主题、语言和表单控件拆成独立组件。
+3. 将设置中心的主题、语言和表单控件拆成独立组件。（2026-10-28 第二屏已拆出设置中心对话框本体 `features/settings/SettingsDialog.tsx`、两页内容 `LayoutPane.tsx`/`NetworkPane.tsx`、共用预设控件 `components/ui/Segmented.tsx` 和保存通道 `hooks/useSettingsSave.ts`；主题、语言仍等 `ThemePicker` 那一屏一起拆。）
 4. 定义 Wails API 封装和统一错误格式，再逐页移除模拟逻辑。
 5. 后端先抽取 Hosts 操作、任务状态和平台接口；遇到第二个真实调用点时再抽公共实现。
 6. 删除旧主题弹窗、重复脚本和不再使用的样式。

@@ -1,27 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { HostsStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { AppStatus, CatalogCategory, CatalogItem, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import { getAppStatus, getItems, getSettings, saveSettings, type NetworkProfile } from '../api/client'
+import { getAppStatus, getItems, getSettings, type NetworkProfile } from '../api/client'
 import { subscribeRuntimeStatus } from '../api/events'
-import { getErrorMessage, toAppError } from '../api/errors'
+import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
+import { SettingsEntry } from '../components/layout/SettingsEntry'
 import { StatusBar } from '../components/layout/StatusBar'
 import { Toolbar } from '../components/layout/Toolbar'
 import { CategoryTree } from '../components/navigation/CategoryTree'
 import type { StatusLookup } from '../components/navigation/CategoryNode'
 import { SearchBox } from '../components/navigation/SearchBox'
-import { profileLabel } from '../features/settings/profileOptions'
+import { SettingsDialog, type SettingsPaneID } from '../features/settings/SettingsDialog'
 import { ItemDetail } from '../features/items/ItemDetail'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
-import type { SaveKind } from '../components/ui/InlineStatus'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 
 type Load = 'loading' | 'ready' | 'error'
-
-type SaveState = { kind: SaveKind; text: string }
-
-const IDLE_SAVE: SaveState = { kind: 'idle', text: '' }
 
 // 目前只搬了晨光白一套配色；其它主题在后端设置里存着，界面先按 light 显示并说明原因，
 // 不假装已经切换成功（另外五套主题等 ThemePicker 那一屏一起搬）。
@@ -52,8 +49,10 @@ export function App() {
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [selectedId, setSelectedId] = useState('')
-  const [save, setSave] = useState<SaveState>(IDLE_SAVE)
   const [themeNotice, setThemeNotice] = useState('')
+
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogPane, setDialogPane] = useState<SettingsPaneID>('layout')
 
   const [sequence, setSequence] = useState(0)
   const [dropped, setDropped] = useState(0)
@@ -64,7 +63,6 @@ export function App() {
   const statusRequestRef = useRef(0)
   const settingsRequestRef = useRef(0)
   const catalogRequestRef = useRef(0)
-  const saveRequestRef = useRef(0)
 
   const loadStatus = useCallback(() => {
     const request = statusRequestRef.current + 1
@@ -83,6 +81,15 @@ export function App() {
       })
   }, [])
 
+  // 一份配置快照落到界面上要做的事只有这些：语言、主题、数据本身。
+  // 读回来的和保存成功返回的都走这里，省得两条链路对同一份配置处理得不一样。
+  const applyConfig = useCallback((next: Config) => {
+    setLocale(next.appearance.language)
+    setThemeNotice(applyTheme(next.appearance.theme))
+    setSettings(next)
+    setSettingsLoad('ready')
+  }, [])
+
   // 设置是语言、档位和布局的唯一来源；读不到时界面回落到「未就绪」，不用假值渲染。
   const loadSettings = useCallback(() => {
     const request = settingsRequestRef.current + 1
@@ -91,10 +98,7 @@ export function App() {
     getSettings()
       .then((result) => {
         if (settingsRequestRef.current !== request) return
-        setLocale(result.appearance.language)
-        setThemeNotice(applyTheme(result.appearance.theme))
-        setSettings(result)
-        setSettingsLoad('ready')
+        applyConfig(result)
       })
       .catch((err: unknown) => {
         if (settingsRequestRef.current !== request) return
@@ -102,7 +106,7 @@ export function App() {
         setSettingsError(getErrorMessage(err))
         setSettingsLoad('error')
       })
-  }, [])
+  }, [applyConfig])
 
   const loadCatalog = useCallback(() => {
     const request = catalogRequestRef.current + 1
@@ -141,7 +145,6 @@ export function App() {
       statusRequestRef.current += 1
       settingsRequestRef.current += 1
       catalogRequestRef.current += 1
-      saveRequestRef.current += 1
       unsubscribe()
     }
   }, [loadStatus, loadSettings, loadCatalog])
@@ -184,33 +187,37 @@ export function App() {
     })
   }, [])
 
-  const saveProfile = useCallback(
+  // 工具栏和设置对话框共用这一条保存链路：同一份 revision 只数一遍，不会出现两边各存各的。
+  const { state: save, save: submit } = useSettingsSave(settings, applyConfig, loadSettings)
+
+  const changeProfile = useCallback(
     (profile: NetworkProfile) => {
       if (!settings || settings.network.profile === profile) return
-      const baseRevision = settings.revision
-      const request = saveRequestRef.current + 1
-      saveRequestRef.current = request
-      setSave({ kind: 'pending', text: t('toolbar.save.pending') })
-      // 每次点击是一个独立改动，所以幂等键每次新建；界面不自动重发同一个请求。
-      saveSettings({ networkProfile: profile }, baseRevision, `${profile}-${Date.now()}`)
-        .then((next) => {
-          if (saveRequestRef.current !== request) return
-          setSettings(next)
-          setSave({ kind: 'ok', text: t('toolbar.save.ok', { revision: next.revision }) })
-        })
-        .catch((err: unknown) => {
-          if (saveRequestRef.current !== request) return
-          const failure = toAppError(err)
-          setSave({
-            kind: 'failed',
-            text: t('toolbar.save.failed', { name: profileLabel(settings.network.profile), reason: failure.message }),
-          })
-          // 失败很可能是版本冲突，重新读一次后端的当前值，界面不停在旧副本上。
-          loadSettings()
-        })
+      submit({ networkProfile: profile }, t('settings.subject.profile'), 'profile')
     },
-    [settings, loadSettings],
+    [settings, submit],
   )
+
+  const changeBudget = useCallback(
+    (value: number) => {
+      if (!settings || settings.network.maxCandidateProbesPerRun === value) return
+      submit({ maxCandidateProbesPerRun: value }, t('settings.subject.budget'), 'budget')
+    },
+    [settings, submit],
+  )
+
+  const changeSidebarWidth = useCallback(
+    (width: number) => {
+      if (!settings || settings.layout.sidebarWidth === width) return
+      submit({ sidebarWidth: width }, t('settings.subject.sidebar'), 'sidebar')
+    },
+    [settings, submit],
+  )
+
+  const openSettings = useCallback((pane: SettingsPaneID) => {
+    setDialogPane(pane)
+    setDialogOpen(true)
+  }, [])
 
   const debouncedQuery = useDebouncedValue(query, 150)
 
@@ -233,38 +240,52 @@ export function App() {
   )
 
   return (
-    <AppShell
-      appName={status?.app ?? ''}
-      status={status}
-      statusLoad={statusLoad}
-      statusError={statusError}
-      onRetryStatus={loadStatus}
-      sidebarWidth={settings?.layout.sidebarWidth ?? null}
-      toolbar={
-        <Toolbar
+    <>
+      <AppShell
+        appName={status?.app ?? ''}
+        status={status}
+        statusLoad={statusLoad}
+        statusError={statusError}
+        onRetryStatus={loadStatus}
+        sidebarWidth={settings?.layout.sidebarWidth ?? null}
+        toolbar={
+          <Toolbar
+            settings={settings}
+            error={settingsLoad === 'error' ? settingsError : ''}
+            saveKind={save.kind}
+            saveText={save.text}
+            busy={save.kind === 'pending'}
+            onProfileChange={changeProfile}
+          />
+        }
+        sidebar={sidebar}
+        sidebarFooter={<SettingsEntry onOpen={() => openSettings('layout')} />}
+        detail={<ItemDetail item={selected.item} category={selected.category} status={statusOf.get(selectedId)} />}
+        statusbar={
+          <StatusBar
+            status={status}
+            settings={settings}
+            counts={counts}
+            sequence={sequence}
+            dropped={dropped}
+            themeNotice={themeNotice}
+          />
+        }
+      />
+      {dialogOpen && settings && (
+        <SettingsDialog
+          pane={dialogPane}
           settings={settings}
-          error={settingsLoad === 'error' ? settingsError : ''}
-          saveKind={save.kind}
-          saveText={save.text}
-          busy={save.kind === 'pending'}
-          onProfileChange={saveProfile}
+          hostnames={counts.hostnames}
+          save={save}
+          onPaneChange={setDialogPane}
+          onClose={() => setDialogOpen(false)}
+          onProfile={changeProfile}
+          onBudget={changeBudget}
+          onSidebarWidth={changeSidebarWidth}
         />
-      }
-      sidebar={sidebar}
-      detail={
-        <ItemDetail item={selected.item} category={selected.category} status={statusOf.get(selectedId)} />
-      }
-      statusbar={
-        <StatusBar
-          status={status}
-          settings={settings}
-          counts={counts}
-          sequence={sequence}
-          dropped={dropped}
-          themeNotice={themeNotice}
-        />
-      }
-    />
+      )}
+    </>
   )
 }
 

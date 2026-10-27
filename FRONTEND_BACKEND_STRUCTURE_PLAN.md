@@ -161,7 +161,7 @@
 - 文件不存在时从代码中的 `DefaultConfig()` 创建内存默认值，不因为读取而强制写盘；首次成功保存时再创建配置文件。默认值由 Go 统一定义，前端只展示后端返回值。当前勾选项目、搜索词和展开项首期不保存，应用重启后回到未选中状态，避免把上次选择误当成本次检测授权。
 - `Load` 按步骤执行：读取 → 检查文件大小/格式/schema → 逐版本迁移 → 业务校验 → 返回带 revision 的快照。迁移必须可重复且有测试；遇到高于当前版本的配置时拒绝覆盖并明确提示，不用旧程序重写新配置。
 - `SaveSettings` 使用字段级 patch、`expectedRevision` 和 `mutationID`，不能让一次只改主题的保存覆盖并发修改的网络设置。后端校验完整候选配置，再在配置文件同目录创建唯一临时文件、同步落盘并原子替换；成功后递增 revision，再发布更新。失败不得发布成功事件或更新为“已保存”。
-- 设置中心编辑控件先写入带 `baseRevision` 的 draft；“保存”提交一次 patch，“取消”丢弃 draft。检测区快速切换档位属于明确即时操作，单独提交一个 patch 并显示保存状态；失败时恢复后端快照中的旧值。两种入口最终都经过相同 config service，不各自写文件。
+- 设置中心控件分两类，都经过同一个 config service，不各自写文件。即时保存类（预设按钮、档位卡、每轮候选上限）点一下单独提交一个 patch 并显示保存状态，失败时恢复后端快照中的旧值；这一类按原型就是即时落盘（`segSidebar`/`segQueue` 第 1934–1952 行，网络页档位与上限第 1912–1932 行，网络页连页脚都隐藏，第 1875 行）。2026-10-28 设置中心第二屏接的布局页与网络与流量页属于这一类，所以对话框页脚只有「关闭」。draft 类（开关、下拉表单：语言、托盘、开机自启动、布局页的焦点跟随）先写入带 `baseRevision` 的草稿，「保存」提交一次 patch、「取消」丢弃；这批控件对应的界面还没迁，所以该路径目前只是口径，未实现。
 - 单进程配置写入由配置服务串行化并进行 revision 比较；重复 `mutationID` 幂等返回原结果。主程序是唯一写入者，特权辅助服务不读写用户配置。任务启动时读取并冻结有效配置快照，之后设置变更只影响新任务。
 - JSON 语法损坏或配置整体无法校验时，不静默覆盖原文件：保留原文件到一个有界的损坏隔离备份，使用代码默认值继续运行，并在设置页/启动提示中说明设置已重置及恢复位置。单字段迁移/修复也必须有明确日志和用户可见反馈；不记录配置中的敏感值。
 - 不支持跨设备自动同步。首期不实现配置导入/导出；如后续需要，应设计带 schema 校验的用户主动导出/导入流程，导出时剔除凭据并对覆盖当前配置再次确认。
@@ -256,8 +256,8 @@ feature action → request validation → backend app service
 
 ##### 用户界面入口与设置内容
 
-1. **主要入口：**设置对话框 → “网络与流量”分类（`NetworkUsageSettings.tsx`）。分类名称应直白、可搜索，不藏在高级/开发者页面。
-2. **快速入口：**检测按钮旁的紧凑流量状态标签显示当前档位和基于当前选择数估算的有效上限；无选择时显示每域名候选上限。启动时按实际目标范围重新计算并冻结预算；108 是可配置总上限，不是每轮固定用量。点击标签可跳转“网络与流量”。每个服务/范围的详情高度与方法选择区仍保持一行，不额外增加纵向空间。
+1. **主要入口：**设置对话框 → “网络与流量”分类（`features/settings/NetworkPane.tsx`，2026-10-28 已建；本条原先写的 `NetworkUsageSettings.tsx` 是实现时按页内命名收敛的同一个文件）。分类名称应直白、可搜索，不藏在高级/开发者页面。对话框的入口是侧栏底部的「⚙ 设置中心」（`components/layout/SettingsEntry.tsx`），与原型第 756–758 行同一位置。
+2. **快速入口：**检测按钮旁的紧凑流量状态标签显示当前档位和基于当前选择数估算的有效上限；无选择时显示每域名候选上限。启动时按实际目标范围重新计算并冻结预算；108 是可配置总上限，不是每轮固定用量。点击标签可跳转“网络与流量”。每个服务/范围的详情高度与方法选择区仍保持一行，不额外增加纵向空间。**现状与这一条有一处对不上，待裁决**：原型这里是一个只读的状态按钮（第 743 行 `省流 · ≤108 候选`，第 1908 行 `onclick = () => openSettings('network')`），点它是打开设置对话框，改档位仍在对话框里；而页面迁移第一屏把工具栏做成了可直接切换档位的下拉框（`components/layout/Toolbar.tsx` 用 `Select` + `profileNote`），没有“跳进网络与流量页”这一步。两种都满足“三档解释常驻可见”，差别在改档位要不要多一次跳转。
 3. **三档解释：**省流（每域名最多 2 个 IP、并发 2、关闭自动全量扫描）；标准（8 个 IP、并发 8）；完整检测（最多 16 个 IP、并发仍不超过 8）。选择档位时同步说明对请求数量、等待时间和结果覆盖面的影响；不只显示档位名称。
 4. **精细上限：**“每轮候选 IP 探测上限”暂定初始为 108，来源是 54 个菜单项目 × 每项 2 个候选；项目数并非 hostname 数，故该值只作可调预算，不保证完整扫描。目录已抽完并核算过：去重后 65 个 hostname，省流档全量一轮理论值 130，确实高于默认 108。有效预算取该值与范围内唯一 hostname 理论候选数的较小者。预算只计实际启动的候选 IP 探测，DNS 查询单独计数。若上限可能导致范围不完整，开始前要求用户确认；确认后按稳定顺序执行并明确列出未检测 hostname/项目，不静默遗漏。
 5. **自动化与更新：**分别显示“自动检测”开关和“在计量网络下下载更新前询问”选项；省流档默认关闭后台自动全量检测，更新下载永远要求用户确认。检测本身由用户按钮发起，不因打开设置而启动。
@@ -545,6 +545,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 │       │   ├── layout/
 │       │   │   ├── AppShell.tsx
 │       │   │   ├── AppShell.module.css
+│       │   │   ├── SettingsEntry.tsx
 │       │   │   ├── Toolbar.tsx
 │       │   │   ├── StatusBar.tsx
 │       │   │   └── SplitPane.tsx
@@ -567,6 +568,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 │       │       ├── OperationFeedback.tsx
 │       │       ├── ProgressBar.tsx
 │       │       ├── Select.tsx
+│       │       ├── Segmented.tsx
 │       │       ├── StatusBadge.tsx
 │       │       ├── SettingsSection.tsx
 │       │       ├── Table.tsx
@@ -600,11 +602,12 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 │       │   ├── settings/
 │       │   │   ├── SettingsDialog.tsx
 │       │   │   ├── SettingsDialog.module.css
+│       │   │   ├── LayoutPane.tsx
+│       │   │   ├── NetworkPane.tsx
+│       │   │   ├── profileOptions.ts
 │       │   │   ├── SettingsNavigation.tsx
 │       │   │   ├── AppearanceSettings.tsx
-│       │   │   ├── LayoutSettings.tsx
-│       │   │   ├── StartupSettings.tsx
-│       │   │   └── NetworkUsageSettings.tsx
+│       │   │   └── StartupSettings.tsx
 │       │   ├── theme/
 │       │   │   ├── ThemePicker.tsx
 │       │   │   └── themes.ts
@@ -621,7 +624,8 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 │       │       └── zh-TW.json
 │       ├── hooks/
 │       │   ├── useAppStatus.ts
-│       │   └── useDebouncedValue.ts
+│       │   ├── useDebouncedValue.ts
+│       │   └── useSettingsSave.ts
 │       ├── stores/
 │       │   ├── appStore.ts
 │       │   └── settingsStore.ts
@@ -756,14 +760,18 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 - `components/layout/`：窗口整体布局、工具栏、状态栏和分栏尺寸。
 - `components/navigation/`：分类树、节点和搜索框。分类树只接收数据和回调，不直接调用后端。
 - `components/ui/`：通用控件，只负责呈现与基础交互；不包含 Hosts 或 DNS 业务规则。
+- `components/ui/Segmented.tsx`（2026-10-28 已建）：互斥预设按钮组，选中态用 `aria-pressed`；`onChange` 可缺省以支持整组禁用，禁用原因用同一段说明文字渲染。样式取自原型 `.seg`（第 430–434 行）。
 - `features/strategies/ServiceStrategySelector.tsx`：放在当前服务详情区，用“GitHub 全部加速方法”等直白名称显示并选择该服务以后默认使用的方法；切换后持久保存，后续检测自动使用此方法，不因切换而自动开始检测。它是业务组件，不放入通用 `components/ui/`。
 - `OperationFeedback.tsx`：统一显示操作阶段、进度、耗时、取消和最终结果。
 - `InlineStatus.tsx`：在表单或按钮附近显示保存中、成功、错误和重试提示。
 - `*.module.css`：页面和组件的局部样式；颜色、字号、间距仍引用统一令牌，不重复定义视觉规范。
 - `features/`：按业务功能组织页面、状态、类型和事件处理。
 - `features/strategies/`：服务方法选择和方法检测状态的业务组件；`strategyStore.ts` 只管理方法列表及临时检测结果，不保存用户偏好，默认方法以 `settingsStore` 从后端读取的配置为唯一来源。方法列表动态来自后端自注册目录；零方法时显示空状态并禁用检测/应用。检测结果只对应用户当前选择的方法，不是多策略比较列表。
-- `features/settings/`：设置页面本身；共享设置状态统一放在 `stores/settingsStore.ts`。业务设置与需持久化的界面偏好都经后端配置 API 保存；前端不维护 `localStorage` 副本。
-- `features/settings/NetworkUsageSettings.tsx`：设置中心内“网络与流量”页面；选择省流/标准/完整检测、每域名候选数/每轮上限和计量网络行为，展示解释与保存状态。设置仍由后端 config 权威保存。
+- `features/settings/`：设置中心对话框本体与分页内容；共享设置状态的落点见本节末尾 `stores/settingsStore.ts` 的现状说明。业务设置与需持久化的界面偏好都经后端配置 API 保存；前端不维护 `localStorage` 副本。
+- `features/settings/SettingsDialog.tsx`（2026-10-28 已建）：设置中心模态框。导航只列已真正实现的页——布局、网络与流量两组两项，原型另外六页（界面缩放、外观、托盘、开机自启动、检测升级、关于我们）没有放假入口；副标题随页切换，取自原型 `PANE_SUBTITLES`（第 1810–1816 行）。Esc 监听挂在 `document` 上（焦点没进对话框时键盘也能退出），打开时初始焦点落在「关闭」按钮，点遮罩同样关闭；因为页内每项都即时保存，页脚只有「关闭」。导航列表暂时留在本文件里，没有单独拆成规划中的 `SettingsNavigation.tsx`——它只有一处调用，等出现第二个需要同一份导航的界面再拆。这些行为都在真 WebView 里逐项实测过，见技术规划阶段二对应条目。
+- `features/settings/LayoutPane.tsx`（2026-10-28 已建，即本节原先规划的 `LayoutSettings.tsx`）：布局页；侧栏宽度 240/340/480 三档预设即时保存并立刻改变界面宽度。队列高度三档预设按原型原样呈现但整组禁用，并写明「任务队列面板还没迁进界面」，不假装可调。原型同页的「检测与应用 → 焦点跟随」两个开关本轮没搬：后端配置字段已在，但界面还没有检测/应用执行过程可跟随。
+- `features/settings/NetworkPane.tsx`（2026-10-28 已建；即本节原先规划的 `NetworkUsageSettings.tsx`，实现时按页内命名收敛为 `NetworkPane`）：网络与流量页；三张档位卡（`aria-pressed` 表选中态）与每轮候选上限输入框，数字唯一来源是 `profileOptions.ts`，预算预览用后端目录的真实主机名数（65）算「一轮全量需要多少次、还差多少盖不住」。输入框先在前端挡非整数与越界并显示 `aria-invalid`＋原因，**不发给后端**，所以 revision 不动；合法值才提交。设置仍由后端 config 权威保存。
+- `components/layout/SettingsEntry.tsx` + `AppShell.tsx` 的 `sidebarFooter` 槽（2026-10-28 已建）：侧栏底部「⚙ 设置中心」入口。`AppShell` 因此把侧栏改成「树滚动区 + 固定底部」两段（`.treeScroll`/`.sideFoot`），照搬原型第 125–133 行的 `.sidebar`/`.tree-scroll`/`.sidebar-footer`/`.sf-btn`；原型底部那另一个「重算演示状态」按钮属于演示逻辑，仍然不迁（见阶段二第一屏）。入口属于布局骨架，不放进 `CategoryTree`。
 - 检测按钮附近显示当前档位和本轮请求预算，并提供紧凑的快速切换入口；它与详情顶部加速方法选择保持同一行的既有布局约束，不增加详情栏高度。完整设置仍从设置中心进入。
 - `features/theme/`：主题列表和选择界面；主题选择读取并更新 `settingsStore`，不另建 `themeStore`。
 - `api/client.ts`：前端唯一的后端调用入口；业务组件不直接使用 Wails 运行时 API。公共方法集中在此文件，禁止业务组件自行拼接调用。
@@ -776,9 +784,10 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 - `styles/layers.css`：声明 reset、token、公共组件和功能样式的 CSS 层级，避免样式加载顺序导致覆盖结果不同。
 - `stores/`：只放确实跨多个功能共享的应用状态。队列任务状态只由 `features/tasks/taskStore.ts` 管理，禁止同时维护 `operationStore` 等第二份任务 store。
 - `stores/appStore.ts`：应用启动状态及 `useAppStatus` 使用的状态源；hook 只提供 React 订阅方式，不另存一份状态。
-- `stores/settingsStore.ts`：所有持久配置的前端快照、编辑草稿、保存状态和 revision 冲突处理。业务设置与界面偏好统一通过后端配置 API 读写；组件不得另存 `localStorage` 副本。
+- `stores/settingsStore.ts`：所有持久配置的前端快照、编辑草稿、保存状态和 revision 冲突处理。业务设置与界面偏好统一通过后端配置 API 读写；组件不得另存 `localStorage` 副本。现状（2026-10-28）：文件还没建。配置快照现在只有 `app/App.tsx` 一个持有者，保存通道与三态、冲突后重读快照都收在 `hooks/useSettingsSave.ts`；等出现第二个需要共享同一份配置快照的功能（任务队列、检测区）再落成 store，避免同一份配置有两个来源。
 - `features/tasks/taskEvents.ts`：把 API 层收到的任务事件转换为 task store 更新；事件订阅的创建和清理由 `api/events.ts` 提供的订阅函数负责，不再额外建立通用 `useTaskEvents` hook。
 - `hooks/useDebouncedValue.ts`：仅供搜索等高频输入使用；卸载时清理计时器，不用于掩盖慢操作。
+- `hooks/useSettingsSave.ts`（2026-10-28 已建）：所有设置写入共用的通道——提交带 `expectedRevision` 与 `mutationID` 的 patch、只认最后一次请求的结果、维护「保存中 / 已保存（第几版·改的哪一项）/ 保存失败」三态、失败后重读后端快照。它只管保存这件事，不持有配置快照，也不承载任务业务。
 - `hooks/`：只保留多个功能确实共用的 React 生命周期或输入行为 hook；任务事件的业务映射留在 `features/tasks/`。
 - `utils/format.ts`：集中格式化延迟、速度、文件大小和时间，使用明确单位及 `Intl`。
 - `utils/validation.ts`：集中前端表单格式和范围校验；后端仍是最终校验方。

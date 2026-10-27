@@ -1,4 +1,5 @@
-/* 骨架尺寸逐条抄原型：.app(22) .topbar(24) .toolbar(51) .main(124) .sidebar(126) .detail(230) .statusbar(376)。
+/* 骨架尺寸逐条抄原型：.app(22) .topbar(24) .toolbar(51) .main(124) .sidebar(126) .tree-scroll(127)
+   .sidebar-footer(130) .sf-btn(131–133) .detail(230) .statusbar(376)。
    可拖拽的分栏（.sidebar-resizer/.resizer）属布局那一屏，这里先不放假的手柄。 */
 .app {
   display: flex;
@@ -110,12 +111,60 @@
 }
 
 .sidebar {
+  display: flex;
+  flex-direction: column;
   width: var(--sidebar-w);
   min-width: 200px;
   max-width: 600px;
-  overflow-y: auto;
+  overflow: hidden;
   border-right: 1px solid var(--border);
   background: var(--panel);
+}
+
+/* 树的滚动区在侧栏内部（原型 .tree-scroll 127 行：flex:1 + min-height:0）。 */
+.treeScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 侧栏底部按钮条，抄原型 .sidebar-footer(130)；「重算演示状态」那颗没搬，所以这里只有一颗按钮。 */
+.sideFoot {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  background: #fbfcfd;
+}
+
+.sfBtn {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--ctl);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.sfBtn:hover {
+  background: var(--hov);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.sfBtn .ico {
+  font-size: 13px;
+  line-height: 1;
 }
 
 .detail {
