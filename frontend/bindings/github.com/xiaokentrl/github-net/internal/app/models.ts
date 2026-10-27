@@ -6,6 +6,209 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * CatalogCategory 是一个服务分类；ScopeID 是它共享的加速范围。
+ */
+export class CatalogCategory {
+    "id": string;
+    "name": string;
+    "scopeId": string;
+    "order": number;
+    "items": CatalogItem[];
+
+    /** Creates a new CatalogCategory instance. */
+    constructor($$source: Partial<CatalogCategory> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("scopeId" in $$source)) {
+            this["scopeId"] = "";
+        }
+        if (!("order" in $$source)) {
+            this["order"] = 0;
+        }
+        if (!("items" in $$source)) {
+            this["items"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogCategory instance from a string or object.
+     */
+    static createFrom($$source: any = {}): CatalogCategory {
+        const $$createField4_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("items" in $$parsedSource) {
+            $$parsedSource["items"] = $$createField4_0($$parsedSource["items"]);
+        }
+        return new CatalogCategory($$parsedSource as Partial<CatalogCategory>);
+    }
+}
+
+/**
+ * CatalogItem 是一个可单独检测的项目；Hostnames 永远是数组，没有预设域名时是空数组而不是 null。
+ */
+export class CatalogItem {
+    "id": string;
+    "name": string;
+    "order": number;
+    "hostnames": string[];
+    "userSupplied": boolean;
+
+    /** Creates a new CatalogItem instance. */
+    constructor($$source: Partial<CatalogItem> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("order" in $$source)) {
+            this["order"] = 0;
+        }
+        if (!("hostnames" in $$source)) {
+            this["hostnames"] = [];
+        }
+        if (!("userSupplied" in $$source)) {
+            this["userSupplied"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogItem instance from a string or object.
+     */
+    static createFrom($$source: any = {}): CatalogItem {
+        const $$createField3_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("hostnames" in $$parsedSource) {
+            $$parsedSource["hostnames"] = $$createField3_0($$parsedSource["hostnames"]);
+        }
+        return new CatalogItem($$parsedSource as Partial<CatalogItem>);
+    }
+}
+
+/**
+ * HostsState 是某个项目的 Hosts 状态快照。
+ * Revision 单调递增，前端只接受更高的值；Message 只在冲突和读取失败时给出可展示原因。
+ */
+export class HostsState {
+    "itemId": string;
+    "status": HostsStatus;
+    "revision": number;
+    "readAt": string;
+    "message"?: string;
+
+    /** Creates a new HostsState instance. */
+    constructor($$source: Partial<HostsState> = {}) {
+        if (!("itemId" in $$source)) {
+            this["itemId"] = "";
+        }
+        if (!("status" in $$source)) {
+            this["status"] = HostsStatus.$zero;
+        }
+        if (!("revision" in $$source)) {
+            this["revision"] = 0;
+        }
+        if (!("readAt" in $$source)) {
+            this["readAt"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new HostsState instance from a string or object.
+     */
+    static createFrom($$source: any = {}): HostsState {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new HostsState($$parsedSource as Partial<HostsState>);
+    }
+}
+
+/**
+ * HostsStatus 是后端读出来的真实 Hosts 状态。前端只能显示这里的值，不能自己推断。
+ */
+export enum HostsStatus {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    /**
+     * HostsUnknown 表示后端还没读过系统 Hosts。当前阶段只能返回这一档。
+     */
+    HostsUnknown = "unknown",
+
+    /**
+     * HostsNone 表示已读过，管理区里没有本工具为该项目的记录。
+     */
+    HostsNone = "none",
+
+    /**
+     * HostsPartial 表示已读过，该项目只有部分 hostname 有本工具记录。
+     */
+    HostsPartial = "partial",
+
+    /**
+     * HostsApplied 表示已读过，该项目全部 hostname 都有本工具记录且区段摘要校验通过。
+     */
+    HostsApplied = "applied",
+
+    /**
+     * HostsConflict 表示管理区被外部改动或摘要不匹配，后端已停止写入并保留现场。
+     */
+    HostsConflict = "conflict",
+
+    /**
+     * HostsReadFailed 表示读不到 Hosts（权限不足、文件占用等）；它和 HostsNone 是两回事，不能合并显示。
+     */
+    HostsReadFailed = "readFailed",
+};
+
+/**
+ * ItemsSnapshot 是 GetItems 的返回形状：目录 + 每项的真实 Hosts 状态。
+ * 目录部分来自 internal/catalog，状态部分只能由后端 Hosts 读取服务填写。
+ */
+export class ItemsSnapshot {
+    "categories": CatalogCategory[];
+    "hosts": HostsState[];
+
+    /** Creates a new ItemsSnapshot instance. */
+    constructor($$source: Partial<ItemsSnapshot> = {}) {
+        if (!("categories" in $$source)) {
+            this["categories"] = [];
+        }
+        if (!("hosts" in $$source)) {
+            this["hosts"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ItemsSnapshot instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ItemsSnapshot {
+        const $$createField0_0 = $$createType4;
+        const $$createField1_0 = $$createType6;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("categories" in $$parsedSource) {
+            $$parsedSource["categories"] = $$createField0_0($$parsedSource["categories"]);
+        }
+        if ("hosts" in $$parsedSource) {
+            $$parsedSource["hosts"] = $$createField1_0($$parsedSource["hosts"]);
+        }
+        return new ItemsSnapshot($$parsedSource as Partial<ItemsSnapshot>);
+    }
+}
+
+/**
  * RuntimeInfo 是后端交给前端的真实运行环境信息，不含任何演示数据。
  */
 export class RuntimeInfo {
@@ -48,3 +251,12 @@ export class RuntimeInfo {
         return new RuntimeInfo($$parsedSource as Partial<RuntimeInfo>);
     }
 }
+
+// Private type creation functions
+const $$createType0 = CatalogItem.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $Create.Array($Create.Any);
+const $$createType3 = CatalogCategory.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = HostsState.createFrom;
+const $$createType6 = $Create.Array($$createType5);

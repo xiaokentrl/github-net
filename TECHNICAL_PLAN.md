@@ -12,8 +12,8 @@
 先完成下列事项，再进入对应功能开发；不要求所有决策都阻塞无关模块：
 
 1. **唯一原型基线**：已逐项核对两份原型，保留副本中的省流设置、预算提示、候选 IP 右侧操作按钮和自定义下拉弹层，作为已确认行为合入正式原型。`github-net唯一前端原型.html` 是唯一迁移来源；副本冻结留档，不再并行维护。主要流程通过验证后才能开始页面迁移。
-2. **Wails 纵向样例**：已用临时 React + TypeScript 样例验证 Wails v3.0.0 的生成绑定、Go/前端调用、错误返回、事件订阅与取消、托盘及退出清理；Go 测试、前端构建、默认 GTK4 构建和 `-tags gtk3` 构建均通过。验证环境为 Ubuntu 26.04 x64；这只证明本机 Linux 的默认 GTK4 构建路径可用，`-tags gtk3` 结果也只算本机编译验证，且该后端已不是发布目标。2026-10-27 已在 Debian 13 与 Ubuntu 24.04 两个容器复测正式工程的默认 GTK4 构建链（均通过，产物要求 `GLIBC_2.34`），Debian 12 容器实测证明无法走默认后端，已退出发布目标；这些是容器编译与链接验证，Debian 13 与 Ubuntu 24.04 的实机运行、Windows、macOS 与 arm64 仍待原生 runner。以该版本实际生成结果和 [Wails Events API](https://v3.wails.io/reference/events/) 为准。
-3. **首发平台矩阵**：已确认 Windows 10 x64、macOS 13 x64/arm64、Linux x64/arm64（发行版最低 Debian 13 与 Ubuntu 24.04 LTS）。Windows 使用 WebView2，macOS 使用 WKWebView。Linux 只有一条发布线：默认 GTK4/WebKitGTK 6.0 构建，构建宿主固定 **Debian 13 稳定版**（或等效容器），依赖 `libgtk-4-dev libwebkitgtk-6.0-dev`，不加 `-tags gtk3`。**Debian 12 已于 2026-10-27 移出发布目标**——它的仓库没有 `webkitgtk-6.0`，默认后端直接编不过，只剩 `-tags gtk3` 这条老后端；不再为它出包，也不再为此维护第二台低版本构建宿主。产物兼容性按两道各自实测的门判定，不按编译机推断：门一是 `objdump -T` 得到的最高 `GLIBC_x.y` 不高于 `GLIBC_2.39`（Ubuntu 24.04 与 Debian 13 中较小的一档），门二是目标发行版提供产物链接的 `libwebkitgtk-6.0.so.4` 与 `libgtk-4.so.1`。CI 覆盖上述发行版与架构的每个组合，两条门任一不过就不得发布该目标；尚未在目标系统实测的平台不能宣称已验证。
+2. **Wails 纵向样例**：样例已从临时验证搬进正式工程——后端 `internal/app`（只暴露 `RuntimeInfo` 与 `Ping`）和 `internal/event`（事件名与自增序号的唯一主人）、入口 `main.go`（托盘显示/隐藏/退出、退出时取消订阅并停发事件）、前端 `frontend/src/App.tsx`（加载/成功/失败三态、保存并调用 unsubscribe、重复序号丢弃）。2026-10-27 在本机 Ubuntu 26.04 x64（Wayland，GTK 4.22.4 / WebKitGTK 2.52.6）实测：WebView 真实请求 `/`、JS 与 CSS；前端调用 `RuntimeInfo` 拿到真实运行环境；空令牌调用回 `empty_token: 令牌不能为空`（`/wails/runtime` 返回 422）；前端 `Events.On` 收到后端事件并回传 `evt:3:running:true`；退出清理确实执行（探针注入法验证后已还原，仓库内无调试代码）。同一份代码在 Debian 13 与 Ubuntu 24.04 两个容器构建均通过，产物只要求 `GLIBC_2.34`；Ubuntu 26.04 的构建在本机（该版本即新的构建宿主）与等效容器 `ubuntu:26.04` 各实测通过，产物都要求 `GLIBC_2.38`，容器产物放进 Debian 13 容器 `ldd -r` 未解析符号 0 条。仍未验：Debian 13 的实机运行、Windows、macOS、arm64；本机没有截图工具，界面排版与托盘菜单的肉眼走查没做；StrictMode 双挂载只在代码里做了请求号作废，未实跑；`-tags gtk3` 只算开发机备选，不是发布路径。以该版本实际生成结果和 [Wails Events API](https://v3.wails.io/reference/events/) 为准。
+3. **首发平台矩阵**：已确认 Windows 10 x64、macOS 13 x64/arm64、Linux x64/arm64（发行版最低 Debian 13 与 Ubuntu 26.04 LTS）。Windows 使用 WebView2，macOS 使用 WKWebView。Linux 只有一条发布线：默认 GTK4/WebKitGTK 6.0 构建，构建宿主固定 **Ubuntu 26.04**（开发机同版本，等效容器 `ubuntu:26.04`），依赖 `libgtk-4-dev libwebkitgtk-6.0-dev`，不加 `-tags gtk3`。**两个发行版已先后移出发布目标**：Debian 12（2026-10-27）——仓库没有 `webkitgtk-6.0`，默认后端直接编不过，只剩 `-tags gtk3` 这条老后端；Ubuntu 24.04 LTS（同日稍后，用户改把 Ubuntu 线定在 26.04 LTS）——它的仓库只有 GTK4 4.14.5，比构建用的 4.22.4 低八个小版本，为它出包才需要额外的低版本宿主，现在不需要了。产物兼容性按两道各自实测的门判定，不按编译机推断：门一是 `objdump -T` 得到的最高 `GLIBC_x.y` 不高于 `GLIBC_2.41`（Debian 13 与 Ubuntu 26.04 中较小的一档），门二是目标发行版提供产物链接的 `libwebkitgtk-6.0.so.4` 与 `libgtk-4.so.1`。CI 覆盖上述发行版与架构的每个组合，两条门任一不过就不得发布该目标；尚未在目标系统实测的平台不能宣称已验证。**当前进度**：`.github/workflows/ci.yml` 已落地，覆盖前端构建、后端 `gofmt`/`go vet`/`go test`、Ubuntu 26.04 宿主产 x64 产物并跑门一与本发行版门二、Debian 13 容器复核门二；这些命令已在 `ubuntu:26.04` 与 `debian:13` 两个真容器按 CI 里的写法逐条本地复现通过，只有 Actions 自己的调度（容器内 `setup-go` 在线装 Go 与拉模块、跨作业 artifact 传递）要等首次真跑确认；arm64、Windows、macOS 还没有对应 job，需匹配 runner 后补，补齐前不得宣称这些目标已进门禁。
 4. **DNS 隐私规则**：首期默认使用操作系统配置的 DNS 解析器，不把查询自动转发给公共 DNS、DoH 服务或第三方 API；不记录完整查询域名。若以后增加外部解析服务，必须单独说明服务方、传输方式和隐私影响，并由用户主动选择。
 5. **Hosts 文件契约**：在任何真实写入前，确定管理区标记、格式版本、冲突处理和恢复规则，并先通过临时文件测试。
 6. **特权辅助服务验证**：在阶段四前分别验证批准平台的安装/授权、IPC 身份校验、白名单 Hosts 操作、升级、卸载和故障恢复。未验证的平台不得启用 Hosts 写入。
@@ -88,7 +88,7 @@
 先定义稳定、可测试的接口，再接入页面：
 
 - `GetAppStatus`：返回平台、权限、DNS 服务和应用版本。
-- `GetItems`：返回分类、域名及当前 Hosts 状态。
+- `GetItems`：返回分类、域名及当前 Hosts 状态。Hosts 读取服务未实现前，状态一律是 `unknown`（意思是「后端还没读过」），界面必须按未读取显示，不许显示成「未替换」或检测结果。
 - `GetStrategies(scopeID)`：返回该菜单/加速范围当前自注册且适用的方法、能力及该范围保存的选择；零个方法返回空列表。
 - `DetectItems`：启动指定项目的检测任务；后端按项目所属加速范围读取已保存的方法并执行，返回任务 ID。没有可用或已选方法时明确拒绝启动并返回可展示错误。
 - `SelectStrategy(scopeID, strategyID)`：校验方法已注册且适用于该范围，并保存该范围以后使用的方法；选择本身不启动检测、不修改 Hosts 或系统代理。
@@ -108,6 +108,8 @@
 `GetTasks` 快照先订阅后读取。快照返回 `sequence` 水位；前端丢弃水位以内已包含的事件，只应用更新的事件。发现序号缺口时先标记队列视图为同步中，再读取新快照；快照请求失败须显示错误，不能把旧缓存伪装为最新状态。
 
 **接口清单基准：**以上 18 个命令及 1 个事件是前后端接口唯一清单；`bindings.go` 与 `api/client.ts` 必须逐项对应，不能把事件算成命令或遗漏命令。任务重试不得把终态改回等待状态。
+
+**实现进度（2026-10-27）：**18 个命令已接 1 个——`GetItems`，其余 17 个仍只是契约。返回形状来自 `internal/app/dto.go`，错误形状来自 `internal/app/errors.go`；Hosts 状态现在是 `unknown` 占位，等 Hosts 读取服务实现才有真值。绑定由 `wails3 generate bindings -ts` 重新生成：`models.ts` 多出 `CatalogCategory`、`CatalogItem`、`HostsState`、`HostsStatus`（TS enum，带 Go 侧注释）、`ItemsSnapshot` 五个类型，`service.ts` 多出 `GetItems()`。注意 `wails3 generate bindings` 不带 `-ts` 会产出 `.js` 并删掉工程里提交的 `.ts`，只能带 `-ts` 跑；反过来，只加没被绑定方法引用的类型时绑定不会变，这一点也实测过（加 DTO 那一轮重新生成后 `git diff frontend/bindings` 为空）。
 
 前端不直接执行系统命令，不把命令字符串或文件路径作为任意执行入口传给后端。
 
@@ -130,7 +132,7 @@
 - 显示单项最多约 5 秒、服务扫描最多约 30 秒的预算；典型体验目标单项 1–3 秒、54 项全量 5–15 秒，但不伪造固定剩余时间。
 - 为控制资源，每个域名最多探测 16 个候选；若 DNS 返回更多，显示截断提示。用户取消即取消 context、保留已完成结果并标记未完成项已取消。
 - 移动流量控制提供“省流/标准/完整检测”配置：每域名候选上限分别为 2/8/16，全任务并发分别为 2/8/8（8 是硬上限）；每轮总候选数另设可见预算，设置保存到后端。
-- 首次安装或配置无效时使用省流档；每轮候选 IP 探测总上限暂定为 108，来源是现有 54 个菜单项目 × 省流档每项 2 个候选的估算。菜单项目数不等于唯一目标 hostname 数，因此 108 只是可调整的默认预算，不保证完整扫描，也不是服务端硬上限。实现前应以目录中规范化、去重后的 hostname 数核算典型范围，并用最大目录规模测试；预算按 `min(本轮唯一目标 hostname 数 × 档位每 hostname 候选上限, 用户总上限)` 动态计算。目录项保存 hostname，而不是完整 URL；同一轮按规范化后的 hostname 去重。按实际启动的候选 IP 探测扣减，DNS 查询单独计数；用户上限可能造成范围不完整时，启动前要求确认，确认后未覆盖 hostname/项目标记未检测。自动检测默认关闭，扫描仍须用户明确触发。
+- 首次安装或配置无效时使用省流档；每轮候选 IP 探测总上限暂定为 108，来源是现有 54 个菜单项目 × 省流档每项 2 个候选的估算。菜单项目数不等于唯一目标 hostname 数，因此 108 只是可调整的默认预算，不保证完整扫描，也不是服务端硬上限。实现前应以目录中规范化、去重后的 hostname 数核算典型范围，并用最大目录规模测试；该核算已于 2026-10-27 完成：目录（`internal/catalog/catalog.json`，从唯一正式原型 `CATEGORY_DEFS` 抽取）为 11 个分类、54 个项目、去重后 65 个 hostname。所以省流档全量一轮的理论候选数是 65 × 2 = 130，高于默认总上限 108——按现值执行时全量一轮覆盖不住，必须走「启动前要求确认、超额项标未检测」这条路；默认上限是否上调尚未由用户落句，落句前实现一律按 108 执行，不自行改默认值。预算按 `min(本轮唯一目标 hostname 数 × 档位每 hostname 候选上限, 用户总上限)` 动态计算。目录项保存 hostname，而不是完整 URL；同一轮按规范化后的 hostname 去重。按实际启动的候选 IP 探测扣减，DNS 查询单独计数；用户上限可能造成范围不完整时，启动前要求确认，确认后未覆盖 hostname/项目标记未检测。自动检测默认关闭，扫描仍须用户明确触发。
 - 用户在设置对话框“网络与流量”页调整档位、每轮候选上限和计量网络行为；检测按钮旁提供紧凑的当前档位/候选预算标签，可快速切换或跳转设置。
 - DNS/TCP/TLS 探测只进行解析、连接和 TLS 证书验证，不下载目标网页或测速文件正文；失败不后台自动重试。并发限制控制瞬时负载，候选数和单轮预算才是控制总探测量的主要手段。
 - 稳定版自动检查只请求 GitHub 发布元数据；不自动下载更新包。用户确认后显示文件大小和来源，再启动下载；移动/计量网络下不自动下载。
@@ -184,18 +186,19 @@ Hosts 恢复元数据需保存原始文件事务快照、最后一次成功写�
 
 ### 阶段一：工程骨架
 
-- 将已通过本机验证的 Wails 纵向样例结果纳入工程基线；在原生 runner 验证其余批准平台和架构。Linux 侧须覆盖 Debian 13 与 Ubuntu 24.04 各自 x64/arm64，统一在 Debian 13 构建宿主（或等效容器）产出发布产物，并对每个产物实测 `objdump -T` 的最高 glibc 符号版本（≤2.39）与 `ldd` 库可得性两道门。
-- 建立 Wails 项目、Go 模块、前端目录和仅覆盖已批准目标的基础 CI。
+- 将已通过本机验证的 Wails 纵向样例结果纳入工程基线；在原生 runner 验证其余批准平台和架构。Linux 侧须覆盖 Debian 13 与 Ubuntu 26.04 各自 x64/arm64，统一在 Ubuntu 26.04 构建宿主（或等效容器）产出发布产物，并对每个产物实测 `objdump -T` 的最高 glibc 符号版本（≤2.41）与 `ldd` 库可得性两道门。
+- 建立 Wails 项目、Go 模块、前端目录和仅覆盖已批准目标的基础 CI。基础 CI 已于 2026-10-27 建立（`.github/workflows/ci.yml`），目前只覆盖 Linux x64 一条线（Ubuntu 26.04 宿主出包 + 门一 + 本发行版门二，Debian 13 复核门二）；arm64、Windows、macOS 的 job 待匹配 runner 后补。
 - 锁定唯一原型基线；把确认后的交互行为合入正式原型后再启动页面迁移。
 
-**验收：**纵向样例覆盖绑定、事件清理、托盘和已批准目标的构建；应用可启动并加载前端。未批准的平台不得列为发布目标；本机 Ubuntu 26.04 构建只算开发调试通过，不计入批准目标验收——它的产物要求 `GLIBC_2.38`，数值上在 2.39 门槛内，但链接的是本机库版本，不能作为可安装包发出。Linux 每个目标的包必须在 Debian 13 构建宿主产出，并通过 glibc 符号版本（≤2.39）和 `libwebkitgtk-6.0.so.4`、`libgtk-4.so.1` 可得性两道实测门才算验收通过。Debian 12 与 `-tags gtk3` 产物不在发布目标内。
+**验收：**纵向样例覆盖绑定、事件清理、托盘和已批准目标的构建；应用可启动并加载前端。2026-10-27 状态：绑定、错误回传、事件与退出清理、应用启动并加载前端已在本机 Ubuntu 26.04 x64 实测通过（见 1.1 第 2 条）；已批准目标里只有 Linux x64 一条线过了两道门，Linux arm64、Windows、macOS 仍未验，本阶段验收未关闭。未批准的平台不得列为发布目标；构建宿主已选定为 Ubuntu 26.04（与开发机同一版本），它的产物要求 `GLIBC_2.38`，在 `GLIBC_2.41` 门槛内，且放进 Debian 13 容器 `ldd -r` 无未解析符号，所以同一台宿主可同时供 Debian 13 与 Ubuntu 26.04 两条目标线——但 Debian 13 上只验过链接，没验过实机运行，补齐实机走查前不算该目标验收通过。Linux 每个目标的包必须由 Ubuntu 26.04 构建宿主产出，并通过 glibc 符号版本（≤2.41）和 `libwebkitgtk-6.0.so.4`、`libgtk-4.so.1` 可得性两道实测门才算验收通过。Debian 12、Ubuntu 24.04 与 `-tags gtk3` 产物不在发布目标内。
 
 ### 阶段二：接口与真实状态
 
-- 定义数据结构、服务接口和前后端错误格式。
-- 从唯一正式原型抽取 GitHub、Steam 等目录数据到 `internal/catalog/catalog.json`，统一稳定 ID 和 hostname；允许不同项目共享规范化 hostname，校验共享关系可解释、无无效域名、引用关系完整，并确认前端不再维护第二份目录。每轮检测按规范化 hostname 去重。
-- 从后端加载分类、权限、Hosts 状态和设置。
-- 将顶部状态、详情页和“重算演示状态”替换成真实状态查询。
+- 定义数据结构、服务接口和前后端错误格式。**已完成 DTO 与错误格式（2026-10-27）**：`internal/app/dto.go` 定下对外的 `CatalogCategory`（`id`/`name`/`scopeId`/`order`/`items`）和 `CatalogItem`（`id`/`name`/`order`/`hostnames`/`userSupplied`），`ItemsSnapshot` = 目录 + 每项 `HostsState`；`HostsStatus` 六档 `unknown/none/partial/applied/conflict/readFailed` 里，当前阶段只有 `unknown` 会被返回，其余五档等 Hosts 读取服务落地才启用。内部审计字段（`protoLine`、`schemaVersion`、`source`）不进对外 JSON，测试用内部目录序列化做反向对照。错误格式在 `internal/app/errors.go`：`Error{Code,Message,cause}`，`cause` 不导出，所以不进 JSON 也不进绑定；`ToPublicError` 把 nil 原样返回、已公开的透传、`catalog.ErrInvalid` 归 `catalog_invalid`、其余归 `internal_error` 且不透出内部文本；前端按码判断，不解析中文。`Ping` 的空令牌改成走 `NewError`，线上文本 `empty_token: 令牌不能为空` 未变，有测试钉住。
+- **`GetItems` 已接线（2026-10-27，按用户「接着实现 GetItems 的接线」）**：`Service.GetItems()` 每次调用都读内嵌目录并返回 `ItemsSnapshot`，目录加载失败时回稳定错误码 `catalog_invalid`（`catalog.Load()` 现在把解析失败也归进 `ErrInvalid`），成功时分类/项目/主机名来自目录本身，前端不再保存第二份清单。Hosts 状态全部是 `unknown`——这一档的语义就是「后端还没读过系统 Hosts」，不是「未替换」也不是检测结果，所以不违反「不把模拟数据显示成真实状态」；等 Hosts 读取服务落地，把这一档换成真值即可，接口形状不变。已实测：真二进制启动后 WebView 确实调到了 `GetItems`（临时探针打印 `分类=11 项目=54 状态条=54 首条=unknown`，探针已删除并逐字节还原、`strings` 复查产物里 `PROBE` 0 处）；`wails3 generate bindings -ts` 重新生成后 `service.ts` 多出 `GetItems()`，`models.ts` 多出 `CatalogCategory`、`CatalogItem`、`HostsState`、`HostsStatus`、`ItemsSnapshot`；`npm run build`（含 tsc）通过。仍未做：Debian 13 实机走查、界面排版的肉眼确认。
+- 从唯一正式原型抽取 GitHub、Steam 等目录数据到 `internal/catalog/catalog.json`，统一稳定 ID 和 hostname；允许不同项目共享规范化 hostname，校验共享关系可解释、无无效域名、引用关系完整，并确认前端不再维护第二份目录。每轮检测按规范化 hostname 去重。**已完成（2026-10-27）**：`internal/catalog/`（`catalog.json`、`catalog.go`、`catalog_test.go`）落进工程，从原型 `CATEGORY_DEFS`（第 1131–1208 行）抽出 11 分类 / 54 项目 / 去重后 65 个 hostname（引用 68 次）；URL 字段只留 hostname（`raw.githubusercontent.com/StevenBlack/hosts`→`raw.githubusercontent.com`，`github.com/zhouzhehong/china-hosts-accelerator`→`github.com`），`自定义域名` 不是主机名，该项目标 `userSupplied` 且主机名留空；演示状态 `init` 不迁移；`scopeID` 取分类 ID，与原型按分类共享方法选择的写法一致。三组共用主机名（`github.com`、`raw.githubusercontent.com`、`ubisoft.com`）逐项登记成断言，54 个 `protoLine` 由测试回查原型原文；另有 17 条负向用例。`GetItems` 一度记为「等真实 Hosts 状态来源一起接」，2026-10-27 由用户改判为「先接，状态给 `unknown`」——理由见上一条：`unknown` 是「还没读过」这一档真实语义，不是伪造的状态，而 Hosts 读取本身属本文件的阶段四（在结构规划里编为阶段三「Hosts 与特权服务」，两份文档的阶段编号不同，引用时以文件为准）。
+- 从后端加载分类、权限、Hosts 状态和设置。**部分完成（2026-10-27）**：分类和项目已由 `GetItems` 从后端加载并在界面只读显示，Hosts 状态这一列目前是 `unknown`；权限和设置还没接。
+- 将顶部状态、详情页和“重算演示状态”替换成真实状态查询。**还没做**：正式工程的页面尚未迁移（现在只有纵向样例那块面板），这条要等页面搬进来才有落点；`unknown` 这类未读取值迁移时必须原样显示成「未读取」。
 
 **验收：**页面不再把模拟数据显示成真实网络或系统状态。
 

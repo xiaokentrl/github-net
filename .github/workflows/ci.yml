@@ -1,0 +1,124 @@
+name: CI
+
+# 门禁判据来自 TECHNICAL_PLAN 的「实现前决策与验证门槛」和 FRONTEND_BACKEND_STRUCTURE_PLAN 的「兼容性规则」。
+# Linux 发布线：目标为 Debian 13 与 Ubuntu 26.04，构建宿主为 ubuntu:26.04 容器。
+# runs-on 只是 Actions 的宿主 VM，不代表支持目标；真正的构建环境是下面 container 里的镜像。
+# arm64、Windows、macOS 还没进门禁。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GLIBC_LIMIT: "2.41"
+  RUNTIME_LIBS: "libgtk-4.so.1 libwebkitgtk-6.0.so.4 libjavascriptcoregtk-6.0.so.1"
+
+jobs:
+  frontend:
+    name: 前端构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: 类型检查并打包
+        run: npm ci && npm run build
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+
+  backend:
+    name: 后端检查（Ubuntu 26.04 宿主）
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:26.04
+    needs: frontend
+    steps:
+      - name: 装构建依赖
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git xz-utils gcc pkg-config binutils libgtk-4-dev libwebkitgtk-6.0-dev
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: 取前端产物
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+      - name: 格式化检查
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: 静态检查与测试
+        run: go vet ./... && go test -count=1 ./...
+
+  linux-x64:
+    name: Linux x64 出包与门一（Ubuntu 26.04 宿主）
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:26.04
+    needs: frontend
+    steps:
+      - name: 装构建依赖
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git xz-utils gcc pkg-config binutils libgtk-4-dev libwebkitgtk-6.0-dev
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: 取前端产物
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+      - name: 构建产物
+        run: CGO_ENABLED=1 go build -trimpath -o bin/github-net .
+      - name: 门一 产物 glibc 符号不高于门槛
+        run: |
+          max=$(objdump -T bin/github-net | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1)
+          echo "产物最高 glibc 符号：$max，门槛：$GLIBC_LIMIT"
+          newest=$(printf '%s\n%s\n' "$max" "$GLIBC_LIMIT" | sort -V | tail -1)
+          test "$newest" = "$GLIBC_LIMIT" || { echo "门一不过：$max 高于 $GLIBC_LIMIT"; exit 1; }
+      - name: 门二 在 Ubuntu 26.04 复核动态链接
+        run: |
+          ldd -r bin/github-net > ldd.txt 2>&1
+          cat ldd.txt
+          if grep -E 'not found|undefined symbol' ldd.txt; then echo "门二不过：Ubuntu 26.04 有未解析依赖"; exit 1; fi
+          for so in $RUNTIME_LIBS; do grep -q "$so => /" ldd.txt || { echo "门二不过：Ubuntu 26.04 缺 $so"; exit 1; }; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: github-net-linux-amd64
+          path: bin/github-net
+          if-no-files-found: error
+
+  linux-x64-debian13:
+    name: 门二 复核 Debian 13 运行库
+    runs-on: ubuntu-latest
+    container:
+      image: debian:13
+    needs: linux-x64
+    steps:
+      - name: 装运行库
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates binutils libgtk-4-1 libwebkitgtk-6.0-4
+      - uses: actions/download-artifact@v4
+        with:
+          name: github-net-linux-amd64
+          path: bin
+      - name: 动态链接必须全部解析
+        run: |
+          chmod +x bin/github-net
+          ldd -r bin/github-net > ldd.txt 2>&1
+          cat ldd.txt
+          if grep -E 'not found|undefined symbol' ldd.txt; then echo "门二不过：Debian 13 有未解析依赖"; exit 1; fi
+          for so in $RUNTIME_LIBS; do grep -q "$so => /" ldd.txt || { echo "门二不过：Debian 13 缺 $so"; exit 1; }; done

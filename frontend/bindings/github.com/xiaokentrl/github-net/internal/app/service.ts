@@ -15,6 +15,17 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 /**
+ * GetItems 返回产品目录和每个项目当前的 Hosts 状态，是目录的唯一来源；前端不再自己存一份列表。
+ * Hosts 状态现在一律是 unknown——后端的 Hosts 读取服务还没实现，unknown 的意思是「还没读过」，
+ * 不是「未替换」，前端必须按未读取显示，不许把它显示成一种检测结果。
+ */
+export function GetItems(): $CancellablePromise<$models.ItemsSnapshot> {
+    return $Call.ByID(1316963034).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
+/**
  * Ping 只为验证「后端错误能传回前端」这条路：空令牌一律拒绝，不做任何检测。
  */
 export function Ping(token: string): $CancellablePromise<string> {
@@ -26,9 +37,10 @@ export function Ping(token: string): $CancellablePromise<string> {
  */
 export function RuntimeInfo(): $CancellablePromise<$models.RuntimeInfo> {
     return $Call.ByID(3961655330).then(($result: any) => {
-        return $$createType0($result);
+        return $$createType1($result);
     });
 }
 
 // Private type creation functions
-const $$createType0 = $models.RuntimeInfo.createFrom;
+const $$createType0 = $models.ItemsSnapshot.createFrom;
+const $$createType1 = $models.RuntimeInfo.createFrom;

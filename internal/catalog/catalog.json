@@ -1,0 +1,601 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "file": "github-net唯一前端原型.html",
+    "region": "CATEGORY_DEFS",
+    "lineStart": 1131,
+    "lineEnd": 1208,
+    "extractedAt": "2026-10-27",
+    "note": "原型 items 的 init 字段是演示状态（applied/stale/error），不是真实状态，未迁移。"
+  },
+  "categories": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "scopeID": "github",
+      "order": 1,
+      "items": [
+        {
+          "id": "gh-main",
+          "name": "主站与 API",
+          "order": 1,
+          "protoLine": 1133,
+          "hostnames": [
+            "github.com",
+            "api.github.com",
+            "gist.github.com"
+          ]
+        },
+        {
+          "id": "gh-raw",
+          "name": "Raw 文件",
+          "order": 2,
+          "protoLine": 1134,
+          "hostnames": [
+            "raw.githubusercontent.com"
+          ]
+        },
+        {
+          "id": "gh-rel",
+          "name": "Release 资产",
+          "order": 3,
+          "protoLine": 1135,
+          "hostnames": [
+            "objects.githubusercontent.com"
+          ]
+        },
+        {
+          "id": "gh-img",
+          "name": "图片与头像",
+          "order": 4,
+          "protoLine": 1136,
+          "hostnames": [
+            "avatars.githubusercontent.com",
+            "user-images.githubusercontent.com"
+          ]
+        },
+        {
+          "id": "gh-cdn",
+          "name": "静态资源 CDN",
+          "order": 5,
+          "protoLine": 1137,
+          "hostnames": [
+            "github.githubassets.com",
+            "github.global.ssl.fastly.net"
+          ]
+        },
+        {
+          "id": "gh-pages",
+          "name": "GitHub Pages",
+          "order": 6,
+          "protoLine": 1138,
+          "hostnames": [
+            "pages.github.com"
+          ]
+        },
+        {
+          "id": "gh-gist",
+          "name": "Gist",
+          "order": 7,
+          "protoLine": 1139,
+          "hostnames": [
+            "gist.githubusercontent.com"
+          ]
+        },
+        {
+          "id": "gh-act",
+          "name": "Actions",
+          "order": 8,
+          "protoLine": 1140,
+          "hostnames": [
+            "pipelines.actions.githubusercontent.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jetbrains",
+      "name": "JetBrains",
+      "scopeID": "jetbrains",
+      "order": 2,
+      "items": [
+        {
+          "id": "jb-plug",
+          "name": "插件市场",
+          "order": 1,
+          "protoLine": 1143,
+          "hostnames": [
+            "plugins.jetbrains.com",
+            "downloads.marketplace.jetbrains.com"
+          ]
+        },
+        {
+          "id": "jb-ide",
+          "name": "IDE 下载",
+          "order": 2,
+          "protoLine": 1144,
+          "hostnames": [
+            "download.jetbrains.com",
+            "download-cdn.jetbrains.com"
+          ]
+        },
+        {
+          "id": "jb-acc",
+          "name": "账号验证",
+          "order": 3,
+          "protoLine": 1145,
+          "hostnames": [
+            "account.jetbrains.com"
+          ]
+        },
+        {
+          "id": "jb-tool",
+          "name": "Toolbox",
+          "order": 4,
+          "protoLine": 1146,
+          "hostnames": [
+            "toolbox.jetbrains.com"
+          ]
+        },
+        {
+          "id": "jb-res",
+          "name": "文档与资源",
+          "order": 5,
+          "protoLine": 1147,
+          "hostnames": [
+            "resources.jetbrains.com",
+            "www.jetbrains.com"
+          ]
+        },
+        {
+          "id": "jb-upd",
+          "name": "更新检查",
+          "order": 6,
+          "protoLine": 1148,
+          "hostnames": [
+            "updates.jetbrains.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "name": "AI 开发工具",
+      "scopeID": "ai",
+      "order": 3,
+      "items": [
+        {
+          "id": "ai-cursor",
+          "name": "Cursor",
+          "order": 1,
+          "protoLine": 1151,
+          "hostnames": [
+            "cursor.com",
+            "cursorapi.com",
+            "cursor-cdn.com"
+          ]
+        },
+        {
+          "id": "ai-windsurf",
+          "name": "Windsurf",
+          "order": 2,
+          "protoLine": 1152,
+          "hostnames": [
+            "windsurf.com",
+            "codeium.com"
+          ]
+        },
+        {
+          "id": "ai-copilot",
+          "name": "GitHub Copilot",
+          "order": 3,
+          "protoLine": 1153,
+          "hostnames": [
+            "api.individual.githubcopilot.com"
+          ]
+        },
+        {
+          "id": "ai-trae",
+          "name": "Trae",
+          "order": 4,
+          "protoLine": 1154,
+          "hostnames": [
+            "trae.ai",
+            "trae-api.com"
+          ]
+        },
+        {
+          "id": "ai-gemini",
+          "name": "Gemini",
+          "order": 5,
+          "protoLine": 1155,
+          "hostnames": [
+            "daily-cloudcode-pa.googleapis.com"
+          ]
+        },
+        {
+          "id": "ai-claude",
+          "name": "Claude / MCP",
+          "order": 6,
+          "protoLine": 1156,
+          "hostnames": [
+            "api.anthropic.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "steam",
+      "name": "Steam",
+      "scopeID": "steam",
+      "order": 4,
+      "items": [
+        {
+          "id": "st-store",
+          "name": "商店",
+          "order": 1,
+          "protoLine": 1159,
+          "hostnames": [
+            "store.steampowered.com"
+          ]
+        },
+        {
+          "id": "st-comm",
+          "name": "社区",
+          "order": 2,
+          "protoLine": 1160,
+          "hostnames": [
+            "steamcommunity.com"
+          ]
+        },
+        {
+          "id": "st-cdn",
+          "name": "CDN",
+          "order": 3,
+          "protoLine": 1161,
+          "hostnames": [
+            "cdn.steampowered.com"
+          ]
+        },
+        {
+          "id": "st-dl",
+          "name": "下载节点",
+          "order": 4,
+          "protoLine": 1162,
+          "hostnames": [
+            "ext1-hkg1.steamserver.net"
+          ]
+        },
+        {
+          "id": "st-img",
+          "name": "图片与头像",
+          "order": 5,
+          "protoLine": 1163,
+          "hostnames": [
+            "avatars.steamstatic.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gameplat",
+      "name": "游戏平台",
+      "scopeID": "gameplat",
+      "order": 5,
+      "items": [
+        {
+          "id": "gp-epic",
+          "name": "Epic Games",
+          "order": 1,
+          "protoLine": 1166,
+          "hostnames": [
+            "download.epicgames.com"
+          ]
+        },
+        {
+          "id": "gp-ea",
+          "name": "EA / Origin",
+          "order": 2,
+          "protoLine": 1167,
+          "hostnames": [
+            "origin.com",
+            "akamai.cdn.ea.com"
+          ]
+        },
+        {
+          "id": "gp-bnet",
+          "name": "Battle.net",
+          "order": 3,
+          "protoLine": 1168,
+          "hostnames": [
+            "battle.net"
+          ]
+        },
+        {
+          "id": "gp-ubi",
+          "name": "Ubisoft Connect",
+          "order": 4,
+          "protoLine": 1169,
+          "hostnames": [
+            "ubisoft.com",
+            "uplay.com"
+          ]
+        },
+        {
+          "id": "gp-riot",
+          "name": "Riot Games",
+          "order": 5,
+          "protoLine": 1170,
+          "hostnames": [
+            "riotgames.com"
+          ]
+        },
+        {
+          "id": "gp-gog",
+          "name": "GOG",
+          "order": 6,
+          "protoLine": 1171,
+          "hostnames": [
+            "gog.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gamespec",
+      "name": "特定游戏专项",
+      "scopeID": "gamespec",
+      "order": 6,
+      "items": [
+        {
+          "id": "gs-pubg",
+          "name": "绝地求生",
+          "order": 1,
+          "protoLine": 1174,
+          "hostnames": [
+            "pubg.com"
+          ]
+        },
+        {
+          "id": "gs-bf",
+          "name": "战地系列",
+          "order": 2,
+          "protoLine": 1175,
+          "hostnames": [
+            "battlefield.com",
+            "ea.com"
+          ]
+        },
+        {
+          "id": "gs-r6",
+          "name": "彩虹六号",
+          "order": 3,
+          "protoLine": 1176,
+          "hostnames": [
+            "ubisoft.com"
+          ]
+        },
+        {
+          "id": "gs-ff14",
+          "name": "FF14 国际版",
+          "order": 4,
+          "protoLine": 1177,
+          "hostnames": [
+            "finalfantasyxiv.com"
+          ]
+        },
+        {
+          "id": "gs-tark",
+          "name": "逃离塔科夫",
+          "order": 5,
+          "protoLine": 1178,
+          "hostnames": [
+            "escapefromtarkov.com"
+          ]
+        },
+        {
+          "id": "gs-gta",
+          "name": "GTA V",
+          "order": 6,
+          "protoLine": 1179,
+          "hostnames": [
+            "rockstargames.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cdn",
+      "name": "公共 CDN",
+      "scopeID": "cdn",
+      "order": 7,
+      "items": [
+        {
+          "id": "cdn-jsdelivr",
+          "name": "jsDelivr",
+          "order": 1,
+          "protoLine": 1182,
+          "hostnames": [
+            "cdn.jsdelivr.net"
+          ]
+        },
+        {
+          "id": "cdn-unpkg",
+          "name": "unpkg",
+          "order": 2,
+          "protoLine": 1183,
+          "hostnames": [
+            "unpkg.com"
+          ]
+        },
+        {
+          "id": "cdn-cdnjs",
+          "name": "cdnjs",
+          "order": 3,
+          "protoLine": 1184,
+          "hostnames": [
+            "cdnjs.cloudflare.com"
+          ]
+        },
+        {
+          "id": "cdn-gfonts",
+          "name": "Google Fonts",
+          "order": 4,
+          "protoLine": 1185,
+          "hostnames": [
+            "fonts.googleapis.com",
+            "fonts.gstatic.com"
+          ]
+        },
+        {
+          "id": "cdn-bootstrap",
+          "name": "Bootstrap",
+          "order": 5,
+          "protoLine": 1186,
+          "hostnames": [
+            "stackpath.bootstrapcdn.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ms",
+      "name": "微软 / Xbox",
+      "scopeID": "ms",
+      "order": 8,
+      "items": [
+        {
+          "id": "ms-store",
+          "name": "Microsoft Store",
+          "order": 1,
+          "protoLine": 1189,
+          "hostnames": [
+            "storeedgefd.dsx.mp.microsoft.com"
+          ]
+        },
+        {
+          "id": "ms-xbox",
+          "name": "Xbox Live",
+          "order": 2,
+          "protoLine": 1190,
+          "hostnames": [
+            "xboxlive.com"
+          ]
+        },
+        {
+          "id": "ms-winup",
+          "name": "Windows Update",
+          "order": 3,
+          "protoLine": 1191,
+          "hostnames": [
+            "update.microsoft.com"
+          ]
+        },
+        {
+          "id": "ms-office",
+          "name": "Office",
+          "order": 4,
+          "protoLine": 1192,
+          "hostnames": [
+            "officeapps.live.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "coursera",
+      "name": "Coursera",
+      "scopeID": "coursera",
+      "order": 9,
+      "items": [
+        {
+          "id": "co-video",
+          "name": "视频 CDN",
+          "order": 1,
+          "protoLine": 1195,
+          "hostnames": [
+            "d3c33hcgiwev3.cloudfront.net"
+          ]
+        },
+        {
+          "id": "co-main",
+          "name": "主站资源",
+          "order": 2,
+          "protoLine": 1196,
+          "hostnames": [
+            "d1a3f4spazzrp4.cloudfront.net"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "block",
+      "name": "去广告与屏蔽",
+      "scopeID": "block",
+      "order": 10,
+      "items": [
+        {
+          "id": "bl-antiad",
+          "name": "anti-AD",
+          "order": 1,
+          "protoLine": 1199,
+          "hostnames": [
+            "anti-ad.net"
+          ]
+        },
+        {
+          "id": "bl-adrules",
+          "name": "AdRules",
+          "order": 2,
+          "protoLine": 1200,
+          "hostnames": [
+            "adrules.top"
+          ]
+        },
+        {
+          "id": "bl-steven",
+          "name": "StevenBlack",
+          "order": 3,
+          "protoLine": 1201,
+          "hostnames": [
+            "raw.githubusercontent.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "custom",
+      "name": "自定义 / 订阅源",
+      "scopeID": "custom",
+      "order": 11,
+      "items": [
+        {
+          "id": "cu-manual",
+          "name": "手动映射",
+          "order": 1,
+          "protoLine": 1204,
+          "hostnames": [],
+          "userSupplied": true
+        },
+        {
+          "id": "cu-gh520",
+          "name": "GitHub520",
+          "order": 2,
+          "protoLine": 1205,
+          "hostnames": [
+            "raw.hellogithub.com"
+          ]
+        },
+        {
+          "id": "cu-china",
+          "name": "china-hosts",
+          "order": 3,
+          "protoLine": 1206,
+          "hostnames": [
+            "github.com"
+          ]
+        }
+      ]
+    }
+  ]
+}

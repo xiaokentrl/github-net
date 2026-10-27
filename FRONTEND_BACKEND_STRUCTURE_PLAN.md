@@ -244,7 +244,7 @@ feature action → request validation → backend app service
 | 完整检测 | 16 | 8（安全硬上限） | 用户主动选择；尝试更多 DNS 候选，不提高网络并发硬上限 |
 
 - 设置提供 `networkProfile`（省流/标准/完整检测）、每域名候选上限、每轮总候选上限、自动检测开关、计量网络行为和更新下载确认。配置由后端持久化并经 revision 保持 GUI 一致；具体配置项可在实现时收敛，但不能只提供一个不解释效果的“速度”滑杆。
-- 首次安装及配置缺失时默认使用“省流”档（每 hostname 最多 2 个候选、全任务并发 2）；可配置总候选探测上限暂定默认 108，来源为现有 54 个菜单项目 × 每项 2 个候选的估算。菜单项目数不等于唯一 hostname 数，108 只是可调预算，不保证完整扫描，也不是后端硬上限。实现前须按规范化、去重后的 hostname 数核算最大范围。实际每轮预算为 `min(本轮唯一目标 hostname 数 × 档位每 hostname 候选上限, 用户总上限)`，只统计实际启动的 IP 连通性探测，DNS 查询单独计数。目录项保存 hostname 而非完整 URL；URL 项先提取 hostname，大小写不敏感、尾随点统一，国际化域名使用同一 IDNA 规范；端口、路径和 query 不计为不同目标。同一轮按该规范化 hostname 去重。后台自动检测默认关闭，不因默认档位或打开设置而自动发起检测。
+- 首次安装及配置缺失时默认使用“省流”档（每 hostname 最多 2 个候选、全任务并发 2）；可配置总候选探测上限暂定默认 108，来源为现有 54 个菜单项目 × 每项 2 个候选的估算。菜单项目数不等于唯一 hostname 数，108 只是可调预算，不保证完整扫描，也不是后端硬上限。实现前须按规范化、去重后的 hostname 数核算最大范围；该核算已于 2026-10-27 完成：目录实际为 54 个项目、去重后 65 个 hostname，省流档全量一轮理论值 65 × 2 = 130，高于默认 108，所以按现值执行时全量一轮必须走「启动前确认 + 超额项标未检测」；默认上限是否上调待用户落句，落句前一律按 108 实现。实际每轮预算为 `min(本轮唯一目标 hostname 数 × 档位每 hostname 候选上限, 用户总上限)`，只统计实际启动的 IP 连通性探测，DNS 查询单独计数。目录项保存 hostname 而非完整 URL；URL 项先提取 hostname，大小写不敏感、尾随点统一，国际化域名使用同一 IDNA 规范；端口、路径和 query 不计为不同目标。同一轮按该规范化 hostname 去重。后台自动检测默认关闭，不因默认档位或打开设置而自动发起检测。
 - 若用户总上限低于本轮理论最大探测数，启动前展示差额并请求确认；确认后按当前范围顺序执行，按实际启动的候选 IP 探测数扣减预算，预算耗尽后的域名/项目明确标记“预算不足，未检测”。单项、批量、服务范围和应用前补充检测共用同一预算路径；拒绝确认则不启动检测，也不继续应用队列。
 - 即使用户选择完整检测，每轮仍受安全硬上限约束：活动网络请求最多 8、候选最多 16/域名、任务 deadline 不超过既定 5 秒/单项与 30 秒/服务。省流配置采用更低上限。界面显示根据本轮范围计算的有效候选预算，不把 108 显示为每轮固定用量；DNS 查询单独说明。
 - **探测只做连接/握手，不下载目标网页、测速文件或大响应体。** 首期使用 DNS 查询与 TCP/TLS 建连/证书验证；不发送 GET 下载页面，不做文件测速，不为测速度请求大文件。若未来策略必须读取 HTTP 内容，必须限定响应体最大字节数并纳入流量选项和安全评审。
@@ -259,7 +259,7 @@ feature action → request validation → backend app service
 1. **主要入口：**设置对话框 → “网络与流量”分类（`NetworkUsageSettings.tsx`）。分类名称应直白、可搜索，不藏在高级/开发者页面。
 2. **快速入口：**检测按钮旁的紧凑流量状态标签显示当前档位和基于当前选择数估算的有效上限；无选择时显示每域名候选上限。启动时按实际目标范围重新计算并冻结预算；108 是可配置总上限，不是每轮固定用量。点击标签可跳转“网络与流量”。每个服务/范围的详情高度与方法选择区仍保持一行，不额外增加纵向空间。
 3. **三档解释：**省流（每域名最多 2 个 IP、并发 2、关闭自动全量扫描）；标准（8 个 IP、并发 8）；完整检测（最多 16 个 IP、并发仍不超过 8）。选择档位时同步说明对请求数量、等待时间和结果覆盖面的影响；不只显示档位名称。
-4. **精细上限：**“每轮候选 IP 探测上限”暂定初始为 108，来源是 54 个菜单项目 × 每项 2 个候选；项目数并非 hostname 数，故该值只作可调预算，不保证完整扫描。有效预算取该值与范围内唯一 hostname 理论候选数的较小者。预算只计实际启动的候选 IP 探测，DNS 查询单独计数。若上限可能导致范围不完整，开始前要求用户确认；确认后按稳定顺序执行并明确列出未检测 hostname/项目，不静默遗漏。
+4. **精细上限：**“每轮候选 IP 探测上限”暂定初始为 108，来源是 54 个菜单项目 × 每项 2 个候选；项目数并非 hostname 数，故该值只作可调预算，不保证完整扫描。目录已抽完并核算过：去重后 65 个 hostname，省流档全量一轮理论值 130，确实高于默认 108。有效预算取该值与范围内唯一 hostname 理论候选数的较小者。预算只计实际启动的候选 IP 探测，DNS 查询单独计数。若上限可能导致范围不完整，开始前要求用户确认；确认后按稳定顺序执行并明确列出未检测 hostname/项目，不静默遗漏。
 5. **自动化与更新：**分别显示“自动检测”开关和“在计量网络下下载更新前询问”选项；省流档默认关闭后台自动全量检测，更新下载永远要求用户确认。检测本身由用户按钮发起，不因打开设置而启动。
 6. **当前网络状态：**若平台可靠识别到计量网络，显示“可能正在使用计量网络”的提示，不未经确认偷偷更改用户选择；识别能力不可用时显示“无法识别，按当前流量设置执行”。
 7. **设置保存：**设置变更显示“保存中/已保存/保存失败”，持久化失败不得显示为已应用；同一轮检测使用启动时的配置快照，修改设置只影响下一轮。
@@ -343,24 +343,26 @@ Wails v3.0.0 的生命周期、绑定和事件 API 以锁定版本的生成结�
 |---|---|---|---|
 | Windows | Windows 10 | x64 | WebView2 |
 | macOS | macOS 13 | x64、arm64 | WKWebView |
-| Linux | Debian 13 | x64、arm64 | 默认 GTK4/WebKitGTK 6.0 构建，在 Debian 13 构建宿主（或等效容器）上编译，不加 `-tags gtk3` |
-| Linux | Ubuntu 24.04 LTS | x64、arm64 | 同一套 GTK4/WebKitGTK 6.0 产物，复用上面那台 Debian 13 宿主构建 |
+| Linux | Debian 13 | x64、arm64 | 默认 GTK4/WebKitGTK 6.0 构建，在 Ubuntu 26.04 构建宿主（或等效容器）上编译，不加 `-tags gtk3` |
+| Linux | Ubuntu 26.04 LTS | x64、arm64 | 同一套 GTK4/WebKitGTK 6.0 产物，就是上面那台 Ubuntu 26.04 宿主构建 |
 
-未在目标系统/架构实测的构建不标记为已验证。**Debian 12 已从发布目标移除**（2026-10-27 决定）：它的仓库里没有 `webkitgtk-6.0`，只能走 `-tags gtk3` 的 GTK3/WebKit2GTK 4.1 老后端；不再为该路径出包，也不再维护第二台低版本构建宿主。Linux 只有一条发布线：默认 GTK4/WebKitGTK 6.0，构建宿主固定 **Debian 13 稳定版**，依赖 `libgtk-4-dev libwebkitgtk-6.0-dev`。
+未在目标系统/架构实测的构建不标记为已验证。**两个发行版已先后移出发布目标**：Debian 12（2026-10-27 决定）——它的仓库里没有 `webkitgtk-6.0`，只能走 `-tags gtk3` 的 GTK3/WebKit2GTK 4.1 老后端；Ubuntu 24.04 LTS（同日稍后决定）——用户改把 Ubuntu 线定在 26.04 LTS，不再为 24.04 出包。Linux 只有一条发布线：默认 GTK4/WebKitGTK 6.0，构建宿主固定 **Ubuntu 26.04**（本机即该版本，容器镜像 `ubuntu:26.04` 等价），依赖 `libgtk-4-dev libwebkitgtk-6.0-dev`。
 
 产物能不能装某台机器，按**两道各自实测的门**判，不按「在哪台机器编译」推断：
 
-- **门一：glibc 符号版本。** 用 `objdump -T` 查产物要求的最高 `GLIBC_x.y`，必须不高于目标发行版的 glibc。最低目标取两发行版中较小者：Ubuntu 24.04 是 2.39，Debian 13 是 2.41，所以发布门槛为 `GLIBC_2.39`。CI 强制跑这条检查，不达标就不得发布该目标。
-- **门二：运行期库文件。** 产物链接的 `libwebkitgtk-6.0.so.4` / `libgtk-4.so.1` / `libjavascriptcoregtk-6.0.so.1` 必须在目标发行版仓库里存在。Debian 13 与 Ubuntu 24.04+ 都有；Debian 12 没有，这正是它出局的原因。
+- **门一：glibc 符号版本。** 用 `objdump -T` 查产物要求的最高 `GLIBC_x.y`，必须不高于目标发行版的 glibc。两个最低目标里较小的一档是 Debian 13 的 2.41（Ubuntu 26.04 是 2.43），所以发布门槛为 `GLIBC_2.41`。CI 强制跑这条检查，不达标就不得发布该目标。
+- **门二：运行期库文件。** 产物链接的 `libwebkitgtk-6.0.so.4` / `libgtk-4.so.1` / `libjavascriptcoregtk-6.0.so.1` 必须在目标发行版仓库里存在。Debian 13 与 Ubuntu 26.04 都有；Debian 12 没有，这正是它出局的原因。
 
-2026-10-27 容器实测（同一份代码，`go build -trimpath`，Go 1.27.3 + Wails v3.0.0）：Debian 13（glibc 2.41）默认 GTK4 构建成功，产物最高只要求 `GLIBC_2.34`，链接 `libwebkitgtk-6.0.so.4` / `libgtk-4.so.1`；Ubuntu 24.04（glibc 2.39）同样成功、同样要求 `GLIBC_2.34`。作为出局依据：Debian 12（glibc 2.36）默认 GTK4 构建直接失败于 pkg-config 找不到 `webkitgtk-6.0`，只有 `-tags gtk3` 能编过。本机 Ubuntu 26.04（glibc 2.43）默认 GTK4 编过，产物要求 `GLIBC_2.38`，虽在 2.39 门槛内，但它链接的是本机库版本，仍只算开发调试——发布产物一律由 Debian 13 宿主出。
+**一处自判翻转：**上一版写「本机 Ubuntu 26.04 编出的产物只算开发调试，发布产物一律由 Debian 13 宿主出」。这句话当时的前提是 Ubuntu 24.04 还在目标里——24.04 仓库里的 GTK4 只有 4.14，比构建用的 4.22 低整整八个小版本，怕的是产物引用了新符号在目标上取不到；24.04 一出局，剩下的最低目标 Debian 13 有 GTK 4.18.6 / WebKitGTK 2.54.0，实测反而站在反面：Ubuntu 26.04 宿主产物要求 `GLIBC_2.38`，低于新门槛 `GLIBC_2.41`；放进 Debian 13 容器 `ldd -r` 未解析计数为 0，`libgtk-4.so.1`、`libwebkitgtk-6.0.so.4`、`libjavascriptcoregtk-6.0.so.1` 三条都解析到真实路径。所以**一台 Ubuntu 26.04 宿主可以同时供 Debian 13 与 Ubuntu 26.04 两条目标线**，不再需要第二台低版本构建宿主。留着的口子写清楚：`ldd -r` 只证明符号接得上，不证明跑得好——Debian 13 的 GTK/WebKit 版本与构建用的不是同一套，界面渲染、托盘和退出仍要在 Debian 13 实机走查一遍才算验完。
 
-**这套门槛的实际余量：**实测产物要求 2.34，门槛 2.39，差五档——说明门一基本不会卡住，真正决定支持面的是门二的库面。`-tags gtk3` 保留为开发者本机备选（例如在无 WebKitGTK 6.0 的环境里临时编译验证），不是受支持的发布路径，CI 不为它出包，出问题不承诺修复。
+2026-10-27 容器实测（同一份代码，`go build -trimpath`，Go 1.27.3 + Wails v3.0.0）：Debian 13（glibc 2.41）默认 GTK4 构建成功，产物最高只要求 `GLIBC_2.34`；Ubuntu 24.04（glibc 2.39）当时同样成功、同样要求 `GLIBC_2.34`，现已随该发行版出局而不再复测；本机 Ubuntu 26.04（glibc 2.43）与其等效容器 `ubuntu:26.04` 的默认 GTK4 都编过，两边产物同样要求 `GLIBC_2.38`。作为 Debian 12 的出局依据：它的默认 GTK4 构建直接失败于 pkg-config 找不到 `webkitgtk-6.0`，只有 `-tags gtk3` 能编过。
+
+**这套门槛的实际余量：**Ubuntu 26.04 宿主产物要求 2.38，门槛 2.41，差三档；Debian 13 宿主产物要求 2.34，差七档。门一仍不太会卡住，真正决定支持面的是门二的库面。`-tags gtk3` 保留为开发者本机备选（例如在无 WebKitGTK 6.0 的环境里临时编译验证），不是受支持的发布路径，CI 不为它出包，出问题不承诺修复。
 
 **兼容性规则：**
 
-- CI 构建矩阵按上表执行；Linux 只有一条 GTK4/WebKitGTK 6.0 产物线，x64 与 arm64 各自构建和验收，缺任意一项不得宣称该架构已支持。构建宿主为 Debian 13（或等效容器），构建前装 `libgtk-4-dev libwebkitgtk-6.0-dev`，构建命令用默认后端，不加 `-tags gtk3`。每个 Linux 产物发布前必须跑 `objdump -T` 取最高 `GLIBC_x.y` 并与 `GLIBC_2.39` 比对，同时用 `ldd` 确认产物链接到的 `libwebkitgtk-6.0.so.4` / `libgtk-4.so.1` 在目标发行版仓库中存在；两项任一不过就不出该目标的包。CI 不为 `-tags gtk3` 出包。不因 Wails 能构建其他平台/架构就自动承诺支持。
-- 记录各系统支持的 WebView 基线：Windows WebView2、macOS WKWebView、Linux 为 WebKitGTK 6.0（Debian 13 与 Ubuntu 24.04+）；字体、DPI、滚动条、原生窗口尺寸和弹窗层级在每个目标逐一实测。
+- CI 构建矩阵按上表执行；Linux 只有一条 GTK4/WebKitGTK 6.0 产物线，x64 与 arm64 各自构建和验收，缺任意一项不得宣称该架构已支持。构建宿主为 Ubuntu 26.04（或等效容器），构建前装 `libgtk-4-dev libwebkitgtk-6.0-dev`，构建命令用默认后端，不加 `-tags gtk3`。每个 Linux 产物发布前必须跑 `objdump -T` 取最高 `GLIBC_x.y` 并与 `GLIBC_2.41` 比对，同时用 `ldd` 确认产物链接到的 `libwebkitgtk-6.0.so.4` / `libgtk-4.so.1` 在目标发行版仓库中存在；两项任一不过就不出该目标的包。CI 不为 `-tags gtk3` 出包。不因 Wails 能构建其他平台/架构就自动承诺支持。**落地状态**：上述判据已写成 `.github/workflows/ci.yml`，当前只覆盖 Linux x64 一条线（Ubuntu 26.04 宿主出包 + 门一 + 本发行版门二 + Debian 13 复核门二）与前端构建、后端 `gofmt`/`vet`/`test`；arm64、Windows、macOS 的 job 待匹配 runner 后补，补齐前这些目标不算进门禁。
+- 记录各系统支持的 WebView 基线：Windows WebView2、macOS WKWebView、Linux 为 WebKitGTK 6.0（Debian 13 与 Ubuntu 26.04）；字体、DPI、滚动条、原生窗口尺寸和弹窗层级在每个目标逐一实测。
 - 只使用已验证的 WebView/CSS 能力；不要依赖系统默认按钮、输入框、字体和滚动行为。
 - 核心流程支持键盘操作和可见焦点；系统字体不可用时配置合理的跨平台回退字体。
 - 平台相关代码有对应平台的编译检查和测试；系统命令通过白名单参数调用，不拼接任意输入。
@@ -372,9 +374,11 @@ Wails v3.0.0 的生命周期、绑定和事件 API 以锁定版本的生成结�
 
 #### Wails v3 最小纵向验证
 
-Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能力。临时 React + TypeScript 样例已在 Ubuntu 26.04 x64 验证生成绑定、Go/前端调用与错误返回、事件订阅和取消、托盘及退出清理；Go 测试、前端构建、默认 GTK4 构建和 `-tags gtk3` 构建均通过。此记录只覆盖本机 Ubuntu 26.04 的 x64 默认 GTK4 路径；`-tags gtk3` 只算本机编译通过，且该后端已不是发布目标，Windows、macOS 和 arm64 都未验证。
+Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能力。样例已从临时验证搬进正式工程：后端 `internal/app`（只暴露 `RuntimeInfo` 与 `Ping`）+ `internal/event`（事件名与自增序号的唯一主人）、入口 `main.go`（托盘显示/隐藏/退出，退出时取消订阅并停发事件）、前端 `frontend/src/App.tsx`（加载/成功/失败三态，保存并调用 unsubscribe，重复序号丢弃）。2026-10-27 在本机 Ubuntu 26.04 x64（Wayland，GTK 4.22.4 / WebKitGTK 2.52.6）实测：WebView 真实请求 `/`、JS 与 CSS；`RuntimeInfo` 返回真实运行环境；空令牌调用回 `empty_token: 令牌不能为空`（`/wails/runtime` 返回 422）；前端 `Events.On` 收到后端事件并回传 `evt:3:running:true`；退出清理确实执行（用临时探针注入验证，验完已 diff 还原，仓库内不留调试代码）。此记录只覆盖本机 Ubuntu 26.04 x64 的默认 GTK4 路径；`-tags gtk3` 只算本机编译通过且已不是发布目标；本机没有截图工具，界面排版、托盘图标与菜单点击无人眼走查；StrictMode 双挂载只在代码里做了请求号作废，未实跑 `wails3 dev`；关闭窗口仍按 Wails 默认＝退出进程（关到托盘属阶段二）。Windows、macOS 和 arm64 都未验证。
 
-2026-10-27 已在正式工程上补测 Linux 构建链：Debian 13 与 Ubuntu 24.04 两个容器的默认 GTK4 构建都通过，产物只要求 `GLIBC_2.34`；Debian 12 容器证明默认 GTK4 无法构建，因此退出发布目标（数据见「首发矩阵」一节）。这些是容器编译与链接实测，不是实机运行验证——Debian 13 与 Ubuntu 24.04 的实机启动、托盘和退出清理仍待原生 runner 验证。
+2026-10-27 已在正式工程上补测 Linux 构建链：Debian 13 与 Ubuntu 24.04 两个容器的默认 GTK4 构建通过，新宿主 Ubuntu 26.04 的同一构建先在本机（同一版本）实测通过、同日稍后在等效容器 `ubuntu:26.04` 里把 CI 的那串命令原样跑完（`gofmt -l` 空、`go vet`、`go test -count=1`、`go build -trimpath`、门一 2.38 ≤ 2.41、门二未解析计数 0），产物再交给 `debian:13` 容器复核门二，同样未解析计数 0；Debian 12 容器证明默认 GTK4 无法构建，因此退出发布目标（数据见「首发矩阵」一节）。这些是容器/主机的编译与链接实测，不是实机运行验证——Debian 13 的实机启动、托盘和退出清理仍待原生 runner 验证。
+
+同日把这两道门落成了 CI：`.github/workflows/ci.yml` 的 `frontend` 作业跑 `npm ci` 和 `npm run build`（含 tsc）；`backend` 与 `linux-x64` 都在 `ubuntu:26.04` 容器里执行，前者查 `gofmt -l`、`go vet ./...`、`go test -count=1 ./...`，后者用默认后端 `go build -trimpath` 出 x64 产物并跑门一（`objdump -T` 最高 `GLIBC_x.y` ≤ `GLIBC_2.41`）和 Ubuntu 26.04 侧门二（`ldd -r` 无未解析，且 `libgtk-4.so.1`/`libwebkitgtk-6.0.so.4`/`libjavascriptcoregtk-6.0.so.1` 三条都解析到真实路径）；产物再交给 `debian:13` 容器的 `linux-x64-debian13` 装 `libgtk-4-1 libwebkitgtk-6.0-4` 后复核门二。工作流里这几条判据已在同名真容器逐条实测：Debian 13 产物门一 2.34 通过、把门槛压到 2.20 能正确判不过（负向对照）、两个发行版 `ldd -r` 未解析计数为 0；`ubuntu:26.04` 容器产物门一 2.38 通过（同样用 2.34 做过负向对照，正确拦住）、放进 `debian:13` 后 `ldd -r` 未解析计数同样为 0、三条运行库都解析到真实路径。还没被本地复现的只剩 Actions 自己的调度层：容器内 `setup-go` 装 Go 与在线拉模块（本机复测是把宿主 Go 1.27.3 与模块缓存拷进容器、`GOPROXY=off` 跑的），以及 `upload-artifact`/`download-artifact` 的跨作业传递——这几步要等首次真跑确认。arm64、Windows、macOS 还没有 job，缺任意一项就不能宣称该目标已进门禁。
 
 正式工程仍须按锁定版本复核以下契约，并在匹配的原生 runner 上验证批准矩阵中其余系统和架构：
 
@@ -930,19 +934,19 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 
 1. 已暂停两份 HTML 原型的并行编辑，并核对候选版的省流设置、检测预算、候选操作按钮布局和自定义下拉弹层。已将这些确认项合入 `github-net唯一前端原型.html`；该正式原型是唯一迁移基线。副本冻结留档，不删除，也不继续维护。
 2. 验证正式原型的省流默认值、档位、预算、取消、队列状态、候选操作和下拉弹层行为；修复后再进入页面迁移。
-3. Go 最低版本为 1.27.3，Wails 锁定 v3.0.0；临时样例已在 Ubuntu 26.04 x64 通过 Go 测试、前端构建、默认 GTK4 和 GTK3 构建。正式工程已在 Debian 13 与 Ubuntu 24.04 容器通过默认 GTK4 构建；Debian 12 经实测无法走默认后端，已于 2026-10-27 退出发布目标。Debian 13 与 Ubuntu 24.04 的实机运行、Windows、macOS 及 arm64 仍待原生 runner 验证。
-4. 使用已批准矩阵：Windows 10 x64、macOS 13 x64/arm64、Linux x64/arm64 且发行版最低 Debian 13 与 Ubuntu 24.04 LTS；CI 使用匹配的原生 runner。Linux 只有默认 GTK4/WebKitGTK 6.0 一条发布线，统一在 Debian 13 构建宿主（或等效容器）编译，不加 `-tags gtk3`；产物兼容性按「两道门」实测判定：`objdump -T` 的最高 glibc 符号版本不高于 `GLIBC_2.39`，且目标发行版提供产物链接的 `libwebkitgtk-6.0.so.4` 与 `libgtk-4.so.1`。
+3. Go 最低版本为 1.27.3，Wails 锁定 v3.0.0；纵向样例已落进正式工程（`internal/app`、`internal/event`、`main.go`、`frontend/src/App.tsx`），并在本机 Ubuntu 26.04 x64 实测通过绑定调用、错误回传、事件接收与退出清理；本机 GTK4 构建与前端构建也通过。正式工程已在 Debian 13 与 Ubuntu 24.04 两个容器通过默认 GTK4 构建；新的构建宿主 Ubuntu 26.04 先在本机（同一版本）实测通过，等效容器 `ubuntu:26.04` 也已按 CI 的命令逐条跑完（含门一与门二，产物在 `debian:13` 复核门二通过）。Debian 12 经实测无法走默认后端，已于 2026-10-27 退出发布目标，Ubuntu 24.04 同日经用户裁决改由 26.04 LTS 取代。Debian 13 的实机运行、Windows、macOS 及 arm64 仍待原生 runner 验证。
+4. 使用已批准矩阵：Windows 10 x64、macOS 13 x64/arm64、Linux x64/arm64 且发行版最低 Debian 13 与 Ubuntu 26.04 LTS；CI 使用匹配的原生 runner。Linux 只有默认 GTK4/WebKitGTK 6.0 一条发布线，统一在 Ubuntu 26.04 构建宿主（或等效容器）编译，不加 `-tags gtk3`；产物兼容性按「两道门」实测判定：`objdump -T` 的最高 glibc 符号版本不高于 `GLIBC_2.41`（Debian 13 的 glibc，两个最低目标里较小的一档），且目标发行版提供产物链接的 `libwebkitgtk-6.0.so.4` 与 `libgtk-4.so.1`。这套判据已落成 `.github/workflows/ci.yml`，当前只覆盖 Linux x64 一条线加前端与后端检查，arm64、Windows、macOS 的 job 待补。
 5. 确认系统 DNS 隐私规则、Hosts 管理区契约，以及各平台特权 helper 验证计划。更新器和繁中按各自发布门槛推进，不阻塞只读界面或检测样例。
 
 **门槛：**唯一正式原型、已通过本机 Linux 验证的 Wails 样例和首发平台矩阵均已明确；正式迁移仍需建立工程并由原生 runner 验证其余目标。没有完成 helper 验证的平台不得开放 Hosts 写入。
 
-**基线与开发机的落差：**发布门槛是产物最高要求不超过 `GLIBC_2.39`（Ubuntu 24.04 的 glibc，两个最低目标里较小的一档）。Debian 13 与 Ubuntu 24.04 容器编出的产物都只要求 `GLIBC_2.34`，余量五档；本机 Ubuntu 26.04（glibc 2.43）编出的默认 GTK4 产物要求 `GLIBC_2.38`，数值上过得去，但它链接的是本机库版本，只能算开发调试，不作为可安装包发出。Linux 发布产物统一在 Debian 13 构建宿主（或等效容器）产出，出厂前必须实测过「两道门」——`objdump -T` 的最高 glibc 符号版本和 `ldd` 的库可得性。构建宿主只是起点，判定一律以产物实测为准：同一份代码在 Debian 13 与本机编出来的产物相差四档，说明「在哪台机器编」不能替代「产物要求哪个版本」。
+**基线与开发机的落差：**2026-10-27 起这条落差已经消掉一半——发布门槛是产物最高要求不超过 `GLIBC_2.41`（Debian 13 的 glibc，两个最低目标里较小的一档），而开发机与构建宿主现在是同一个系统（Ubuntu 26.04，glibc 2.43），它编出的产物要求 `GLIBC_2.38`，门一有余量三档，并且实测放进 Debian 13 容器后 `ldd -r` 无未解析符号，所以不再需要「另找一台低版本宿主出包」。剩下的落差是另一件事：Debian 13 目标上的 GTK 是 4.18.6、WebKitGTK 是 2.54.0，与构建用的 4.22.4 / 2.52.6 不同源同版本，链接接得上不等于跑得对，Debian 13 的实机启动、托盘与退出清理仍需人在这台机器上走查一次。判定一律以产物实测为准：同一份代码在 Debian 13 编出的产物要求 `GLIBC_2.34`、在 Ubuntu 26.04 编出的要求 `GLIBC_2.38`，相差四档，说明「在哪台机器编」不能替代「产物要求哪个版本」——所以两道门都要真跑，只是宿主选定为 Ubuntu 26.04 之后，门一和门二可以在同一条 CI 里一次测完。
 
 ### 阶段一：目录和只读界面
 
-1. 从唯一正式原型抽取 `catalog.json`，完成稳定 ID、hostname 规范化、共享 hostname 关系和引用完整性测试。不同项目可共享规范化 hostname；每轮检测按 hostname 去重，不合并项目 ID。
+1. 从唯一正式原型抽取 `catalog.json`，完成稳定 ID、hostname 规范化、共享 hostname 关系和引用完整性测试。不同项目可共享规范化 hostname；每轮检测按 hostname 去重，不合并项目 ID。**已完成（2026-10-27）**：`internal/catalog/`（`catalog.json` + `catalog.go` + `catalog_test.go`）落进工程，11 分类 / 54 项目 / 去重后 65 个 hostname（引用 68 次），三条来自 URL 的原型字段只保留 hostname、`手动映射` 标为用户自填、演示状态 `init` 未迁移；`scopeID` 取分类 ID。三组共用主机名已逐项登记并写成断言，54 个 `protoLine` 由测试回查原型原文。`GetItems` 曾记为「随真实状态来源一起接」，2026-10-27 由用户改判先接：Hosts 状态这一列现在给 `unknown`（本意是「后端还没读过」，不是伪造的「未替换」），等阶段三「Hosts 与特权服务」的读取服务到位再换真值——总纲 TECHNICAL_PLAN 把同一件事编为阶段四，两份文档阶段编号不同，引用时以所在文件为准。
 2. 搬入设计令牌和公共 UI 控件，按 `catalog`、详情、设置和队列的顺序迁移页面。
-3. 先接入只读后端状态；不把原型模拟数据伪装成真实检测或系统状态。
+3. 先接入只读后端状态；不把原型模拟数据伪装成真实检测或系统状态。**对外形状与错误格式已定，`GetItems` 已接线（2026-10-27）**：`internal/app/dto.go` 给出 `CatalogCategory`/`CatalogItem`/`HostsState`/`ItemsSnapshot`，`internal/app/errors.go` 给出稳定错误码（`empty_token`、`catalog_invalid`、`internal_error`）和带不可见 `cause` 的 `Error`；内部审计字段（原型行号、抽取来源、`schemaVersion`）不进对外 JSON，`HostsStatus` 当前只返回 `unknown`，其余五档等 Hosts 读取服务到位。前端 `frontend/src/App.tsx` 新增只读面板，分类/项目/去重主机名数全部来自 `GetItems`，界面把 `unknown` 明写为「后端还没读过系统 Hosts，不是未替换」；页面迁移（本阶段第 2 条）还没开始，所以正式列表页仍不在工程里。绑定已随 `GetItems` 重新生成：`service.ts` 多 `GetItems()`，`models.ts` 多 `CatalogCategory`、`CatalogItem`、`HostsState`、`HostsStatus`、`ItemsSnapshot`；`wails3 generate bindings` 必须带 `-ts`，否则会用 `.js` 覆盖并删掉工程里已提交的 `.ts`。
 
 ### 阶段二：检测与任务
 

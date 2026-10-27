@@ -7,5 +7,10 @@ export {
 };
 
 export {
+    CatalogCategory,
+    CatalogItem,
+    HostsState,
+    HostsStatus,
+    ItemsSnapshot,
     RuntimeInfo
 } from "./models.js";

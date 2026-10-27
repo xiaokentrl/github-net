@@ -60,6 +60,45 @@ h1 {
   line-height: 1.3;
 }
 
+h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.catalog-panel {
+  width: min(100%, 520px);
+  padding: 24px 40px 32px;
+  border: 1px solid #e6e9ef;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgb(25 37 56 / 8%);
+}
+
+.catalog-list {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.catalog-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid #eef0f4;
+}
+
+.catalog-list span {
+  color: #697386;
+}
+
+.catalog-list b {
+  color: #20242c;
+  font-weight: 600;
+}
+
 p {
   margin: 12px 0 0;
   color: #697386;
