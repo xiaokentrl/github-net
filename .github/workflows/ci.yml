@@ -84,6 +84,19 @@ jobs:
           path: frontend/dist
       - name: 构建产物
         run: |
+          # 容器里 checkout 出来的目录属主和跑任务的用户对不上，git 直接拒绝读版本信息
+          # （fatal: detected dubious ownership，退出码 128），go build 的 VCS 打标因此失败。
+          # 已在 golang:1.27.3 容器里逐字复现：不放行时 go build 退出码 1，放行后产物带 vcs.revision。
+          # 临时文件一律写在仓库外，否则工作区变脏，产物的 vcs.modified 就证明不了任何东西。
+          git config --global --add safe.directory "$GITHUB_WORKSPACE" 2> "$RUNNER_TEMP/vcs.err" || {
+            echo "::error::放行工作目录属主失败（HOME=$HOME）：$(tr '\n\r' '  ' < "$RUNNER_TEMP/vcs.err")"
+            exit 1
+          }
+          # 先单独问一次 git：还读不到仓库就在这里报清楚，别拖到 go build 变成一句 exit 128。
+          git rev-parse HEAD > /dev/null 2> "$RUNNER_TEMP/vcs.err" || {
+            echo "::error::git 仍读不了仓库：$(tr '\n\r' '  ' < "$RUNNER_TEMP/vcs.err")"
+            exit 1
+          }
           # 失败原因写进 annotations：公开接口就能读到，不用登录翻作业正文。
           {
             echo "go=$(go env GOVERSION) cgo=$(go env CGO_ENABLED) cc=$(go env CC)"
@@ -92,15 +105,17 @@ jobs:
             pkg-config --modversion gtk4 webkitgtk-6.0 || true
             echo "前端产物：$(find frontend/dist -type f | wc -l) 个文件，$(du -sh frontend/dist | cut -f1)"
             df -h "$GITHUB_WORKSPACE" | tail -1
-          } > build.env 2>&1
-          cat build.env
-          if ! CGO_ENABLED=1 go build -trimpath -o bin/github-net . > build.log 2>&1; then
-            msg=$(sed 's/%/%25/g' build.log | tr '\n\r' '  ' | cut -c1-1000)
+          } > "$RUNNER_TEMP/build.env" 2>&1
+          cat "$RUNNER_TEMP/build.env"
+          if ! CGO_ENABLED=1 go build -trimpath -o bin/github-net . > "$RUNNER_TEMP/build.log" 2>&1; then
+            msg=$(sed 's/%/%25/g' "$RUNNER_TEMP/build.log" | tr '\n\r' '  ' | cut -c1-1000)
             echo "::error::构建产物失败：$msg"
-            cat build.log
+            cat "$RUNNER_TEMP/build.log"
             exit 1
           fi
-          cat build.log
+          cat "$RUNNER_TEMP/build.log"
+          # 打标是否真的生效，留一行可核对的证据。
+          go version -m bin/github-net | grep -E 'vcs.revision|vcs.modified' || echo "::warning::产物没有 VCS 打标信息"
       - name: 门一 产物 glibc 符号不高于门槛
         run: |
           max=$(objdump -T bin/github-net | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1)
@@ -137,5 +152,5 @@ jobs:
           chmod +x bin/github-net
           ldd -r bin/github-net > ldd.txt 2>&1
           cat ldd.txt
-          if grep -E 'not found|undefined symbol' ldd.txt; then echo "门二不过：Debian 13 有未解析依赖"; exit 1; fi
-          for so in $RUNTIME_LIBS; do grep -q "$so => /" ldd.txt || { echo "门二不过：Debian 13 缺 $so"; exit 1; }; done
+          if grep -E 'not found|undefined symbol' ldd.txt; then echo "::error::门二不过：Debian 13 有未解析依赖"; exit 1; fi
+          for so in $RUNTIME_LIBS; do grep -q "$so => /" ldd.txt || { echo "::error::门二不过：Debian 13 缺 $so"; exit 1; }; done
