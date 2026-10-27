@@ -24,7 +24,6 @@ const (
 	appVersion = "0.1.0"
 	statusTick = 2 * time.Second
 	appID      = "io.github.xiaokentrl.githubnet"
-	linuxName  = "github-net"
 )
 
 func main() {
@@ -60,7 +59,6 @@ func main() {
 		},
 		Linux: application.LinuxOptions{
 			ApplicationID: appID,
-			ProgramName:   linuxName,
 		},
 		Services: []application.Service{
 			application.NewService(service),

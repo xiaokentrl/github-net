@@ -21,8 +21,8 @@ contents:
     dst: "/usr/local/bin/github-net"
   - src: "./build/appicon.png"
     dst: "/usr/share/icons/hicolor/128x128/apps/github-net.png"
-  - src: "./build/linux/github-net.desktop"
-    dst: "/usr/share/applications/github-net.desktop"
+  - src: "./build/linux/io.github.xiaokentrl.githubnet.desktop"
+    dst: "/usr/share/applications/io.github.xiaokentrl.githubnet.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:
