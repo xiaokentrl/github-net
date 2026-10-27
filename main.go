@@ -59,7 +59,8 @@ func main() {
 			ActivationPolicy: application.ActivationPolicyRegular,
 		},
 		Linux: application.LinuxOptions{
-			ProgramName: linuxName,
+			ApplicationID: appID,
+			ProgramName:   linuxName,
 		},
 		Services: []application.Service{
 			application.NewService(service),

@@ -370,7 +370,7 @@ Wails v3.0.0 的生命周期、绑定和事件 API 以锁定版本的生成结�
 - 临时文件、权限不足、DNS 服务差异和文件占用都返回明确错误。
 - 后端任务使用 `context.Context` 支持取消和关闭时清理。
 - Wails 绑定错误和版本升级保持兼容；破坏性 DTO 变更要同步更新前端和契约测试。
-- 桌面应用启用 Wails 单实例锁；二次启动只唤醒已有主窗口，不创建第二个窗口或进程。macOS 使用普通应用激活策略，并在 Dock 重开事件中还原、显示和聚焦主窗口；Linux 的 `Linux.ProgramName`、`.desktop` 文件名和 `StartupWMClass` 与实际启动器 ID 一致，确保运行窗口归入应用图标。**已接并实测（2026-10-28，`4611e1b`）**：三个名字实测一致（`Linux.ProgramName=github-net`、桌面项文件 `github-net.desktop`、`StartupWMClass=github-net`，窗口 `WM_CLASS` 实测就是 `github-net`）；单例锁在真二进制上验证过——第一实例持有会话总线名，第二次启动退出码 0、不产生第二个窗口或进程。聚焦是否真拉到前台、拓展坞分组与运行小点仍待人眼；连不上会话总线时静默退出（退出码 1、无输出）是否加提示待裁决。过程与判据见总纲第 10 条。
+- 桌面应用启用 Wails 单实例锁；点击程序坞固定的 `github-net` 图标时，短暂启动的转发进程必须退出，由已有实例直接还原、显示和聚焦主窗口，不得留下第二个可见启动器图标或窗口。macOS 使用普通应用激活策略，并处理 Dock 重开事件；Linux 的 `Linux.ApplicationID` 使用稳定产品 ID，`Linux.ProgramName`、`.desktop` 文件名和 `StartupWMClass` 都使用 `github-net`，确保运行窗口归入固定图标，运行标记由桌面环境显示。**已接并实测（2026-10-28，`4611e1b`）**：三个名字实测一致（`Linux.ProgramName=github-net`、桌面项文件 `github-net.desktop`、`StartupWMClass=github-net`，窗口 `WM_CLASS` 实测就是 `github-net`）；单例锁在真二进制上验证过——第一实例持有会话总线名，第二次启动退出码 0、不产生第二个窗口或进程。聚焦是否真拉到前台、拓展坞分组与运行小点仍待人眼；连不上会话总线时静默退出（退出码 1、无输出）是否加提示待裁决。过程与判据见总纲第 10 条。
 - 依赖版本锁定，升级前检查变更说明、跨平台构建和回归测试。
 
 #### Wails v3 最小纵向验证
@@ -805,9 +805,9 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 - `internal/app/`：Wails 暴露给前端的唯一服务门面、DTO 和错误转换；不放系统操作细节。
 - 应用每次启动都创建空的内存任务队列；不读取或创建队列历史文件。
 - `internal/accelerator/`：加速流程协调、按范围读取用户选择的方法，以及检测、应用路由；不维护需要每次新增方法时编辑的手工清单。
-- `internal/accelerator/strategies/contract.go`、`registry.go`：策略元数据与能力契约、包内自注册表、注册错误收集和排序后的只读查询。该包被应用装配层固定导入一次；新增同包 `.go` 文件会随正常 Go 构建自动编译。
-- `internal/accelerator/strategies/hosts_dns_lookup.go`：首期策略；文件内声明稳定方法 ID、目标加速范围、用户文案、能力和实现，通过 `init` 注册；默认使用系统 DNS 配置取得候选 IP，保留目标 hostname 进行 TLS 证书校验，并调用共享 Hosts 服务应用。不得自动把查询发给第三方解析器。
-- `internal/accelerator/strategies/hosts_dns_lookup_test.go`：使用模拟解析器、模拟网络和临时 Hosts 文件测试该策略，不访问真实 Hosts。
+- `internal/accelerator/strategies/contract.go`、`registry.go`：策略元数据与能力契约、包内自注册表、注册错误收集和排序后的只读查询。该包被应用装配层固定导入一次；新增同包 `.go` 文件会随正常 Go 构建自动编译。**已落（2026-10-28）**：能力位三类（候选取得 / 保留 hostname 给 TLS 校验 / 只走系统 DNS），校验逐条拦坏描述符、重复 ID 保留先到的、`Errors()` 攒 init 期的错误；排序与只读快照由 `All()`/`Get()`/`ForScope()` 返回副本保证。「装配层固定导入」这一半还没做——`main.go` 目前不引用该包，所以注册表在真实程序里还没被跑起来，接线要单独放行。
+- `internal/accelerator/strategies/hosts_dns_lookup.go`：首期策略；文件内声明稳定方法 ID、目标加速范围、用户文案、能力和实现，通过 `init` 注册；默认使用系统 DNS 配置取得候选 IP，保留目标 hostname 进行 TLS 证书校验，并调用共享 Hosts 服务应用。不得自动把查询发给第三方解析器。**已落（2026-10-28）**：ID `dns-hosts`、名称「自动查找可用 IP」，范围 init 时从 `internal/catalog` 取全量 `scopeID`（11 个）而不是抄清单；一次解析最多 2 秒，失败按七档分类且错误文本不含被查域名（`*net.DNSError` 不保存、不透出）。TLS 校验和 Hosts 应用这两步属后面的阶段，本文件只出候选，能力位 `CapabilityKeepsTLSHostname` 先把「候选必须连同 hostname 一起交给后续校验」这件事声明出来。
+- `internal/accelerator/strategies/hosts_dns_lookup_test.go`：使用模拟解析器、模拟网络和临时 Hosts 文件测试该策略，不访问真实 Hosts。**已落（2026-10-28）**：14 个测试（另含 15 个子用例）全在模拟解析器上跑，没有真实网络，也没有临时 Hosts 文件（策略不碰 Hosts）；`registry_test.go` 另测注册门槛、重复 ID、排序快照和「注册表范围与产品目录逐项对齐」（9 个测试，含 13 个子用例）。
 - `internal/catalog/`：分类、域名等产品数据的唯一来源；阶段二从唯一正式原型抽取初始 `catalog.json`，前端不得再维护另一份列表。
 - `internal/config/`：默认配置、校验、版本迁移和原子保存；按稳定 `scopeID` 保存选择的方法 ID，不保存易过期的检测结果作为可直接应用的数据。
 - `config.Config` 中的 `defaultStrategyByScope` 用稳定加速范围 ID 映射用户选择的方法 ID。当前若多个二级菜单共享服务选择，它们映射到同一范围 ID；以后需要某菜单独立选择时，由产品目录定义独立范围。保存的方法不存在或不适用时不得静默切换到另一个方法，须清除有效选择并提示用户重新选择。
@@ -1011,7 +1011,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 - [ ] 辅助服务不可用、IPC 请求无效或授权失败时，明确报错且不修改系统；接口不能执行任意命令或访问任意路径。
 - [ ] 关闭并重新打开应用后可复用正常的 helper；服务损坏、授权撤销或用户移除时安全失败，不静默提权。
 - [ ] Wails 生成绑定不手改；重新生成后检查接口差异。
-- [ ] 同一用户再次启动应用只唤醒现有窗口；macOS Dock 图标点击可还原并聚焦窗口，Linux 启动器图标与运行窗口合并且显示系统运行标记。
+- [ ] 点击程序坞固定的 `github-net` 图标后直接显示已有窗口；不出现未关联的第二个图标或第二个窗口，程序坞显示系统运行标记。macOS Dock 与 Linux 目标桌面环境都要实机验收。
 - [ ] 关键窗口尺寸、主题和页面通过视觉回归检查。
 - [ ] 所有已批准首发平台的 WebView 字体、DPI、滚动、快捷键和弹窗层级通过实机检查。
 - [ ] 在最大预期数据量下记录交互延迟和主线程长任务；超出门槛时有复现步骤和修复记录。
