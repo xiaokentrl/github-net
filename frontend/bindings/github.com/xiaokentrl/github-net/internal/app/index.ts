@@ -7,8 +7,10 @@ export {
 };
 
 export {
+    AppStatus,
     CatalogCategory,
     CatalogItem,
+    HostsAccess,
     HostsState,
     HostsStatus,
     ItemsSnapshot,

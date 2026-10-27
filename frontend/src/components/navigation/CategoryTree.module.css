@@ -1,0 +1,98 @@
+/* 行高、缩进和徽章尺寸取自原型：.node 32px(145)、.node.item 30px 且左内边距 34px(154)、
+   .count 数量徽章(194)、选中态左侧 3px 蓝条(155)、caret 折叠时旋转 -90°(178)。 */
+.tree {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  list-style: none;
+}
+
+.children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: var(--node-h);
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.node:hover {
+  background: var(--hov);
+}
+
+.node:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.cat {
+  font-weight: 600;
+}
+
+.item {
+  height: var(--node-item-h);
+  padding-left: 34px;
+}
+
+.item.active {
+  background: var(--primary-soft);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.caret {
+  flex: none;
+  width: 12px;
+  color: var(--text-3);
+  font-size: 11px;
+  transition: transform 0.12s ease;
+}
+
+.caret.collapsed {
+  transform: rotate(-90deg);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--band);
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.search {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.search input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--ctl);
+  color: var(--text);
+}

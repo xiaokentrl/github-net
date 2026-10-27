@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/xiaokentrl/github-net/internal/catalog"
+	"github.com/xiaokentrl/github-net/internal/config"
 )
 
 // Service 是暴露给前端的唯一门面；这里只放前端确实需要的读操作。
@@ -19,6 +20,11 @@ type Service struct {
 	// 每次读目录都会把它转成稳定错误码回给前端，不在启动时静默吞掉。
 	productCatalog    *catalog.Catalog
 	productCatalogErr error
+
+	// settings 是用户配置服务。构造它需要知道合法 scopeID，
+	// 所以目录加载失败时这里是 nil，读设置会明确报错而不是回退成「没配置」。
+	settings    *config.Store
+	settingsErr error
 }
 
 func NewService(appName, version string, sequence func() int64) *Service {
@@ -26,7 +32,7 @@ func NewService(appName, version string, sequence func() int64) *Service {
 		sequence = func() int64 { return 0 }
 	}
 	c, err := catalog.Load()
-	return &Service{
+	s := &Service{
 		appName:        appName,
 		version:        version,
 		startedAt:      time.Now(),
@@ -35,6 +41,22 @@ func NewService(appName, version string, sequence func() int64) *Service {
 		// 加载失败时 c 是 nil，先把错误留下，读接口再负责翻译成人能看懂的错误码。
 		productCatalogErr: err,
 	}
+	if err == nil {
+		s.settings, s.settingsErr = newSettingsStore(c)
+	} else {
+		s.settingsErr = err
+	}
+	return s
+}
+
+// newSettingsStore 用目录里的 scopeID 作为校验集合；方法注册表还没实现，
+// 所以已注册方法集合是空的——任何默认方法选择都会被拒，不会静默接受。
+func newSettingsStore(c *catalog.Catalog) (*config.Store, error) {
+	path, err := config.Path()
+	if err != nil {
+		return nil, err
+	}
+	return config.NewStore(path, c.ScopeIDs(), nil), nil
 }
 
 // RuntimeInfo 返回当前进程的真实运行环境，供前端显示与绑定链路自检。
@@ -70,4 +92,61 @@ func (s *Service) GetItems() (ItemsSnapshot, error) {
 		Categories: CatalogToCategories(s.productCatalog),
 		Hosts:      UnknownHosts(s.productCatalog),
 	}, nil
+}
+
+// GetAppStatus 返回平台、Hosts 写权限探测结果、DNS 解析选型和应用版本。
+// Hosts 权限只是「能不能打开来写」的探测，本工具当前不写 Hosts；
+// DNS 一栏报的是首期选型（系统解析器），检测任务还没接入，所以 DetectionReady 是 false。
+func (s *Service) GetAppStatus() (AppStatus, error) {
+	status := AppStatus{
+		App:               s.appName,
+		Version:           s.version,
+		OS:                runtime.GOOS,
+		Arch:              runtime.GOARCH,
+		HostsPath:         HostsPath(),
+		HostsAccess:       ProbeHostsAccess(HostsPath()),
+		DNSResolver:       DNSResolverSystem,
+		DNSDetectionReady: false,
+	}
+	if s.settings != nil {
+		status.ConfigPath = s.settings.Path()
+		status.ConfigNotice = s.settings.Notice()
+	} else {
+		status.ConfigNotice = s.settingsFailure().Message
+	}
+	return status, nil
+}
+
+// settingsFailure 保证「没有配置服务」这件事一定带回一个错误，绝不返回 (空配置, nil)。
+func (s *Service) settingsFailure() *Error {
+	if s.settingsErr != nil {
+		return ToPublicError(s.settingsErr)
+	}
+	return NewError(CodeInternal, "配置服务没准备好，请重启应用", nil)
+}
+
+// GetSettings 返回带 schemaVersion 和 revision 的完整配置快照。
+// 文件不存在时给代码里的默认值，不为了读取而写盘。
+func (s *Service) GetSettings() (config.Config, error) {
+	if s.settings == nil {
+		return config.Config{}, s.settingsFailure()
+	}
+	cfg, err := s.settings.Snapshot()
+	if err != nil {
+		return config.Config{}, ToPublicError(err)
+	}
+	return cfg, nil
+}
+
+// SaveSettings 按字段 patch 保存：先比 revision，再校验完整配置，最后原子替换并递增 revision。
+// 失败一律明确返回，前端不能把没落盘的东西显示成已保存。
+func (s *Service) SaveSettings(patch config.Patch, expectedRevision int64, mutationID string) (config.Config, error) {
+	if s.settings == nil {
+		return config.Config{}, s.settingsFailure()
+	}
+	cfg, err := s.settings.Save(patch, expectedRevision, mutationID)
+	if err != nil {
+		return config.Config{}, ToPublicError(err)
+	}
+	return cfg, nil
 }

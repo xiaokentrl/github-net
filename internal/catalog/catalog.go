@@ -178,6 +178,15 @@ func checkHostname(itemID, h string) error {
 	return nil
 }
 
+// ScopeIDs 返回目录里全部加速范围（首期等于分类 ID），供配置校验默认方法选择时查表。
+func (c *Catalog) ScopeIDs() map[string]bool {
+	ids := make(map[string]bool, len(c.Categories))
+	for _, cat := range c.Categories {
+		ids[cat.ScopeID] = true
+	}
+	return ids
+}
+
 // UniqueHostnames 返回整份目录去重、排序后的主机名，供探测预算核算使用。
 func (c *Catalog) UniqueHostnames() []string {
 	set := make(map[string]bool, 64)

@@ -1,0 +1,42 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.neutral {
+  border-color: var(--border-strong);
+  background: var(--band);
+  color: var(--text-2);
+}
+
+.good {
+  border-color: var(--green-soft);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.warn {
+  border-color: var(--amber-soft);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.bad {
+  border-color: var(--red-soft);
+  background: var(--red-soft);
+  color: var(--red);
+}

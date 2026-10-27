@@ -1,0 +1,47 @@
+import type { Config } from '../../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
+import type { NetworkProfile } from '../../api/client'
+import { PROFILE_IDS, profileLabel, profileNote } from '../../features/settings/profileOptions'
+import { t } from '../../i18n'
+import { InlineStatus, type SaveKind } from '../../components/ui/InlineStatus'
+import { Select } from '../../components/ui/Select'
+import styles from './AppShell.module.css'
+
+// 工具栏上的紧凑流量状态：档位可以在这里改，改动立刻走后端保存。
+// 三档解释必须一直看得见（规划要求同时说明请求量、等待和覆盖面），所以这一栏允许换成两行。
+export function Toolbar({
+  settings,
+  error,
+  saveKind,
+  saveText,
+  busy,
+  onProfileChange,
+}: {
+  settings: Config | null
+  error: string
+  saveKind: SaveKind
+  saveText: string
+  busy: boolean
+  onProfileChange: (profile: NetworkProfile) => void
+}) {
+  if (error) return <span className={styles.text}>{t('settings.error', { reason: error })}</span>
+  if (!settings) return <span className={styles.text}>{t('detail.loading')}</span>
+
+  const profile = settings.network.profile
+
+  return (
+    <>
+      <Select
+        label={t('toolbar.profile.label')}
+        value={profile}
+        disabled={busy}
+        options={PROFILE_IDS.map((id) => ({ value: id, label: profileLabel(id) }))}
+        onChange={(value) => onProfileChange(value as NetworkProfile)}
+      />
+      <span className={styles.text}>{t('toolbar.profile.summary', { cap: settings.network.maxCandidateProbesPerRun })}</span>
+      <InlineStatus kind={saveKind} text={saveText} />
+      <span className={styles.spacer} />
+      <span className={styles.text}>{t('toolbar.settings.revision', { revision: settings.revision })}</span>
+      <p className={styles.note}>{profileNote(profile)}</p>
+    </>
+  )
+}

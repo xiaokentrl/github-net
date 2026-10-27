@@ -1,0 +1,66 @@
+.wrap {
+  max-width: 760px;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.subTitle {
+  margin: 18px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.fields {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.fields > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.fields dt {
+  color: var(--text-2);
+}
+
+.fields dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.hint {
+  margin: 10px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.plain {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.hosts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hosts li {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

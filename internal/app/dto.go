@@ -70,6 +70,26 @@ type ItemsSnapshot struct {
 	Hosts      []HostsState      `json:"hosts"`
 }
 
+// DNSResolverSystem 表示按隐私规则使用操作系统配置的解析器，不转发给公共 DNS。
+const DNSResolverSystem = "system"
+
+// AppStatus 是 GetAppStatus 的返回形状：平台、权限、DNS 服务和应用版本。
+// HostsAccess 只报探测结果，不代表本工具已具备写 Hosts 的能力——写入仍要等特权服务阶段。
+// DNSDetectionReady 为 false 表示解析器选型已定，但检测任务还没接入。
+// ConfigNotice 是配置加载时的用户可见说明，例如原文件损坏已隔离并用默认值运行。
+type AppStatus struct {
+	App               string      `json:"app"`
+	Version           string      `json:"version"`
+	OS                string      `json:"os"`
+	Arch              string      `json:"arch"`
+	HostsPath         string      `json:"hostsPath"`
+	HostsAccess       HostsAccess `json:"hostsAccess"`
+	DNSResolver       string      `json:"dnsResolver"`
+	DNSDetectionReady bool        `json:"dnsDetectionReady"`
+	ConfigPath        string      `json:"configPath"`
+	ConfigNotice      string      `json:"configNotice,omitempty"`
+}
+
 // CatalogToCategories 把内部目录转成对外形状，保留原型显示顺序，并保证数组字段不为 null。
 func CatalogToCategories(c *catalog.Catalog) []CatalogCategory {
 	out := make([]CatalogCategory, 0, len(c.Categories))

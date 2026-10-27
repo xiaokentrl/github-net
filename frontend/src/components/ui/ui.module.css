@@ -1,0 +1,81 @@
+.line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.error {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.error button {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--ctl);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.empty {
+  margin: 0;
+  padding: 14px 10px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.status {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.pending {
+  background: var(--band);
+  color: var(--text-2);
+}
+
+.ok {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.failed {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+}
+
+.field select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--ctl);
+  color: var(--text);
+}
+
+.field select:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}

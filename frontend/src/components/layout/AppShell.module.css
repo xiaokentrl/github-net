@@ -1,0 +1,145 @@
+/* 骨架尺寸逐条抄原型：.app(22) .topbar(24) .toolbar(51) .main(124) .sidebar(126) .detail(230) .statusbar(376)。
+   可拖拽的分栏（.sidebar-resizer/.resizer）属布局那一屏，这里先不放假的手柄。 */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.topbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--gap);
+  height: var(--topbar-h);
+  padding: 0 var(--pad);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #2563eb, #0ea5a4);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.perm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--band);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.perm .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.perm.warn .dot {
+  background: var(--amber);
+}
+
+.warnPerm {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.warnPerm button {
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--ctl);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap);
+  min-height: var(--toolbar-h);
+  padding: 6px var(--pad);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.text {
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* 三档解释要一直看得见，所以它单独占一行，不塞进标题提示里。 */
+.note {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: 200px;
+  max-width: 600px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.detail {
+  flex: 1;
+  min-width: 0;
+  padding: var(--pad) 18px;
+  overflow-y: auto;
+}
+
+.statusbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  height: var(--statusbar-h);
+  padding: 0 var(--pad);
+  border-top: 1px solid var(--border);
+  background: var(--band);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.statusbar .item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -6,6 +6,66 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * AppStatus 是 GetAppStatus 的返回形状：平台、权限、DNS 服务和应用版本。
+ * HostsAccess 只报探测结果，不代表本工具已具备写 Hosts 的能力——写入仍要等特权服务阶段。
+ * DNSDetectionReady 为 false 表示解析器选型已定，但检测任务还没接入。
+ * ConfigNotice 是配置加载时的用户可见说明，例如原文件损坏已隔离并用默认值运行。
+ */
+export class AppStatus {
+    "app": string;
+    "version": string;
+    "os": string;
+    "arch": string;
+    "hostsPath": string;
+    "hostsAccess": HostsAccess;
+    "dnsResolver": string;
+    "dnsDetectionReady": boolean;
+    "configPath": string;
+    "configNotice"?: string;
+
+    /** Creates a new AppStatus instance. */
+    constructor($$source: Partial<AppStatus> = {}) {
+        if (!("app" in $$source)) {
+            this["app"] = "";
+        }
+        if (!("version" in $$source)) {
+            this["version"] = "";
+        }
+        if (!("os" in $$source)) {
+            this["os"] = "";
+        }
+        if (!("arch" in $$source)) {
+            this["arch"] = "";
+        }
+        if (!("hostsPath" in $$source)) {
+            this["hostsPath"] = "";
+        }
+        if (!("hostsAccess" in $$source)) {
+            this["hostsAccess"] = HostsAccess.$zero;
+        }
+        if (!("dnsResolver" in $$source)) {
+            this["dnsResolver"] = "";
+        }
+        if (!("dnsDetectionReady" in $$source)) {
+            this["dnsDetectionReady"] = false;
+        }
+        if (!("configPath" in $$source)) {
+            this["configPath"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new AppStatus instance from a string or object.
+     */
+    static createFrom($$source: any = {}): AppStatus {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new AppStatus($$parsedSource as Partial<AppStatus>);
+    }
+}
+
+/**
  * CatalogCategory 是一个服务分类；ScopeID 是它共享的加速范围。
  */
 export class CatalogCategory {
@@ -92,6 +152,32 @@ export class CatalogItem {
         return new CatalogItem($$parsedSource as Partial<CatalogItem>);
     }
 }
+
+/**
+ * HostsAccess 是「当前进程对系统 Hosts 的写权限」探测结果。
+ * 这里只探测、不写入：Hosts 写入仍属后面的特权服务阶段。
+ */
+export enum HostsAccess {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    /**
+     * HostsAccessWritable 表示能以当前身份打开 Hosts 文件写（不截断、不写一个字节）。
+     */
+    HostsAccessWritable = "writable",
+
+    /**
+     * HostsAccessReadOnly 表示因权限不足打不开，需要提权或辅助服务。
+     */
+    HostsAccessReadOnly = "readOnly",
+
+    /**
+     * HostsAccessUnknown 表示探测本身失败（文件不存在、平台不支持等），不能当成任何一种结论。
+     */
+    HostsAccessUnknown = "unknown",
+};
 
 /**
  * HostsState 是某个项目的 Hosts 状态快照。

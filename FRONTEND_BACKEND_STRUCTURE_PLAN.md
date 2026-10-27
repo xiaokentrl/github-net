@@ -118,7 +118,7 @@
 | `appearance` | 语言、主题、缩放 | 使用明确的支持值；无效值回退默认并报告配置问题 |
 | `layout` | 侧栏和队列高度等用户可调布局 | 数值限制在 UI 与后端约定范围内 |
 | `treeBehavior` | `detectFocusFollow`、`applyFocusFollow` | 两个独立持久开关，默认关闭；只控制分类树临时展开，不移动键盘焦点 |
-| `startup` | 开机启动、启动后最小化、启动自动检测/应用 | 自动检测和自动应用默认关闭；有依赖关系的选项由后端再次校验 |
+| `startup` | 开机启动、启动后最小化、启动自动检测/应用 | 自动检测和自动应用默认关闭；有依赖关系的选项由后端再次校验。原型另有「托盘最小化」「显示托盘图标」两个开关，不属于这份已定形状，是否纳入待用户裁决，实现里没自己加 |
 | `update` | 用户明确设置的更新偏好（如适用） | 不保存令牌；更新包本身不写入配置 |
 
 配置文件建议采用带 `schemaVersion` 和单调 `revision` 的结构，例如：
@@ -374,7 +374,7 @@ Wails v3.0.0 的生命周期、绑定和事件 API 以锁定版本的生成结�
 
 #### Wails v3 最小纵向验证
 
-Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能力。样例已从临时验证搬进正式工程：后端 `internal/app`（只暴露 `RuntimeInfo` 与 `Ping`）+ `internal/event`（事件名与自增序号的唯一主人）、入口 `main.go`（托盘显示/隐藏/退出，退出时取消订阅并停发事件）、前端 `frontend/src/App.tsx`（加载/成功/失败三态，保存并调用 unsubscribe，重复序号丢弃）。2026-10-27 在本机 Ubuntu 26.04 x64（Wayland，GTK 4.22.4 / WebKitGTK 2.52.6）实测：WebView 真实请求 `/`、JS 与 CSS；`RuntimeInfo` 返回真实运行环境；空令牌调用回 `empty_token: 令牌不能为空`（`/wails/runtime` 返回 422）；前端 `Events.On` 收到后端事件并回传 `evt:3:running:true`；退出清理确实执行（用临时探针注入验证，验完已 diff 还原，仓库内不留调试代码）。此记录只覆盖本机 Ubuntu 26.04 x64 的默认 GTK4 路径；`-tags gtk3` 只算本机编译通过且已不是发布目标；本机没有截图工具，界面排版、托盘图标与菜单点击无人眼走查；StrictMode 双挂载只在代码里做了请求号作废，未实跑 `wails3 dev`；关闭窗口仍按 Wails 默认＝退出进程（关到托盘属阶段二）。Windows、macOS 和 arm64 都未验证。
+Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能力。样例已从临时验证搬进正式工程：后端 `internal/app`（只暴露 `RuntimeInfo` 与 `Ping`）+ `internal/event`（事件名与自增序号的唯一主人）、入口 `main.go`（托盘显示/隐藏/退出，退出时取消订阅并停发事件）、前端 `frontend/src/App.tsx`（加载/成功/失败三态，保存并调用 unsubscribe，重复序号丢弃。这块自检面板已在 2026-10-27 页面迁移中删除，同样三条做法现在在正式入口 `frontend/src/app/App.tsx` 与 `frontend/src/api/events.ts`）。2026-10-27 在本机 Ubuntu 26.04 x64（Wayland，GTK 4.22.4 / WebKitGTK 2.52.6）实测：WebView 真实请求 `/`、JS 与 CSS；`RuntimeInfo` 返回真实运行环境；空令牌调用回 `empty_token: 令牌不能为空`（`/wails/runtime` 返回 422）；前端 `Events.On` 收到后端事件并回传 `evt:3:running:true`；退出清理确实执行（用临时探针注入验证，验完已 diff 还原，仓库内不留调试代码）。此记录只覆盖本机 Ubuntu 26.04 x64 的默认 GTK4 路径；`-tags gtk3` 只算本机编译通过且已不是发布目标；本机没有截图工具，界面排版、托盘图标与菜单点击无人眼走查；StrictMode 双挂载只在代码里做了请求号作废，未实跑 `wails3 dev`；关闭窗口仍按 Wails 默认＝退出进程（关到托盘属阶段二）。Windows、macOS 和 arm64 都未验证。
 
 2026-10-27 已在正式工程上补测 Linux 构建链：Debian 13 与 Ubuntu 24.04 两个容器的默认 GTK4 构建通过，新宿主 Ubuntu 26.04 的同一构建先在本机（同一版本）实测通过、同日稍后在等效容器 `ubuntu:26.04` 里把 CI 的那串命令原样跑完（`gofmt -l` 空、`go vet`、`go test -count=1`、`go build -trimpath`、门一 2.38 ≤ 2.41、门二未解析计数 0），产物再交给 `debian:13` 容器复核门二，同样未解析计数 0；Debian 12 容器证明默认 GTK4 无法构建，因此退出发布目标（数据见「首发矩阵」一节）。这些是容器/主机的编译与链接实测，不是实机运行验证——Debian 13 的实机启动、托盘和退出清理仍待原生 runner 验证。
 
@@ -946,7 +946,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 
 1. 从唯一正式原型抽取 `catalog.json`，完成稳定 ID、hostname 规范化、共享 hostname 关系和引用完整性测试。不同项目可共享规范化 hostname；每轮检测按 hostname 去重，不合并项目 ID。**已完成（2026-10-27）**：`internal/catalog/`（`catalog.json` + `catalog.go` + `catalog_test.go`）落进工程，11 分类 / 54 项目 / 去重后 65 个 hostname（引用 68 次），三条来自 URL 的原型字段只保留 hostname、`手动映射` 标为用户自填、演示状态 `init` 未迁移；`scopeID` 取分类 ID。三组共用主机名已逐项登记并写成断言，54 个 `protoLine` 由测试回查原型原文。`GetItems` 曾记为「随真实状态来源一起接」，2026-10-27 由用户改判先接：Hosts 状态这一列现在给 `unknown`（本意是「后端还没读过」，不是伪造的「未替换」），等阶段三「Hosts 与特权服务」的读取服务到位再换真值——总纲 TECHNICAL_PLAN 把同一件事编为阶段四，两份文档阶段编号不同，引用时以所在文件为准。
 2. 搬入设计令牌和公共 UI 控件，按 `catalog`、详情、设置和队列的顺序迁移页面。
-3. 先接入只读后端状态；不把原型模拟数据伪装成真实检测或系统状态。**对外形状与错误格式已定，`GetItems` 已接线（2026-10-27）**：`internal/app/dto.go` 给出 `CatalogCategory`/`CatalogItem`/`HostsState`/`ItemsSnapshot`，`internal/app/errors.go` 给出稳定错误码（`empty_token`、`catalog_invalid`、`internal_error`）和带不可见 `cause` 的 `Error`；内部审计字段（原型行号、抽取来源、`schemaVersion`）不进对外 JSON，`HostsStatus` 当前只返回 `unknown`，其余五档等 Hosts 读取服务到位。前端 `frontend/src/App.tsx` 新增只读面板，分类/项目/去重主机名数全部来自 `GetItems`，界面把 `unknown` 明写为「后端还没读过系统 Hosts，不是未替换」；页面迁移（本阶段第 2 条）还没开始，所以正式列表页仍不在工程里。绑定已随 `GetItems` 重新生成：`service.ts` 多 `GetItems()`，`models.ts` 多 `CatalogCategory`、`CatalogItem`、`HostsState`、`HostsStatus`、`ItemsSnapshot`；`wails3 generate bindings` 必须带 `-ts`，否则会用 `.js` 覆盖并删掉工程里已提交的 `.ts`。
+3. 先接入只读后端状态；不把原型模拟数据伪装成真实检测或系统状态。**对外形状、错误格式、`GetItems`、`GetAppStatus`、`GetSettings`/`SaveSettings` 已接线（2026-10-27）**：`internal/app/dto.go` 给出 `CatalogCategory`/`CatalogItem`/`HostsState`/`ItemsSnapshot`/`AppStatus`/`HostsAccess`，`internal/app/errors.go` 给出稳定错误码（`empty_token`、`catalog_invalid`、`internal_error`、`invalid_settings`、`revision_conflict`、`settings_save_failed`、`config_schema_newer`）和带不可见 `cause` 的 `Error`；内部审计字段（原型行号、抽取来源、`schemaVersion`）不进对外 JSON，`HostsStatus` 当前只返回 `unknown`，其余五档等 Hosts 读取服务到位。设置本体在 `internal/config/`，按本文件第六节那份 JSON 走：字段级 patch + `expectedRevision` + `mutationID`、串行写、同目录唯一临时文件同步后原子替换、成功才递增 revision、失败明确返回且不改 revision；文件缺失给默认值不写盘，损坏隔离到 `<路径>.bad` 并在 `configNotice` 里说明，版本比程序新拒读拒改；目录 0700、文件 0600。权限一栏只是只读探测（以写模式打开但不截断、不写字节），Hosts 写入仍在阶段三。前端这一轮先落在自检面板上，2026-10-27 页面迁移后自检面板已删除，同样的数据改由正式页面显示：顶栏权限徽章、状态栏的 Hosts 路径与写权限、DNS 选型、档位、revision 和事件序号、左树的分类/项目/去重主机名数、工具栏档位切换；`unknown` 明写为「后端还没读过系统 Hosts，不是未替换」，档位切换用 `SaveSettings` 并按「保存中/已保存/保存失败」三态回显，保存期间控件禁用、失败后重读后端当前值，界面不停在旧副本上；前端不再有第二份配置副本，也没用 `localStorage`。页面迁移（本阶段第 2 条）已开工，第一屏是目录列表页（`frontend/src/app/App.tsx` + `src/api/` + `src/components/` + `src/features/items`）；完整设置对话框、任务队列面板、侧栏与队列拖拽、另外五套主题仍不在工程里。绑定已随这 4 个命令重新生成：`service.ts` 6 个方法，新增 `internal/config/models.ts`；`wails3 generate bindings` 必须带 `-ts`，否则会用 `.js` 覆盖并删掉工程里已提交的 `.ts`。
 
 ### 阶段二：检测与任务
 

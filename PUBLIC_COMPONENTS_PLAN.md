@@ -73,14 +73,14 @@
 
 | 文件 | 方法或内容 | 责任与边界 |
 |---|---|---|
-| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`getTasks`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则 |
-| `frontend/src/api/errors.ts` | `toAppError`、`getErrorMessage` | 把调用异常整理成稳定错误码和可展示文案；保留原错误供日志，不能改成成功或空数据 |
-| `frontend/src/api/events.ts` | `subscribeTaskProgress` | 订阅带单调递增 `sequence` 的 `TaskProgress` 事件（不是命令接口）并返回取消订阅函数；组件或 hook 销毁时必须调用 |
+| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`getTasks`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则。现状（2026-10-27，正式页面迁移第一屏）：这一层已建，包了后端已接的 4 个命令（`getAppStatus`、`getItems`、`getSettings`、`saveSettings`），纵向样例面板连同它对绑定的直接 `import` 一起删掉了，工程里只剩这一处调用入口；本表其余 14 个命令在后端仍是契约，所以没有为它们写空壳封装 |
+| `frontend/src/api/errors.ts` | `toAppError`、`getErrorMessage` | 把调用异常整理成稳定错误码和可展示文案；保留原错误供日志，不能改成成功或空数据。现状（2026-10-27）：已建，按后端线格式 `code: message[: 原因]` 拆码，认得全部 7 个稳定错误码，认不出的归 `unknown` 并保留原文；组件只拿到码和可展示文案 |
+| `frontend/src/api/events.ts` | `subscribeTaskProgress` | 订阅带单调递增 `sequence` 的 `TaskProgress` 事件（不是命令接口）并返回取消订阅函数；组件或 hook 销毁时必须调用。现状（2026-10-27）：文件已建，但里面是运行状态事件 `subscribeRuntimeStatus`（事件名 `app:runtime-status` 只在这一处出现，组件不再直接 `import` `@wailsio/runtime`）；`subscribeTaskProgress` 等任务队列接通后端再加，不提前放空壳 |
 | `frontend/src/utils/format.ts` | `formatLatency`、`formatBytes`、`formatDuration`、`formatTimestamp` | 统一数值和时间格式，单位明确，日期数字走 `Intl`；不显示没有下载实测依据的“下载速度” |
 | `frontend/src/utils/validation.ts` | `validateSettings`、`validateRequiredValue`、`validateNumberRange` | 检查前端表单格式并返回字段级错误；后端仍负责最终校验 |
 | `frontend/src/utils/safeText.ts` | `isTrustedExternalURL` | 仅在打开动态外链时检查 `https:` 和允许的 GitHub 主机；普通文字使用 React 默认转义 |
 | `frontend/src/i18n/index.ts` | `t`、`setLocale`、`getLocale` | 按稳定文案键读取资源、替换命名参数并统一回退；组件不手工拼翻译片段 |
-| `frontend/src/i18n/formatters.ts` | `formatLocaleDate`、`formatLocaleNumber` | 用当前语言和 `Intl` 格式化日期、数字；不自建日期格式规则 |
+| `frontend/src/i18n/formatters.ts` | `formatLocaleDate`、`formatLocaleNumber` | 用当前语言和 `Intl` 格式化日期、数字；不自建日期格式规则。现状（2026-10-27）：文件已建，但只有页面真正用到的 `formatInteger`（状态栏计数）；日期和耗时格式化等对应功能接上再加，不放空壳 |
 | `frontend/src/hooks/useAppStatus.ts` | `useAppStatus` | 读取并订阅权限、平台和服务状态；负责加载反馈和取消订阅，不复制全局状态 |
 | `frontend/src/hooks/useDebouncedValue.ts` | `useDebouncedValue` | 仅合并搜索等高频输入；组件卸载时清理计时器，不用来掩盖慢请求 |
 | `frontend/src/features/tasks/taskEvents.ts` | 任务事件到 task store 的映射 | `api/events.ts` 负责底层订阅和取消；任务事件映射留在任务功能内，不额外建立通用 `useTaskEvents` hook |
