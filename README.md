@@ -6,6 +6,8 @@
 
 ---
 
+> **产品身份配置指针**：产品名字的唯一手写源是 `internal/identity/identity.go`，别处不再抄一份；把这些值钉死的金标准在 `internal/identity/identity_test.go`；唯一的安全例外是免密 root 助手 `scripts/github-net-root-install.sh`，它按字面把包名写在自己文件的 `PKG` 一行，一致性靠那个测试反向核对。改户口层的值（产品 ID、包名、数据目录名、Hosts 区段标记）之前，先读那个包的头部注释和金标准，并在 PR 里写清迁移影响：新旧值同时存在的时刻会发生什么、怎么迁、迁失败怎么回来。
+
 ## 中文
 
 GitHub Net（GitHub 加速助手）是一个用 Go、Wails v3、React 和 TypeScript 构建的跨平台桌面应用。它通过检测 GitHub 域名的可用 IP 并写入系统 Hosts 文件来加速访问：不改系统代理、不装虚拟网卡、不需要常驻后台流量。加速方法按独立策略扩展，后续可加装系统代理、PAC 等新方式，每种方式一个实现文件。
