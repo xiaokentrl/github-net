@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "xiaokentrl",
+			"FileDescription": "GitHub 和 Steam 网络加速工具",
+			"LegalCopyright": "© 2026, My Company",
+			"ProductName": "GitHub Net",
+			"Comments": "This is a comment"
+		}
+	}
+}

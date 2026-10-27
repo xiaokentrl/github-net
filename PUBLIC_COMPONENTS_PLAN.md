@@ -42,7 +42,7 @@
 
 ## 4. 前端公共工具
 
-- **格式化工具**：格式化延迟、速度、时间和文件大小；使用 React 文本节点显示内容。
+- **格式化工具**：格式化连接耗时、时间和流量估算值；使用 React 文本节点显示内容。
 - **安全工具**：只校验需要打开的动态外链协议和可信域名；React 默认转义已足够处理普通文字，不自行拼 HTML。
 - **表单校验工具**：检查设置项格式和范围并返回字段级错误；后端仍负责最终校验。
 - **Wails API 封装**：集中调用后端方法和监听事件；统一处理错误和取消订阅。
@@ -73,10 +73,10 @@
 
 | 文件 | 方法或内容 | 责任与边界 |
 |---|---|---|
-| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 14 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则 |
+| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`getTasks`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则 |
 | `frontend/src/api/errors.ts` | `toAppError`、`getErrorMessage` | 把调用异常整理成稳定错误码和可展示文案；保留原错误供日志，不能改成成功或空数据 |
-| `frontend/src/api/events.ts` | `subscribeTaskProgress` | 订阅 `TaskProgress` 事件（不是命令接口）并返回取消订阅函数；组件或 hook 销毁时必须调用 |
-| `frontend/src/utils/format.ts` | `formatLatency`、`formatSpeed`、`formatBytes`、`formatDuration`、`formatTimestamp` | 统一数值和时间格式，单位明确，日期数字走 `Intl`；不做业务判断 |
+| `frontend/src/api/events.ts` | `subscribeTaskProgress` | 订阅带单调递增 `sequence` 的 `TaskProgress` 事件（不是命令接口）并返回取消订阅函数；组件或 hook 销毁时必须调用 |
+| `frontend/src/utils/format.ts` | `formatLatency`、`formatBytes`、`formatDuration`、`formatTimestamp` | 统一数值和时间格式，单位明确，日期数字走 `Intl`；不显示没有下载实测依据的“下载速度” |
 | `frontend/src/utils/validation.ts` | `validateSettings`、`validateRequiredValue`、`validateNumberRange` | 检查前端表单格式并返回字段级错误；后端仍负责最终校验 |
 | `frontend/src/utils/safeText.ts` | `isTrustedExternalURL` | 仅在打开动态外链时检查 `https:` 和允许的 GitHub 主机；普通文字使用 React 默认转义 |
 | `frontend/src/i18n/index.ts` | `t`、`setLocale`、`getLocale` | 按稳定文案键读取资源、替换命名参数并统一回退；组件不手工拼翻译片段 |
@@ -85,7 +85,7 @@
 | `frontend/src/hooks/useDebouncedValue.ts` | `useDebouncedValue` | 仅合并搜索等高频输入；组件卸载时清理计时器，不用来掩盖慢请求 |
 | `frontend/src/features/tasks/taskEvents.ts` | 任务事件到 task store 的映射 | `api/events.ts` 负责底层订阅和取消；任务事件映射留在任务功能内，不额外建立通用 `useTaskEvents` hook |
 | `frontend/src/stores/settingsStore.ts` | 持久配置快照、draft、保存状态和更新 action | 所有需跨重启保留的设置（包括独立的 `detectFocusFollow`、`applyFocusFollow`）通过后端 `GetSettings`、`SaveSettings` 保存；前端不得以 `localStorage` 建立副本 |
-| `frontend/src/features/tasks/taskStore.ts` | `upsertTask`、`removeTask`、`markTaskCancelled`、`removeFinishedTasks` | 任务状态唯一来源；终态集合为成功、跳过、失败、取消、已恢复。清理终态时保留排队中和执行中任务 |
+| `frontend/src/features/tasks/taskStore.ts` | `replaceTaskSnapshot`、`upsertTask`、`removeTask`、`markTaskCancelled`、`removeFinishedTasks`、`tasksForItem` | 任务状态唯一来源；终态集合为成功、跳过、失败、回滚、取消、已恢复。快照和事件按 sequence 合并；“查看日志”只筛选当前内存队列中该项目的记录，不承诺跨清理或重启保留 |
 | `internal/detector/probe.go` | `ProbeTCP`、`ProbeHTTPS` | 单候选探测接收 `context` 截止时间；HTTPS 保留 SNI/主机名和证书校验。多个候选由策略层提交给共享有界 worker pool，不在每个策略中另造并发框架 |
 | `frontend/src/features/*/*Selectors.ts` | 功能内纯查询方法 | 仅放同一功能里被多个组件复用的筛选、排序和派生状态，不建跨功能万能 selector |
 | `frontend/src/styles/tokens.css` | 颜色、间距、尺寸、圆角、层级和焦点令牌 | 唯一全站视觉令牌来源；组件引用变量，不复制样式常量 |
@@ -96,7 +96,7 @@
 - 每种业务数据只在一个 feature store 中维护；按稳定 ID 归一化。树、详情、工具栏、任务队列和计数用 selectors 从同一状态派生，不分别复制同一条记录。
 - 数据读取使用“请求中/成功有数据/成功为空/失败/过期”等明确状态。不得把失败吞掉后当空结果或演示数据。
 - 用户操作由 feature action 调 API；Go snapshot/command DTO 和生成绑定是接口类型来源。任务进度由 Wails typed event 通知，应用级订阅统一注册和取消。
-- 所有可变实体含 revision/sequence；RPC 响应和事件共用版本比较，旧响应、重复事件、迟到进度不覆盖新状态，任务终态不可回退。初次进入先订阅再拉快照，事件序号有缺口或窗口重新激活时重拉后端快照。
+- 所有可变实体含 revision/sequence；RPC 响应和事件共用版本比较，旧响应、重复事件、迟到进度不覆盖新状态，任务终态不可回退。初次进入先订阅再调用 `GetTasks` 拉取带 sequence 水位的快照；事件序号有缺口、连接重建或窗口重新激活时重拉后端快照。
 - 方法选择按 `scopeID` 持久化。保存中与已保存状态分开；确认失败/冲突时不能显示为已生效，也不能因请求乱序覆盖用户较新的选择。
 - Hosts 应用、还原等系统操作不做假成功式乐观更新。前端可显示 pending，但只有后端确认/权威事件才能更新“已应用”状态；重复命令用 `operationID` 做幂等保护。
 - 检测/应用焦点跟随是两个独立设置，默认关闭；自动展开分类不移动键盘焦点。任务期间用户手动切换分类后，结束时保留用户最新状态，不用旧快照覆盖。
@@ -166,14 +166,14 @@
 
 | 文件 | 规划方法 | 复用范围 |
 |---|---|---|
-| `internal/app/bindings.go` | `GetAppStatus`、`GetItems`、`GetStrategies`、`DetectItems`、`SelectStrategy`、`ApplyItems`、`RestoreItems`、`OpenHosts`、`GetSettings`、`SaveSettings`、`CancelTask`、`ClearFinishedTasks`、`ClearQueue`、`CheckForUpdates` | 与技术规划中的 14 个命令接口逐项对应；检查请求并转给业务服务 |
+| `internal/app/bindings.go` | `GetAppStatus`、`GetItems`、`GetStrategies`、`DetectItems`、`SelectStrategy`、`ApplyItems`、`RestoreItems`、`OpenHosts`、`GetSettings`、`SaveSettings`、`CancelTask`、`GetTasks`、`PauseQueue`、`ResumeQueue`、`RetryFailedTasks`、`ClearFinishedTasks`、`ClearQueue`、`CheckForUpdates` | 与技术规划中的 18 个命令接口逐项对应；检查请求并转给业务服务 |
 | `internal/app/errors.go` | `ToPublicError` | 把内部错误转换成稳定、可展示的错误码和消息；保留底层原因用于日志 |
 | `internal/catalog/catalog.go` | `Services`、`ItemsForService`、`FindItem`、`ValidateIDs` | 服务、项目、域名和 ID 的唯一来源 |
 | `internal/config/store.go` | `Load`、`Save` | 配置读写、原子保存及明确报错 |
 | `internal/config/defaults.go` | `DefaultConfig` | 唯一默认值来源；新安装默认省流、自动检测关闭 |
 | `internal/config/validate.go` | `Validate` | 校验配置范围、服务 ID 和已注册的方法 ID |
 | `internal/config/migrate.go` | `Migrate` | 把旧配置逐版本迁移到当前结构 |
-| `internal/task/manager.go` | `Start`、`Get`、`List`、`Cancel`、`ClearFinished`、`ClearAll` | `ClearFinished` 只移除终态，可与其他任务并行；`ClearAll` 清除包括排队任务在内的全部记录，但有执行中任务时拒绝 |
+| `internal/task/manager.go` | `Start`、`Get`、`List`、`Pause`、`Resume`、`Cancel`、`RetryFailed`、`ClearFinished`、`ClearAll` | 暂停只阻止领取新等待任务，不中断执行中任务；重试创建关联原任务的新 ID；`ClearFinished` 只移除终态，可与其他任务并行；`ClearAll` 清除包括排队任务在内的全部记录，但有执行中任务时拒绝 |
 | `internal/task/transition.go` | `CanTransition`、`Transition` | 集中检查合法状态变化，不重复散落条件判断 |
 | `internal/event/publisher.go` | `Publish`、`PublishTaskProgress` | 统一事件结构和限频；任务状态仍由 task 管理 |
 | `internal/detector/resolver.go` | `Resolve` | 可取消、有超时的系统 DNS 解析；首期不自动向第三方解析器发送查询 |
@@ -201,7 +201,7 @@
 
 ### 6.5 抽取与删除规则
 
-- DNS 解析、候选测速、任务进度和 Hosts 事务各保留一个权威实现；加速方法只组合调用。
+- DNS 解析、候选连接检测、任务进度和 Hosts 事务各保留一个权威实现；加速方法只组合调用。
 - 配置原子保存和 Hosts 写入事务不是同一种业务；不能为少量重复代码合成可写任意路径的通用文件工具。
 - 首期配置使用一个带 `schemaVersion`、`revision` 的 JSON 文件；不引入 SQLite、浏览器 `localStorage` 副本或云同步。Go 配置服务负责默认值、迁移、校验、revision 比较和同目录临时文件原子替换。
 - `SaveSettings` 按字段 patch 提交，并携带 `expectedRevision`、`mutationID`；配置服务串行化写入，冲突和持久化错误必须显式返回。新版本未知配置不得被旧版本重写；损坏配置保留一个受控副本并提示用户，不能静默覆写。
@@ -338,7 +338,7 @@ internal/
 - 任务取消或页面关闭后，不留下仍在运行的事件监听。
 - Hosts 组件使用临时文件测试，不修改开发机真实 Hosts。
 - 检测和应用焦点跟随分别持久化且默认关闭；自动展开不移动键盘焦点，任务结束时保留用户在运行期间手动调整的分类状态。
-- “清理已结束”只移除成功、跳过、失败、取消和已恢复任务，排队中/执行中任务保留；“清空队列”会移除排队任务，但存在执行中任务时拒绝。清理终态可与其他任务并行。
+- “清理已结束”只移除成功、跳过、失败、回滚、取消和已恢复任务，排队中/执行中任务保留；“清空队列”会移除排队任务，但存在执行中任务时拒绝。清理终态可与其他任务并行。
 - Hosts 单项还原恢复该项目应用前的工具映射；多个项目共用映射时，其他所有者仍在使用的记录必须保留。区段外用户内容不变，冲突时不覆盖。
 - Hosts 全部还原逐项处理并返回成功/失败清单；元数据或区段冲突时保留现场。恢复成功后隐藏该项目的还原入口，再次成功应用后重新建立还原点。
 - 前端显示的真实状态来自后端；模拟数据只在明确的演示环境中使用。
