@@ -3,6 +3,8 @@ bin
 frontend/dist
 frontend/node_modules
 build/linux/appimage/build
+# build/linux/<产品ID>.desktop 由 Taskfile 的 generate:dotdesktop 每次打包时重新生成
+build/linux/*.desktop
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 # Mobile generated (per-machine; overlays hold absolute paths)
 build/ios/xcode/overlay.json

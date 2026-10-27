@@ -103,6 +103,8 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 ```text
 .
 ├── main.go                  # Wails 应用入口：装配服务、托盘、单实例锁、生命周期
+├── cmd/
+│   └── identity/            # 取值小命令：给脚本和构建项读产品身份（--key / --shell）
 ├── internal/
 │   ├── app/                 # 暴露给前端的接口、DTO 和错误转换
 │   ├── accelerator/         # 【未建】加速流程协调与按服务的方法路由
@@ -112,6 +114,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 │   ├── detector/            # 【未建】DNS 解析、候选探测与排序
 │   ├── event/               # 给前端推事件的统一出口
 │   ├── hosts/               # 【未建】Hosts 解析、备份、事务写入与还原
+│   ├── identity/            # 产品名字的唯一手写源：户口层常量、派生路径与钉死它们的金标准测试
 │   ├── platform/            # 【未建】Windows/macOS/Linux 系统差异适配
 │   ├── privilege/           # 【未建】受限特权辅助服务的 IPC 客户端与协议
 │   ├── task/                # 【未建】任务生命周期、取消与进度
@@ -259,6 +262,8 @@ Entries marked [not built] exist only in the plan — those directories are not 
 ```text
 .
 ├── main.go                  # Wails entry point: service wiring, single-instance lock, tray, lifecycle
+├── cmd/
+│   └── identity/            # Small value command: lets scripts and build steps read the product identity (--key / --shell)
 ├── internal/
 │   ├── app/                 # Frontend-facing API, DTOs and error mapping
 │   ├── accelerator/         # [not built] Acceleration flow and per-service method routing
@@ -268,6 +273,7 @@ Entries marked [not built] exist only in the plan — those directories are not 
 │   ├── detector/            # [not built] DNS resolution, candidate probing and ranking
 │   ├── event/               # Single outlet for events pushed to the frontend
 │   ├── hosts/               # [not built] Hosts parsing, backup, transactional writes and restore
+│   ├── identity/            # The only handwritten source of product names: identity constants, derived paths and the golden test that pins them
 │   ├── platform/            # [not built] Windows/macOS/Linux system adapters
 │   ├── privilege/           # [not built] Restricted privileged helper IPC client and protocol
 │   ├── task/                # [not built] Task lifecycle, cancellation and progress

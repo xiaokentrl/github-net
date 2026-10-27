@@ -6,8 +6,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 
+# 产品身份：包名、二进制名、产物路径、助手路径、配置目录名统统来自 internal/identity，
+# 这里只 eval 这一次；取不到值就中断推送，绝不带着空字符串往下删。
+. "$ROOT/scripts/lib/identity-guard.sh"
+identity_load "$ROOT" || { echo '拿不到产品身份，中断推送' >&2; exit 1; }
+identity_guard || { echo '产品身份的值不合法，中断推送' >&2; exit 1; }
+
 # 装好的 root 助手：只干卸载+安装这两件事，可由 setup-passwordless-reinstall.sh 配成免密。
-HELPER=/usr/local/sbin/github-net-root-install
+HELPER="$IDENTITY_HELPER_PATH"
 PRIV=()
 
 # 提权通道，按「已经免密 → 终端能问 → 图形弹框」依次挑一条。
@@ -48,7 +54,7 @@ priv() {
 swap_packages() {
   local deb="$1"
   # 助手只认固定产物路径，别的文件名不能让它装（否则会装到旧包）。
-  if [ -x "$HELPER" ] && [ "$deb" = 'bin/github-net.deb' ]; then
+  if [ -x "$HELPER" ] && [ "$deb" = "$IDENTITY_DEB_PATH" ]; then
     echo "  走 root 助手：$HELPER"
     if sudo -n "$HELPER"; then
       return 0
@@ -58,10 +64,11 @@ swap_packages() {
     return
   fi
   if [ -x "$HELPER" ]; then
-    echo "  这次的产物不是 bin/github-net.deb，助手认不出，改走脚本直装" >&2
+    echo "  这次的产物不是 $IDENTITY_DEB_PATH，助手认不出，改走脚本直装" >&2
   fi
-  if dpkg-query -W -f='${Status}' github-net 2>/dev/null | grep -q 'install ok installed'; then
-    priv dpkg --purge github-net
+  identity_guard || { echo '卸载前产品身份校验没过，中断' >&2; return 1; }
+  if dpkg-query -W -f='${Status}' "$IDENTITY_PACKAGE_NAME" 2>/dev/null | grep -q 'install ok installed'; then
+    priv dpkg --purge "$IDENTITY_PACKAGE_NAME"
   else
     echo '  本来就没装，跳过卸载'
   fi
@@ -72,14 +79,15 @@ swap_packages() {
 echo '== 1/4 打包 deb =='
 wails3 task linux:create:deb
 
-# wails3 打出来的 deb 就叫 bin/github-net.deb（不带版本后缀，实测如此）
-DEB="$(ls -t bin/github-net*.deb 2>/dev/null | head -n1 || true)"
+# wails3 打出来的 deb 就是 identity 里登记的产物路径（不带版本后缀，实测如此）。
+# 找的时候按前缀通配，兼容万一带上版本号的产物名。
+DEB="$(ls -t "${IDENTITY_DEB_PATH%.deb}"*.deb 2>/dev/null | head -n1 || true)"
 [ -n "$DEB" ] || { echo '打完包却没找到 deb，中断推送' >&2; exit 1; }
 echo "  产物：$DEB ($(stat -c %s "$DEB") 字节)"
 
-echo '== 2/4 停掉在跑的 github-net =='
-# 装着的和 wails3 dev 起的都叫 github-net，一并停掉，避免旧实例占着旧代码
-pkill -x github-net 2>/dev/null || true
+echo "== 2/4 停掉在跑的 $IDENTITY_BINARY_NAME =="
+# 装着的和 wails3 dev 起的都叫同一个二进制名，一并停掉，避免旧实例占着旧代码
+pkill -x "$IDENTITY_BINARY_NAME" 2>/dev/null || true
 
 echo '== 3/4 卸载旧包并装新包 =='
 swap_packages "$DEB"
@@ -87,6 +95,7 @@ swap_packages "$DEB"
 echo '== 4/4 删配置 =='
 # 配置和数据按规划只落在这三个用户目录。删在新包装好之后：这中间没有任何一次运行会写配置，
 # 效果就是「新包从默认配置起步」，而授权或安装没过时不会出现「配置已删、包没装」的半截状态。
-rm -rf ~/.local/share/github-net ~/.cache/github-net ~/.config/github-net
+identity_guard || { echo '删配置前产品身份校验没过，中断' >&2; exit 1; }
+rm -rf "$HOME/.local/share/$IDENTITY_DATA_DIR" "$HOME/.cache/$IDENTITY_DATA_DIR" "$HOME/.config/$IDENTITY_DATA_DIR"
 
-echo "== 完成：github-net 已重装，版本 $(dpkg-query -W -f='${Version}' github-net) =="
+echo "== 完成：$IDENTITY_PACKAGE_NAME 已重装，版本 $(dpkg-query -W -f='${Version}' "$IDENTITY_PACKAGE_NAME") =="
