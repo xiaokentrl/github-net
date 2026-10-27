@@ -1,0 +1,68 @@
+// github-net 运行时拓扑（部署/进程视角，不是逻辑分层）　生成日期 2026-10-28
+// 问的问题：这套东西在用户机器上到底跑成几个进程、碰哪些文件、跨哪条信任边界。
+// 渲染：dot -Tsvg runtime-topology.dot -o runtime-topology.svg（graphviz 14.1.2 实测；SVG 是派生产物，改图请改本文件）
+digraph runtime {
+  rankdir=TB;
+  nodesep=0.4; ranksep=0.8;
+  fontname="Helvetica"; labelloc=t; fontsize=15;
+  label="github-net 运行时拓扑：一台桌面机 + 一个进程 + 一条 JS↔Go 桥 + 三类本机文件\n（没有远端服务、没有数据库；「不监听端口」属框架推断，仓库层面未证实）";
+  node [shape=box, style="rounded,filled", fillcolor="#ffffff", color="#c8ccd1", fontsize=11];
+
+  // ── 用户桌面会话 ────────────────────────────────────────────────
+  subgraph cluster_desktop {
+    label="用户桌面会话（Wayland/X11，普通用户权限）"; style="rounded,filled"; fillcolor="#fafbfc"; color="#d0d7de"; fontsize=12;
+
+    subgraph cluster_proc {
+      label="交付二进制 /usr/local/bin/github-net　单一进程"; style="dashed"; color="#8a94a0"; fontsize=12;
+      webkitw [label="WebKitGTK 渲染\n跑 frontend/dist（React SPA）\n资源由 Wails 内置服务器给（自定义 scheme 还是本地回环，仓库不体现＝待实测）", fillcolor="#e8f8ef"];
+      goroot  [label="Go 主循环\nWails 应用、窗口、托盘、单例锁\napplication.NewService(service)", fillcolor="#eaf3ff"];
+      bridge  [label="Wails JS↔Go 桥（进程内消息）\n6 个绑定方法：RuntimeInfo Ping GetItems\nGetAppStatus GetSettings SaveSettings\n1 个事件：app:runtime-status", shape=hexagon, fillcolor="#fff8e1"];
+      webkitw -> bridge [label="调用（Promise）"];
+      bridge  -> goroot [label="派发"];
+      goroot  -> bridge [label="每 2 秒 Emit 状态事件\nstatusTick=2s，sequence 单调递增"];
+    }
+
+    gtkdep [label="动态库依赖（CGO 链接期就要满足）\nlibgtk-4.so.1 libwebkitgtk-6.0.so.4\nlibjavascriptcoregtk-6.0.so.1", shape=component, fillcolor="#f6f8fa"];
+    goroot -> gtkdep [label="本地库调用"];
+
+    // ── 本机文件与外部资源 ────────────────────────────────────────
+    subgraph cluster_files {
+      label="本机文件（工具的落盘面）"; style="rounded"; color="#d0d7de"; fontsize=12;
+      hostsf [label="/etc/hosts（Windows 走 System32 那条路径）\n读：找 BEGIN/END github-net managed hosts v1 区段\n写：当前没有", shape=cylinder, fillcolor="#fdeceb"];
+      configf [label="config.json（XDG data home 下 github-net/config）\n目录 0700 文件 0600\n坏了改名 config.json.bad 隔离，只留最近一份", shape=cylinder, fillcolor="#eef3fb"];
+      embedded [label="二进制内嵌（只读，运行期不落盘）\ncatalog.json 目录数据\nappicon.png 托盘图标\nfrontend/dist 界面", shape=folder, fillcolor="#f2f4f6"];
+      goroot -> hostsf  [label="GetItems 每次现读一遍，不缓存\napp.go:99 hosts/manager.go:25"];
+      goroot -> configf [label="读 GetSettings / 写 SaveSettings（同目录临时文件 + rename）"];
+      goroot -> embedded [label="go:embed 已编译进产物"];
+    }
+
+    tray [label="系统托盘 + 单例锁\nApplicationID/UniqueID = AppID\n二次启动只做一件事：聚焦已有窗口", shape=note, style="filled,dashed", fillcolor="#f6f8fa"];
+    goroot -> tray [label="建/销毁（cleanup 里取消 3 个订阅 + tray.Destroy）"];
+
+    dns [label="操作系统配置的 DNS\nnet.DefaultResolver，2 秒预算", shape=ellipse, fillcolor="#f6f8fa", fontcolor="#8a5a00"];
+    goroot -> dns [label="当前不查：dns-hosts 策略代码在但没进运行时\n（隐私规则：绝不转发第三方解析器）", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
+  }
+
+  // ── 提权边界 ───────────────────────────────────────────────────
+  subgraph cluster_root {
+    label="root 边界（只有装/卸包时跨过去，运行期不碰）"; style="dashed"; color="#c0392b"; fontcolor="#c0392b"; fontsize=12;
+    helper [label="/usr/local/sbin/github-net-root-install\n先 dpkg --purge 旧包，再 apt-get install -y ./新 deb（脚本 :37,39）\n由 sudoers.d 规则免密；故意不 source 仓库里的脚本\n（仓库目录用户可写，让 root 读它等于开口子）", shape=box3d, fillcolor="#fdeceb"];
+    sudoers [label="/etc/sudoers.d/github-net-reinstall\nscripts/setup-passwordless-reinstall.sh 配出来", shape=note, fillcolor="#f6f8fa"];
+    sudoers -> helper [label="授权范围只有这两件事"];
+  }
+
+  goroot -> hostsf [label="写权限只是探测，不写\nProbeHostsAccess 打开即关", style=dotted, color="#8a94a0", fontcolor="#57606a", constraint=false];
+  helper -> hostsf [label="包本身不写 Hosts（特权写入属后面阶段）", style=dotted, color="#c0392b", fontcolor="#c0392b", constraint=false];
+
+  // ── 一次典型往返 ───────────────────────────────────────────────
+  subgraph cluster_trace {
+    label="一次界面往返（打开或刷新目录）"; style="rounded"; color="#d0d7de"; fontsize=12;
+    t1 [label="1. 前端 App.tsx loadCatalog\n只认最后一次请求结果", fillcolor="#e8f8ef"];
+    t2 [label="2. api/client getItems\n→ 生成绑定 GetItems()", fillcolor="#e8f8ef"];
+    t3 [label="3. Service.GetItems\ncatalog 已加载则继续，否则报 catalog_invalid", fillcolor="#eaf3ff"];
+    t4 [label="4. hosts.Read 现读 /etc/hosts\nParse 判区段，Anomaly 不猜修", fillcolor="#eaf3ff"];
+    t5 [label="5. HostsStates 逐项目定档\n只产出 none / conflict / readFailed", fillcolor="#eaf3ff"];
+    t6 [label="6. 前端按 itemId 建索引渲染\napplied/partial 不会显示成已生效", fillcolor="#e8f8ef"];
+    t1 -> t2 -> t3 -> t4 -> t5 -> t6;
+  }
+}

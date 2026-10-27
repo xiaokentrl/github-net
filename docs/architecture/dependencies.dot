@@ -1,0 +1,93 @@
+// github-net 依赖图（包/模块级）　生成日期 2026-10-28　复核日期 2026-10-28（行号与调用点逐条重跑）
+// 边全部来自 import 或调用点，证据位置见同目录 evidence.md 的第 1、2 节。
+// 线型口径：实线=运行时已接上；虚线=应接未接的缺口（代码存在，但执行路径到不了）；点线=构建期或推送期。
+// 渲染：dot -Tsvg dependencies.dot -o dependencies.svg（graphviz 14.1.2 实测无警告；SVG 是派生产物，改图请改本文件）
+digraph deps {
+  rankdir=TB;
+  compound=true;
+  nodesep=0.36; ranksep=0.72;
+  fontname="Helvetica"; labelloc=t;
+  label="github-net 依赖图（实线=运行时已接上，虚线=代码在但没接线，点线=构建/推送期）\n生成 2026-10-28，依据 main 工作树（远端 4475f5b + 未提交阶段三起手）";
+  fontsize=15;
+
+  node [shape=box, style="rounded,filled", fillcolor="#ffffff", color="#c8ccd1", fontsize=11];
+
+  // ── Go 侧 ────────────────────────────────────────────────────────
+  subgraph cluster_go {
+    label="Go 模块 github.com/xiaokentrl/github-net"; fontsize=12; color="#d0d7de"; style="rounded";
+    main        [label="main\n装配入口", fillcolor="#eaf3ff"];
+    app         [label="internal/app\n对外门面 + 错误码 + Hosts 探测", fillcolor="#eaf3ff"];
+    catalog     [label="internal/catalog\n内嵌目录 + 校验", fillcolor="#eaf3ff"];
+    config      [label="internal/config\n读盘/校验/原子保存", fillcolor="#eaf3ff"];
+    hosts       [label="internal/hosts\n区段只读解析", fillcolor="#eaf3ff"];
+    event       [label="internal/event\n状态序号与事件名", fillcolor="#eaf3ff"];
+    strategies  [label="internal/accelerator/strategies\n方法自注册表 + dns-hosts", fillcolor="#fff5e6", fontcolor="#8a5a00"];
+    identity    [label="internal/identity\n产品身份唯一手写源", fillcolor="#f3eefc", fontcolor="#5b3a8e"];
+    cmdidentity [label="cmd/identity\n取值 CLI", fillcolor="#f3eefc", fontcolor="#5b3a8e"];
+  }
+
+  // ── 外部依赖 ─────────────────────────────────────────────────────
+  wails   [label="github.com/wailsapp/wails/v3\n窗口/托盘/服务绑定/事件/资源服务器", shape=box, fillcolor="#f6f8fa"];
+  gtklibs [label="GTK4 + WebKitGTK 6.0（CGO）\nnfpm 声明 libgtk-4-1、libwebkitgtk-6.0-4", shape=box3d, fillcolor="#f6f8fa"];
+  xdgDNS  [label="操作系统 DNS\nnet.DefaultResolver", shape=ellipse];
+
+  // ── 本机文件 ─────────────────────────────────────────────────────
+  hostsF  [label="/etc/hosts（只读）", shape=cylinder];
+  configF [label="config.json + config.json.bad\nXDG data home 下 github-net/config", shape=cylinder];
+  distF   [label="frontend/dist\n（go:embed 进二进制）", shape=folder];
+  protoF  [label="唯一正式原型 HTML\nCATEGORY_DEFS 1131-1208 行（一次性抽取）", shape=note, fillcolor="#f6f8fa"];
+
+  // ── 前端侧 ───────────────────────────────────────────────────────
+  subgraph cluster_ts {
+    label="前端 frontend/src"; fontsize=12; color="#d0d7de"; style="rounded";
+    entry     [label="main.tsx\nStrictMode + ErrorBoundary", fillcolor="#e8f8ef"];
+    appTsx    [label="app/App.tsx\n三条加载链路 + 事件订阅", fillcolor="#e8f8ef"];
+    layout    [label="components/layout\nAppShell Toolbar StatusBar SettingsEntry", fillcolor="#e8f8ef"];
+    nav       [label="components/navigation\nCategoryTree CategoryNode SearchBox", fillcolor="#e8f8ef"];
+    features  [label="features\nItemDetail + settings 三块面板", fillcolor="#e8f8ef"];
+    ui        [label="components/ui\nEmptyState ErrorMessage InlineStatus Segmented Select StatusBadge", fillcolor="#e8f8ef"];
+    hooks     [label="hooks\nuseDebouncedValue useSettingsSave", fillcolor="#e8f8ef"];
+    api       [label="api\nclient events errors", fillcolor="#e8f8ef"];
+    bindingsT [label="frontend/bindings（生成物，勿手改）\napp/service.ts config/models.ts events", fillcolor="#dcedd9", fontcolor="#2b5d2b"];
+    i18n      [label="i18n + styles/tokens.css\nzh-CN 一套文案、当前只移植 light 主题", fillcolor="#e8f8ef"];
+  }
+
+  // ── 构建/发布链 ──────────────────────────────────────────────────
+  subgraph cluster_build {
+    label="构建与发布（不在运行时）"; fontsize=12; color="#d0d7de"; style="dashed";
+    taskfile [label="Taskfile.yml + build/{linux,darwin,windows,ios,android}\nbuild/config.yml 产品信息", shape=component];
+    nfpm     [label="build/linux/nfpm/nfpm.yaml（由 Taskfile 的 wails3 tool package 挂它，:153-166）\n装 3 个文件（dst 在 :21-25）\n只挂 postinstall（刷 desktop + mime 两个库）；preinstall/preremove/postremove 没被引用", shape=component];
+    ci       [label=".github/workflows/ci.yml\n前端构建→后端检查→出包+门一+门二→debian13 复跑", shape=component];
+    hook     [label=".githooks/pre-push\nscripts/pre-push-reinstall.sh\nscripts/lib/identity-guard.sh", shape=component];
+    rootHelp [label="/usr/local/sbin/github-net-root-install\nscripts/github-net-root-install.sh（故意不 source 仓库脚本）", shape=component];
+  }
+
+  // ── 运行时边 ─────────────────────────────────────────────────────
+  main -> app;      main -> event;   main -> wails;   wails -> gtklibs;
+  app -> catalog;   app -> config;   app -> hosts;
+  main -> distF     [label="go:embed", style=dotted, constraint=false];
+  catalog -> protoF [label="一次性抽取，运行时不读", style=dotted, constraint=false];
+  config -> configF [label="读 + 原子替换写", style=dotted, constraint=false];
+  hosts -> hostsF   [label="只读", style=dotted, constraint=false];
+
+  entry -> appTsx;  appTsx -> api;   appTsx -> layout; appTsx -> nav;
+  appTsx -> features; appTsx -> hooks; appTsx -> i18n;
+  layout -> ui;     nav -> ui;       features -> ui;   features -> hooks;
+  api -> bindingsT;
+  bindingsT -> wails [label="@wailsio/runtime 桥"];
+
+  // ── 未接线边（阶段三起手，代码在但没有 importer）─────────────────
+  strategies -> catalog    [label="init 取 scopeIDs", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
+  strategies -> hosts      [label="NormalizeHostname", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
+  strategies -> xdgDNS     [label="候选 IP 查询", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
+  app -> strategies        [label="缺口：NewStore 的 strategies 传 nil，注册表没进装配层", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
+  main -> identity         [label="缺口：main.go 仍写死 appName/appID/version 字面量", style=dashed, color="#6f42c1", fontcolor="#5b3a8e"];
+
+  // ── 身份与构建期边 ───────────────────────────────────────────────
+  identity -> cmdidentity       [style=dotted];
+  hook -> cmdidentity           [label="eval 一次", style=dotted];
+  hook -> rootHelp              [label="卸载 + 装新包 + 删配置", style=dotted];
+  taskfile -> nfpm              [style=dotted];
+  ci -> taskfile                [label="直接 go build，未走 Taskfile", style=dotted, color="#6e7781", fontcolor="#57606a"];
+  nfpm -> identity              [label="缺口：nfpm.yaml 里包名/路径仍是抄写", style=dashed, color="#6f42c1", fontcolor="#5b3a8e"];
+}
