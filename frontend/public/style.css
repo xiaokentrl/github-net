@@ -66,3 +66,43 @@ p {
   font-size: 14px;
   line-height: 1.6;
 }
+
+.info-list {
+  margin: 20px 0 0;
+  font-size: 14px;
+  text-align: left;
+}
+
+.info-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eef0f4;
+}
+
+.info-list dt {
+  color: #697386;
+}
+
+.info-list dd {
+  margin: 0;
+  color: #20242c;
+}
+
+.actions button,
+p button {
+  margin-left: 8px;
+  padding: 6px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #f6f8fa;
+  color: #20242c;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.actions button:disabled {
+  color: #8c959f;
+  cursor: not-allowed;
+}
