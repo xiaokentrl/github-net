@@ -77,6 +77,25 @@ Linux 构建需要 `libgtk-4-dev libwebkitgtk-6.0-dev`。产物能不能装某�
 go test ./...
 ```
 
+### 推送前自动重装
+
+本项目的规则：每次 `git push` 前自动跑一遍「打包 → 停旧进程 → 卸载旧包并装新包 → 删配置」，让本机装的永远是这一批要推的代码。实现是 `.githooks/pre-push` 调 `scripts/pre-push-reinstall.sh`。
+
+钩子只对设过 `git config core.hooksPath .githooks` 的机器生效；这条设置只写在 `.git/config`，不在仓库里，换机器要重设一次。
+
+卸载和安装要用 root。仓库里有两条路：
+
+- **root 助手（推荐，配一次以后不再问密码）**：`scripts/github-net-root-install.sh` 只干「卸载旧包 + 装新包」两件事，先一次性配置 `sudo bash scripts/setup-passwordless-reinstall.sh`（这一步要输一次密码），把它装成 root 所有的 `/usr/local/sbin/github-net-root-install` 并给它单独开免密。之后重装脚本检测到这个助手就整个交给它，`git push` 全程不打断。这个助手被免密调用，所以不要往里加别的功能——加什么能力等于给用户开什么 root 权限。撤销配置：`sudo rm /etc/sudoers.d/github-net-reinstall /usr/local/sbin/github-net-root-install`。
+- **直接 sudo（没配助手时的兜底）**：脚本按「已有免密凭据 → 终端里问密码 → 图形密码框」依次试。钩子里没有终端，直接 `sudo` 会卡在「需要终端」，所以走钩子推送时会弹一个图形密码框（`scripts/gui-askpass.sh`，用 zenity）。密码只交给 sudo 那一次，不落文件、不进日志，也不给机器加免密。
+
+授权或安装没过就中断推送。删配置排在装好新包之后：这中间没有任何一次运行会写配置，效果一样是新包从默认配置起步，但不会出现「配置已删、包没装」的半截状态。删配置每次都执行，不管之前装没装过。
+
+只改文档想跳过一次：
+
+```sh
+GITHUB_NET_SKIP_REINSTALL=1 git push
+```
+
 ### 项目结构
 
 标了【未建】的目录还只在规划里，仓库里还没有这些文件；其余是当前的真实结构。
@@ -100,7 +119,7 @@ go test ./...
 ├── frontend/
 │   ├── bindings/            # Wails 生成的绑定（不手改）
 │   └── src/                 # React 页面、组件、i18n、样式
-├── scripts/                 # 版本号、Release notes 生成等脚本
+├── scripts/                 # 版本号、Release notes 生成、推送前自动重装等脚本
 ├── docs/                    # 更新日志等文档
 └── .github/workflows/       # CI 与工作流
 ```
@@ -214,6 +233,25 @@ Run the Go tests:
 go test ./...
 ```
 
+### Reinstall before each push
+
+Project rule: every `git push` first runs "build package → stop the old process → purge the installed package and install the new one → delete its config", so the machine always runs exactly the code being pushed. `.githooks/pre-push` calls `scripts/pre-push-reinstall.sh`.
+
+The hook only fires on machines where `git config core.hooksPath .githooks` was set; that setting lives in `.git/config`, is not in the repository, and has to be re-set on a new machine.
+
+Purging and installing need root. The repository offers two ways:
+
+- **Root helper (recommended; one setup, then no more prompts).** `scripts/github-net-root-install.sh` does exactly two things — purge the old package, install the new one. Configure it once with `sudo bash scripts/setup-passwordless-reinstall.sh` (this step asks for a password): it installs the helper as `/usr/local/sbin/github-net-root-install`, owned by root, and grants passwordless sudo for that one file. After that the reinstall script hands the whole swap to the helper and `git push` never interrupts. The helper runs under passwordless sudo, so do not add other capabilities to it — anything you add is a root capability for the user. To undo: `sudo rm /etc/sudoers.d/github-net-reinstall /usr/local/sbin/github-net-root-install`.
+- **Plain sudo (fallback when the helper is not installed).** The script tries, in order: cached or passwordless credentials, the terminal prompt when pushing from a terminal, then a graphical password dialog inside a hook (`scripts/gui-askpass.sh`, using zenity) — a hook has no terminal, so plain `sudo` would stop at "a terminal is required". The password is handed to sudo once only: never written to a file or a log, and the machine gets no passwordless rule.
+
+If authorisation or installation fails the push aborts. Config deletion runs after the new package is installed: nothing launches the app in between, so the new package still starts from default settings, but a half state — config gone, package not installed — cannot happen. Config deletion runs on every push, installed before or not.
+
+To skip once, for a documentation-only change:
+
+```sh
+GITHUB_NET_SKIP_REINSTALL=1 git push
+```
+
 ### Project layout
 
 Entries marked [not built] exist only in the plan — those directories are not in the repo yet; the rest is the current layout.
@@ -237,7 +275,7 @@ Entries marked [not built] exist only in the plan — those directories are not 
 ├── frontend/
 │   ├── bindings/            # Wails-generated bindings (do not edit by hand)
 │   └── src/                 # React pages, components, i18n, styles
-├── scripts/                 # Version and release-notes helpers
+├── scripts/                 # Version, release-notes and pre-push reinstall helpers
 ├── docs/                    # Changelog and other docs
 └── .github/workflows/       # CI and workflows
 ```
