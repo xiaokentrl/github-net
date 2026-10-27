@@ -7,12 +7,15 @@ export {
 };
 
 export {
+    HostsAccess,
+    HostsStatus
+} from "./models.js";
+
+export type {
     AppStatus,
     CatalogCategory,
     CatalogItem,
-    HostsAccess,
     HostsState,
-    HostsStatus,
     ItemsSnapshot,
     RuntimeInfo
 } from "./models.js";

@@ -160,9 +160,10 @@ export function App() {
     const hostnames = new Set<string>()
     let items = 0
     for (const category of categories) {
-      items += category.items.length
-      for (const item of category.items) {
-        for (const hostname of item.hostnames) hostnames.add(hostname)
+      const categoryItems = category.items ?? []
+      items += categoryItems.length
+      for (const item of categoryItems) {
+        for (const hostname of item.hostnames ?? []) hostnames.add(hostname)
       }
     }
     return { categories: categories.length, items, hostnames: hostnames.size }
@@ -171,7 +172,7 @@ export function App() {
   const selected = useMemo(() => {
     const categories = snapshot?.categories ?? []
     for (const category of categories) {
-      for (const item of category.items) {
+      for (const item of category.items ?? []) {
         if (item.id === selectedId) return { item, category }
       }
     }

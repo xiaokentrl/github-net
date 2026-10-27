@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -24,9 +24,7 @@ import * as $models from "./models.js";
  * DNS 一栏报的是首期选型（系统解析器），检测任务还没接入，所以 DetectionReady 是 false。
  */
 export function GetAppStatus(): $CancellablePromise<$models.AppStatus> {
-    return $Call.ByID(645086831).then(($result: any) => {
-        return $$createType0($result);
-    });
+    return $Call.ByID(645086831);
 }
 
 /**
@@ -35,9 +33,7 @@ export function GetAppStatus(): $CancellablePromise<$models.AppStatus> {
  * 读不到文件报 readFailed、区段判读不了报 conflict，这两种都不会被显示成「未替换」。
  */
 export function GetItems(): $CancellablePromise<$models.ItemsSnapshot> {
-    return $Call.ByID(1316963034).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(1316963034);
 }
 
 /**
@@ -45,9 +41,7 @@ export function GetItems(): $CancellablePromise<$models.ItemsSnapshot> {
  * 文件不存在时给代码里的默认值，不为了读取而写盘。
  */
 export function GetSettings(): $CancellablePromise<config$0.Config> {
-    return $Call.ByID(77437691).then(($result: any) => {
-        return $$createType2($result);
-    });
+    return $Call.ByID(77437691);
 }
 
 /**
@@ -61,9 +55,7 @@ export function Ping(token: string): $CancellablePromise<string> {
  * RuntimeInfo 返回当前进程的真实运行环境，供前端显示与绑定链路自检。
  */
 export function RuntimeInfo(): $CancellablePromise<$models.RuntimeInfo> {
-    return $Call.ByID(3961655330).then(($result: any) => {
-        return $$createType3($result);
-    });
+    return $Call.ByID(3961655330);
 }
 
 /**
@@ -71,13 +63,5 @@ export function RuntimeInfo(): $CancellablePromise<$models.RuntimeInfo> {
  * 失败一律明确返回，前端不能把没落盘的东西显示成已保存。
  */
 export function SaveSettings(patch: config$0.Patch, expectedRevision: number, mutationID: string): $CancellablePromise<config$0.Config> {
-    return $Call.ByID(2645721314, patch, expectedRevision, mutationID).then(($result: any) => {
-        return $$createType2($result);
-    });
+    return $Call.ByID(2645721314, patch, expectedRevision, mutationID);
 }
-
-// Private type creation functions
-const $$createType0 = $models.AppStatus.createFrom;
-const $$createType1 = $models.ItemsSnapshot.createFrom;
-const $$createType2 = config$0.Config.createFrom;
-const $$createType3 = $models.RuntimeInfo.createFrom;

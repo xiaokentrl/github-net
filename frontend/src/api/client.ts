@@ -6,7 +6,7 @@ import {
   GetSettings,
   SaveSettings,
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/service'
-import { Patch } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
+import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { AppStatus, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 
@@ -36,11 +36,22 @@ export function getSettings(): Promise<Config> {
 // 保存必须带「你手上那份的 revision」和幂等键；后端比完版本才写，失败会明确 reject。
 // 没给的字段在 Patch 里是 null，后端按「这次不改」处理，不会清零。
 export function saveSettings(patch: SettingsPatch, expectedRevision: number, mutationID: string): Promise<Config> {
-  const body = new Patch({
+  const body: Patch = {
     networkProfile: patch.networkProfile ?? null,
     maxCandidateProbesPerRun: patch.maxCandidateProbesPerRun ?? null,
+    confirmUpdateDownloadOnMetered: null,
+    defaultStrategyByScope: null,
+    language: null,
+    theme: null,
+    zoom: null,
     sidebarWidth: patch.sidebarWidth ?? null,
     queueHeight: patch.queueHeight ?? null,
-  })
+    detectFocusFollow: null,
+    applyFocusFollow: null,
+    autoStart: null,
+    startMinimized: null,
+    autoDetectOnStartup: null,
+    autoApplyOnStartup: null,
+  }
   return SaveSettings(body, expectedRevision, mutationID)
 }

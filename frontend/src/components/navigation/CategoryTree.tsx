@@ -8,11 +8,12 @@ import styles from './CategoryTree.module.css'
 export type TreeLoad = 'loading' | 'ready' | 'error'
 
 function matches(category: CatalogCategory, needle: string): CatalogItem[] {
-  if (needle === '') return category.items
-  return category.items.filter(
+  const items = category.items ?? []
+  if (needle === '') return items
+  return items.filter(
     (item) =>
       item.name.toLowerCase().includes(needle) ||
-      item.hostnames.some((hostname) => hostname.toLowerCase().includes(needle)),
+      (item.hostnames ?? []).some((hostname) => hostname.toLowerCase().includes(needle)),
   )
 }
 

@@ -31,6 +31,7 @@ export function ItemDetail({
   if (!item || !category) return <EmptyState message={t('detail.empty')} />
 
   const status = hosts?.status ?? HostsStatus.HostsUnknown
+  const hostnames = item.hostnames ?? []
 
   return (
     <div className={styles.wrap}>
@@ -66,11 +67,11 @@ export function ItemDetail({
       <h3 className={styles.subTitle}>{t('detail.field.hostnames')}</h3>
       {item.userSupplied ? (
         <p className={styles.plain}>{t('detail.hostnames.userSupplied')}</p>
-      ) : item.hostnames.length === 0 ? (
+      ) : hostnames.length === 0 ? (
         <p className={styles.plain}>{t('detail.hostnames.none')}</p>
       ) : (
         <ul className={styles.hosts}>
-          {item.hostnames.map((hostname) => (
+          {hostnames.map((hostname) => (
             <li key={hostname}>{hostname}</li>
           ))}
         </ul>

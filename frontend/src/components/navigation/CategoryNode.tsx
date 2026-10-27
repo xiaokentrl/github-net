@@ -52,7 +52,7 @@ export function CategoryNode({
                 className={`${styles.node} ${styles.item} ${item.id === selectedId ? styles.active : ''}`}
                 onClick={() => onSelect(item.id)}
               >
-                <span className={styles.name} title={item.hostnames.join(', ')}>
+                <span className={styles.name} title={(item.hostnames ?? []).join(', ')}>
                   {item.name}
                 </span>
                 <StatusBadge
