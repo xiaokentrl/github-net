@@ -20,6 +20,8 @@
 # 排版固定为：分组名一行（`**名字**`）→ 空一行 → 条目；组与组之间恰好一个空行；段末不留多余空行，文件以一个换行结束。
 #
 # 用法：bash scripts/gen-release-notes.sh <条目文件> [版本号]
+#   · 条目文件按版本入库存放在 docs/release-notes/<版本号>.entries（如 docs/release-notes/0.1.0.entries）；
+#     release-notes.md 是生成物，不手改，要改内容就改那份条目清单再重跑
 #   · 版本号省略时取 main.go 的 appVersion（经 scripts/version.sh）；预览版手动传完整串（如 0.2.0-beta.1）
 #   · 上一版本从本地标签里取「比本版小的最大那个」，发版前先 git fetch --tags
 #   · 第一次发版（本地还没有任何 vX.Y.Z 标签）时没有「上一版」，标题不写 from/to

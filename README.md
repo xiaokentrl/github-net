@@ -102,7 +102,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 
 ```text
 .
-├── main.go                  # Wails 应用入口：装配服务、托盘、生命周期
+├── main.go                  # Wails 应用入口：装配服务、托盘、单实例锁、生命周期
 ├── internal/
 │   ├── app/                 # 暴露给前端的接口、DTO 和错误转换
 │   ├── accelerator/         # 【未建】加速流程协调与按服务的方法路由
@@ -120,7 +120,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 │   ├── bindings/            # Wails 生成的绑定（不手改）
 │   └── src/                 # React 页面、组件、i18n、样式
 ├── scripts/                 # 版本号、Release notes 生成、推送前自动重装等脚本
-├── docs/                    # 更新日志等文档
+├── docs/                    # 更新日志与 Release 条目清单（docs/release-notes/）
 └── .github/workflows/       # CI 与工作流
 ```
 
@@ -258,7 +258,7 @@ Entries marked [not built] exist only in the plan — those directories are not 
 
 ```text
 .
-├── main.go                  # Wails entry point: service wiring, tray, lifecycle
+├── main.go                  # Wails entry point: service wiring, single-instance lock, tray, lifecycle
 ├── internal/
 │   ├── app/                 # Frontend-facing API, DTOs and error mapping
 │   ├── accelerator/         # [not built] Acceleration flow and per-service method routing
@@ -276,7 +276,7 @@ Entries marked [not built] exist only in the plan — those directories are not 
 │   ├── bindings/            # Wails-generated bindings (do not edit by hand)
 │   └── src/                 # React pages, components, i18n, styles
 ├── scripts/                 # Version, release-notes and pre-push reinstall helpers
-├── docs/                    # Changelog and other docs
+├── docs/                    # Changelog and release note entry lists (docs/release-notes/)
 └── .github/workflows/       # CI and workflows
 ```
 
