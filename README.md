@@ -107,13 +107,13 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 │   └── identity/            # 取值小命令：给脚本和构建项读产品身份（--key / --shell）
 ├── internal/
 │   ├── app/                 # 暴露给前端的接口、DTO 和错误转换
-│   ├── accelerator/         # 【未建】加速流程协调与按服务的方法路由
-│   │   └── strategies/      # 【未建】加速方法（单文件自注册）
+│   ├── accelerator/         # 【部分建】加速流程协调与按服务的方法路由（根包还没写，目前只有 strategies/）
+│   │   └── strategies/      # 加速方法单文件自注册：契约、注册表与 dns-hosts（还没接进应用装配层）
 │   ├── catalog/             # 服务、项目、域名等产品数据（catalog.json）
 │   ├── config/              # 用户配置：校验、revision、原子保存
 │   ├── detector/            # 【未建】DNS 解析、候选探测与排序
 │   ├── event/               # 给前端推事件的统一出口
-│   ├── hosts/               # 【未建】Hosts 解析、备份、事务写入与还原
+│   ├── hosts/               # Hosts 管理区段判读与只读读取（备份、写入、还原还没做）
 │   ├── identity/            # 产品名字的唯一手写源：户口层常量、派生路径与钉死它们的金标准测试
 │   ├── platform/            # 【未建】Windows/macOS/Linux 系统差异适配
 │   ├── privilege/           # 【未建】受限特权辅助服务的 IPC 客户端与协议
@@ -266,13 +266,13 @@ Entries marked [not built] exist only in the plan — those directories are not 
 │   └── identity/            # Small value command: lets scripts and build steps read the product identity (--key / --shell)
 ├── internal/
 │   ├── app/                 # Frontend-facing API, DTOs and error mapping
-│   ├── accelerator/         # [not built] Acceleration flow and per-service method routing
-│   │   └── strategies/      # [not built] Acceleration methods (single-file self-registration)
+│   ├── accelerator/         # [partly built] Acceleration flow and per-service method routing (only strategies/ exists)
+│   │   └── strategies/      # Acceleration methods, one file each: contract, registry and dns-hosts (not wired into the app yet)
 │   ├── catalog/             # Product data: services, items, domains (catalog.json)
 │   ├── config/              # User config: validation, revision, atomic saves
 │   ├── detector/            # [not built] DNS resolution, candidate probing and ranking
 │   ├── event/               # Single outlet for events pushed to the frontend
-│   ├── hosts/               # [not built] Hosts parsing, backup, transactional writes and restore
+│   ├── hosts/               # Hosts managed-block parsing and read-only access (backup, writes and restore not built)
 │   ├── identity/            # The only handwritten source of product names: identity constants, derived paths and the golden test that pins them
 │   ├── platform/            # [not built] Windows/macOS/Linux system adapters
 │   ├── privilege/           # [not built] Restricted privileged helper IPC client and protocol
