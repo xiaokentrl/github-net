@@ -83,19 +83,36 @@ jobs:
           name: frontend-dist
           path: frontend/dist
       - name: 构建产物
-        run: CGO_ENABLED=1 go build -trimpath -o bin/github-net .
+        run: |
+          # 失败原因写进 annotations：公开接口就能读到，不用登录翻作业正文。
+          {
+            echo "go=$(go env GOVERSION) cgo=$(go env CGO_ENABLED) cc=$(go env CC)"
+            gcc --version | head -1
+            ld --version | head -1 || true
+            pkg-config --modversion gtk4 webkitgtk-6.0 || true
+            echo "前端产物：$(find frontend/dist -type f | wc -l) 个文件，$(du -sh frontend/dist | cut -f1)"
+            df -h "$GITHUB_WORKSPACE" | tail -1
+          } > build.env 2>&1
+          cat build.env
+          if ! CGO_ENABLED=1 go build -trimpath -o bin/github-net . > build.log 2>&1; then
+            msg=$(sed 's/%/%25/g' build.log | tr '\n\r' '  ' | cut -c1-1000)
+            echo "::error::构建产物失败：$msg"
+            cat build.log
+            exit 1
+          fi
+          cat build.log
       - name: 门一 产物 glibc 符号不高于门槛
         run: |
           max=$(objdump -T bin/github-net | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1)
           echo "产物最高 glibc 符号：$max，门槛：$GLIBC_LIMIT"
           newest=$(printf '%s\n%s\n' "$max" "$GLIBC_LIMIT" | sort -V | tail -1)
-          test "$newest" = "$GLIBC_LIMIT" || { echo "门一不过：$max 高于 $GLIBC_LIMIT"; exit 1; }
+          test "$newest" = "$GLIBC_LIMIT" || { echo "::error::门一不过：$max 高于 $GLIBC_LIMIT"; exit 1; }
       - name: 门二 在 Ubuntu 26.04 复核动态链接
         run: |
           ldd -r bin/github-net > ldd.txt 2>&1
           cat ldd.txt
-          if grep -E 'not found|undefined symbol' ldd.txt; then echo "门二不过：Ubuntu 26.04 有未解析依赖"; exit 1; fi
-          for so in $RUNTIME_LIBS; do grep -q "$so => /" ldd.txt || { echo "门二不过：Ubuntu 26.04 缺 $so"; exit 1; }; done
+          if grep -E 'not found|undefined symbol' ldd.txt; then echo "::error::门二不过：Ubuntu 26.04 有未解析依赖"; exit 1; fi
+          for so in $RUNTIME_LIBS; do grep -q "$so => /" ldd.txt || { echo "::error::门二不过：Ubuntu 26.04 缺 $so"; exit 1; }; done
       - uses: actions/upload-artifact@v4
         with:
           name: github-net-linux-amd64
