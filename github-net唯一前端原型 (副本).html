@@ -77,6 +77,26 @@
   .service-strategy-controls select{height:26px;max-width:190px;padding:0 7px;border:1px solid #b9c9e8;border-radius:5px;background:#fff;color:var(--text);font-size:11.5px;outline:none}
   .service-strategy-controls select:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
   .service-detect-button{height:26px;padding:0 9px;font-size:11.5px}
+  .network-profile-quick{height:26px;padding:0 9px;border:1px solid var(--border-strong);border-radius:6px;background:transparent;color:var(--text-2);font-size:11.5px;cursor:pointer;white-space:nowrap}
+  .network-profile-quick:hover{background:#f5f6f8;border-color:var(--border-strong);color:var(--text)}
+  .network-profile-quick:focus-visible,.network-profile-card:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+  .network-profile-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .network-profile-card{position:relative;display:flex;flex-direction:column;gap:7px;min-height:132px;padding:13px;border:1px solid var(--border);border-radius:9px;background:var(--panel);color:var(--text);text-align:left;cursor:pointer;transition:border-color .12s,background .12s,box-shadow .12s}
+  .network-profile-card:hover{border-color:var(--border-strong);background:var(--bg)}
+  .network-profile-card[aria-pressed="true"]{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-soft);background:var(--primary-soft)}
+  .network-profile-card .profile-title{font-size:13px;font-weight:650}
+  .network-profile-card .profile-desc{font-size:11.5px;color:var(--text-3);line-height:1.45}
+  .network-profile-card .profile-limit{margin-top:auto;font-size:11px;color:var(--text-2)}
+  .network-profile-card .profile-check{position:absolute;top:10px;right:10px;color:var(--primary);font-weight:700}
+  .network-budget-row{display:flex;align-items:center;gap:10px}
+  .network-budget-row input{width:100px;height:30px;padding:0 8px;border:1px solid var(--border-strong);border-radius:5px;background:var(--panel);color:var(--text)}
+  .network-budget-row input:focus{outline:2px solid var(--primary-soft);border-color:var(--primary)}
+  .network-budget-row input[aria-invalid="true"]{border-color:var(--red)}
+  .network-budget-preview{margin-top:9px;font-size:11.5px;color:var(--text-3);line-height:1.5}
+  .network-save-status{font-size:11.5px;color:var(--green)}
+  .network-save-status.error{color:var(--red)}
+  .network-note{padding:10px 12px;border-radius:7px;background:var(--bg);color:var(--text-2);font-size:11.5px;line-height:1.55}
+  @media(max-width:760px){.network-profile-grid{grid-template-columns:1fr}.network-profile-card{min-height:0}}
   .toolbar .spacer{flex:1}
 
   /* 挂在工具栏里面，位置跟着工具栏下沿走，不再写死像素（写死会压到按钮上） */
@@ -545,7 +565,9 @@
     --line-a:rgba(236,72,153,.35); --line-w:rgba(217,119,6,.4); --line-d:rgba(225,29,72,.35);
     --mask:rgba(80,40,60,.35); --toast:#fff; --pop:0 12px 32px rgba(190,120,150,.3);--on-primary:#2a1a22; --on-green:#ffffff}
   html[data-theme]:not([data-theme="light"]) .update-btn,
-  html[data-theme]:not([data-theme="light"]) .btn:not(.primary):not(.ghost),
+    html[data-theme]:not([data-theme="light"]) .network-profile-card,
+    html[data-theme]:not([data-theme="light"]) .network-budget-row input,
+    html[data-theme]:not([data-theme="light"]) .btn:not(.primary):not(.ghost),
   html[data-theme]:not([data-theme="light"]) .search input,
   html[data-theme]:not([data-theme="light"]) select.mode,
   html[data-theme]:not([data-theme="light"]) .sf-btn,
@@ -559,6 +581,7 @@
   html[data-theme]:not([data-theme="light"]) .set-card,
   html[data-theme]:not([data-theme="light"]) .ver-block{background:var(--ctl)}
 html[data-theme]:not([data-theme="light"]) .update-btn:hover:not(:disabled),
+  html[data-theme]:not([data-theme="light"]) .network-profile-card:hover,
   html[data-theme]:not([data-theme="light"]) .btn:hover:not(:disabled),
   html[data-theme]:not([data-theme="light"]) .sf-btn:hover,
   html[data-theme]:not([data-theme="light"]) .node:hover,
@@ -697,6 +720,7 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
     <button class="btn" id="btnOpenHosts" title="打开系统 hosts 文件">打开Hosts</button>
     <div class="spacer"></div>
     <button class="btn" id="btnDetectAll">检测全部</button>
+    <button class="network-profile-quick" id="btnNetworkProfileQuick" type="button" title="查看或切换网络流量档位">省流 · ≤108 候选</button>
     <button class="btn primary" id="btnApplyQueue">应用队列</button>
     <button class="btn danger" id="btnRestore">恢复</button>
     <div class="global-progress" id="globalProgress"><i></i></div>
@@ -781,12 +805,56 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
         <div class="nav-item" data-pane="appearance"><span class="ico">◐</span>外观</div>
         <div class="nav-item" data-pane="tray"><span class="ico">▣</span>托盘</div>
         <div class="nav-item" data-pane="startup"><span class="ico">▶</span>开机自启动</div>
+        <div class="nav-group" style="margin-top:8px">网络</div>
+        <div class="nav-item" data-pane="network"><span class="ico">⌁</span>网络与流量</div>
         <div class="nav-group" style="margin-top:8px">信息</div>
         <div class="nav-item" data-pane="update"><span class="ico">⭯</span>检测升级<span class="badge-dot" id="navUpdateDot" style="display:none"></span></div>
         <div class="nav-item" data-pane="about"><span class="ico">ⓘ</span>关于我们</div>
       </nav>
 
       <div class="settings-content" id="settingsContent">
+        <section class="settings-pane" data-pane="network">
+          <h3 class="pane-title">网络与流量</h3>
+          <p class="pane-desc">按当前网络情况选择检测范围。档位立即保存并用于之后启动的检测；正在运行的任务继续使用启动时的设置。</p>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">⌁</span>检测档位</div>
+            <p class="set-card-desc">降低并发主要减少同时占用；减少每域名候选数和每轮上限，才能直接减少尝试次数。</p>
+            <div class="network-profile-grid" id="networkProfileGrid" role="group" aria-label="检测档位">
+              <button class="network-profile-card" type="button" data-profile="low" aria-pressed="false">
+                <span class="profile-title">省流</span>
+                <span class="profile-desc">优先减少网络请求，适合手机流量或网络受限时使用。</span>
+                <span class="profile-limit">每项目最多 2 个候选 IP · 并发上限 2</span>
+                <span class="profile-check" aria-hidden="true"></span>
+              </button>
+              <button class="network-profile-card" type="button" data-profile="standard" aria-pressed="false">
+                <span class="profile-title">标准</span>
+                <span class="profile-desc">在候选覆盖和请求量之间保持平衡。</span>
+                <span class="profile-limit">每项目最多 8 个候选 IP · 并发上限 8</span>
+                <span class="profile-check" aria-hidden="true"></span>
+              </button>
+              <button class="network-profile-card" type="button" data-profile="full" aria-pressed="false">
+                <span class="profile-title">完整检测</span>
+                <span class="profile-desc">尝试更多候选；不会提高并发硬上限。</span>
+                <span class="profile-limit">每项目最多 16 个候选 IP · 并发上限 8</span>
+                <span class="profile-check" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">⇣</span>每轮候选 IP 上限</div>
+            <p class="set-card-desc">限制本轮所有待检测项目合计尝试的候选数；达到上限后，剩余项目会标记为未检测，不会悄悄跳过。</p>
+            <div class="network-budget-row">
+              <input id="networkCandidateBudget" type="number" min="1" max="108" step="1" value="108" inputmode="numeric" aria-label="每轮候选 IP 上限">
+              <span>个候选 IP</span>
+              <span class="network-save-status" id="networkSaveStatus" role="status" aria-live="polite">设置已保存</span>
+            </div>
+            <div class="network-budget-preview" id="networkBudgetPreview" aria-live="polite"></div>
+          </div>
+          <div class="network-note">
+            当前原型用每个菜单项目模拟候选列表，不会发起 DNS/TLS 请求；并发数仅为模拟任务的并发上限。真实应用将按域名解析候选，并由后端统一限制并发和请求量。后台自动检测默认关闭，流量字节数无法精确等同于运营商计费量。
+          </div>
+        </section>
+
         <section class="settings-pane active" data-pane="layout">
           <h3 class="pane-title">布局</h3>
           <p class="pane-desc">调整主界面主要区域的尺寸。拖动主界面边缘也可以直接调整，两者会同步。</p>
@@ -1164,6 +1232,7 @@ const state = {
   paused: false,
   queueRunning: false,
   batchDetecting: false,
+  activeDetectCount: 0,
   startupAutomationRunning: false,
   taskSeq: 0,
   detectingServiceId: null,
@@ -1191,6 +1260,8 @@ const state = {
     detectFocusFollow: false,
     applyFocusFollow: false,
     primaryStrategyByService: {},
+    networkProfile: 'low',
+    maxCandidatesPerRun: 108,
     /* 需求①：自动检测 / 自动应用默认关闭 */
     autoDetectOnStartup: false,
     autoApplyOnStartup: false
@@ -1236,7 +1307,7 @@ function createItem(def) {
     candidates: [], errorMsg: ''
   };
   if (def.init === 'applied' || def.init === 'stale') {
-    generateCandidates(item);
+    generateCandidates(item, 2, 2);
     const best = item.candidates[0];
     item.bestIp = best.ip;
     item.appliedIp = def.init === 'applied' ? best.ip : item.candidates[1].ip;
@@ -1252,10 +1323,11 @@ function createItem(def) {
   return item;
 }
 
-function generateCandidates(item) {
+function generateCandidates(item, maxCandidates = getNetworkProfile(state.settings.networkProfile).candidatesPerItem, minCandidates = 1) {
   const seed = hashStr(item.id) ^ (Date.now() & 0xffff);
   const rng = mulberry32(seed);
-  const n = 3 + Math.floor(rng() * 3);
+  const minimum = Math.max(1, Math.min(maxCandidates, minCandidates));
+  const n = minimum + Math.floor(rng() * (maxCandidates - minimum + 1));
   const list = [];
   for (let i = 0; i < n; i++) {
     const latency = 28 + Math.floor(rng() * 175);
@@ -1515,7 +1587,15 @@ function loadSettings() {
           .filter(([serviceId, strategyId]) => CATEGORY_DEFS.some(category => category.id === serviceId) && strategyId === 'dns-hosts')
       );
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('[loadSettings] 无法读取设置，使用安全默认值:', e);
+  }
+  if (!['low', 'standard', 'full'].includes(state.settings.networkProfile)) {
+    state.settings.networkProfile = 'low';
+  }
+  if (!Number.isInteger(state.settings.maxCandidatesPerRun) || state.settings.maxCandidatesPerRun < 1 || state.settings.maxCandidatesPerRun > 108) {
+    state.settings.maxCandidatesPerRun = 108;
+  }
   if (!state.settings.autoDetectOnStartup) state.settings.autoApplyOnStartup = false;
 }
 function applyLayoutFromSettings() {
@@ -1570,15 +1650,69 @@ const settingsSub = document.getElementById('settingsSub');
 const PANE_SUBTITLES = {
   layout: '调整主界面元素尺寸', zoom: '调整整体缩放比例',
   appearance: '语言与主题', tray: '系统托盘与窗口关闭行为',
-  startup: '登录时自动启动后台服务', update: '检查新版本与更新日志',
+  startup: '登录时自动启动后台服务', network: '检测范围与网络请求预算',
+  update: '检查新版本与更新日志',
   about: '应用信息与反馈'
 };
+
+const NETWORK_PROFILES = {
+  low: { label: '省流', candidatesPerItem: 2, concurrency: 2 },
+  standard: { label: '标准', candidatesPerItem: 8, concurrency: 8 },
+  full: { label: '完整检测', candidatesPerItem: 16, concurrency: 8 }
+};
+function getNetworkProfile(id) { return NETWORK_PROFILES[id] || NETWORK_PROFILES.low; }
+function getEffectiveCandidateBudget(itemCount, profile = getNetworkProfile(state.settings.networkProfile), totalCap = state.settings.maxCandidatesPerRun) {
+  return Math.min(itemCount * profile.candidatesPerItem, totalCap);
+}
+function syncNetworkProfileUI(statusText = null, isError = false) {
+  const profile = getNetworkProfile(state.settings.networkProfile);
+  const selectedCount = checkedItems().length;
+  const effectiveBudget = getEffectiveCandidateBudget(selectedCount, profile);
+  const quickButton = document.getElementById('btnNetworkProfileQuick');
+  if (quickButton) {
+    quickButton.textContent = selectedCount
+      ? `${profile.label} · ≤${effectiveBudget} 候选`
+      : `${profile.label} · 每项≤${profile.candidatesPerItem}`;
+    quickButton.title = selectedCount
+      ? `按当前已选 ${selectedCount} 项估算：最多 ${effectiveBudget} 次候选 IP 探测；DNS 查询另计。档位并发目标上限 ${profile.concurrency}；点击调整`
+      : `当前档位每项最多 ${profile.candidatesPerItem} 个候选，并发目标上限 ${profile.concurrency}；选择项目后显示预算估算，点击调整`;
+  }
+  document.querySelectorAll('#networkProfileGrid [data-profile]').forEach(button => {
+    const selected = button.dataset.profile === state.settings.networkProfile;
+    button.setAttribute('aria-pressed', String(selected));
+    const check = button.querySelector('.profile-check');
+    if (check) check.textContent = selected ? '✓' : '';
+  });
+  const budgetInput = document.getElementById('networkCandidateBudget');
+  if (budgetInput && document.activeElement !== budgetInput) budgetInput.value = String(state.settings.maxCandidatesPerRun);
+  const status = document.getElementById('networkSaveStatus');
+  if (status && statusText !== null) {
+    status.textContent = statusText;
+    status.classList.toggle('error', isError);
+  }
+  const preview = document.getElementById('networkBudgetPreview');
+  if (preview) {
+    preview.textContent = `当前已选 ${selectedCount} 项：本轮候选探测预算最多 ${effectiveBudget} 次（DNS 查询单独计数）；实际数量还取决于各域名返回的候选 IP 数。`;
+  }
+}
+function saveNetworkSettings(previousSettings) {
+  const saved = persistSettings();
+  if (!saved) Object.assign(state.settings, previousSettings);
+  const budgetInput = document.getElementById('networkCandidateBudget');
+  if (budgetInput) {
+    budgetInput.value = String(state.settings.maxCandidatesPerRun);
+    budgetInput.removeAttribute('aria-invalid');
+  }
+  syncNetworkProfileUI(saved ? '设置已保存' : '保存失败，请检查浏览器存储权限', !saved);
+  renderToolbar();
+}
 
 function switchPane(paneName) {
   settingsNav.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.pane === paneName));
   settingsContent.querySelectorAll('.settings-pane').forEach(el => el.classList.toggle('active', el.dataset.pane === paneName));
   settingsSub.textContent = PANE_SUBTITLES[paneName] || '调整应用偏好与版本';
   const saveBtn = document.getElementById('settingsSave');
+  document.querySelector('.settings-foot').style.display = paneName === 'network' ? 'none' : 'flex';
   if (paneName === 'update' || paneName === 'about') saveBtn.style.visibility = 'hidden';
   else saveBtn.style.visibility = 'visible';
 }
@@ -1590,6 +1724,7 @@ settingsNav.addEventListener('click', e => {
 
 function openSettings(paneName) {
   syncLayoutSegButtons();
+  syncNetworkProfileUI('设置已保存');
   document.getElementById('selLanguage').value = state.settings.language;
   document.getElementById('chkTrayMinimize').checked = state.settings.trayMinimize;
   document.getElementById('chkShowTrayIcon').checked = state.settings.showTrayIcon;
@@ -1609,9 +1744,31 @@ function openSettings(paneName) {
 function closeSettings() { settingsMask.classList.remove('show'); }
 
 document.getElementById('btnSettings').onclick = () => openSettings('layout');
+document.getElementById('btnNetworkProfileQuick').onclick = () => openSettings('network');
 document.getElementById('settingsClose').onclick = closeSettings;
 document.getElementById('settingsCancel').onclick = closeSettings;
 settingsMask.addEventListener('click', e => { if (e.target === settingsMask) closeSettings(); });
+document.getElementById('networkProfileGrid').addEventListener('click', e => {
+  const button = e.target.closest('[data-profile]');
+  if (!button || !NETWORK_PROFILES[button.dataset.profile]) return;
+  const previousSettings = { networkProfile: state.settings.networkProfile };
+  state.settings.networkProfile = button.dataset.profile;
+  saveNetworkSettings(previousSettings);
+});
+document.getElementById('networkCandidateBudget').addEventListener('change', e => {
+  const input = e.currentTarget;
+  const value = Number(input.value);
+  if (!Number.isInteger(value) || value < 1 || value > 108) {
+    input.setAttribute('aria-invalid', 'true');
+    syncNetworkProfileUI('请输入 1–108 之间的整数', true);
+    input.value = String(value);
+    return;
+  }
+  input.removeAttribute('aria-invalid');
+  const previousSettings = { maxCandidatesPerRun: state.settings.maxCandidatesPerRun };
+  state.settings.maxCandidatesPerRun = value;
+  saveNetworkSettings(previousSettings);
+});
 
 document.getElementById('segSidebar').addEventListener('click', e => {
   const btn = e.target.closest('button'); if (!btn) return;
@@ -1831,6 +1988,7 @@ function renderToolbar() {
   const btnRestore = document.getElementById('btnRestore');
   if (!btnDetect) return;
   const busy = state.startupAutomationRunning || state.batchDetecting || state.queueRunning;
+  syncNetworkProfileUI();
   btnDetect.disabled = busy;
   btnApply.disabled = busy;
   btnRestore.disabled = busy;
@@ -2142,7 +2300,7 @@ function renderDetail() {
 
 function taskStatusText(task) {
   if (task.kind === 'detect') {
-    const map = { waiting:'待检测', running:'检测中', done:'已检测', failed:'检测失败', cancelled:'已取消' };
+    const map = { waiting:'待检测', running:'检测中', done:'已检测', failed:'检测失败', cancelled:'已取消', skipped:'预算不足，未检测' };
     return map[task.status] || TaskMeta[task.status].text;
   }
   return TaskMeta[task.status].text;
@@ -2177,7 +2335,7 @@ function renderQueueHeader() {
 
   const detectTasks = state.queue.filter(t => t.kind === 'detect');
   const applyTasks = state.queue.filter(t => t.kind === 'apply');
-  const detectFinished = detectTasks.filter(t => ['done','failed','cancelled'].includes(t.status)).length;
+  const detectFinished = detectTasks.filter(t => ['done','failed','cancelled','skipped'].includes(t.status)).length;
   const applyFinished = applyTasks.filter(t => ['done','failed','skipped','rolledback'].includes(t.status)).length;
 
   const summaryParts = [];
@@ -2189,15 +2347,22 @@ function renderQueueHeader() {
   }
   queueSummaryEl.textContent = summaryParts.join(' · ');
 
-  const runningTask = state.queue.find(t=>t.status==='running' || t.status==='restoring');
+  const runningTasks = state.queue.filter(t=>t.status==='running' || t.status==='restoring');
+  const runningTask = runningTasks[0];
   if (runningTask) {
     const isDetecting = runningTask.kind === 'detect';
     const isRestoring = runningTask.status === 'restoring';
-    const prefix = isRestoring ? '恢复中' : (isDetecting ? '检测中' : '执行中');
+    const prefix = isRestoring
+      ? '恢复中'
+      : (isDetecting && state.batchDetecting && runningTasks.length > 1
+        ? `并发检测 ${runningTasks.length} 项`
+        : (isDetecting ? '检测中' : '执行中'));
     const phaseText = runningTask.phaseText ? `<span class="ph">· ${escapeHtml(runningTask.phaseText)}</span>` : '';
     queueCurrentEl.className = 'q-current' + (isDetecting ? ' detecting' : '');
     queueCurrentEl.innerHTML = `<span class="spin"></span><span>${prefix}：</span><span class="nm">${escapeHtml(runningTask.name)}</span>${phaseText}`;
-    queueCurrentEl.title = `${prefix}：${runningTask.name}${runningTask.phaseText?' · '+runningTask.phaseText:''}`;
+    queueCurrentEl.title = isDetecting && state.batchDetecting
+      ? `当前活动检测 ${runningTasks.length} 项`
+      : `${prefix}：${runningTask.name}${runningTask.phaseText?' · '+runningTask.phaseText:''}`;
   } else {
     queueCurrentEl.className = 'q-current';
     queueCurrentEl.innerHTML = '';
@@ -2406,55 +2571,7 @@ document.addEventListener('keydown', e => {
  * ============================================================================ */
 
 async function detectSingle(item) {
-  if (state.startupAutomationRunning) { toast('启动自动化进行中，请稍候'); return; }
-  if (state.batchDetecting) { toast('批量检测进行中，请稍候'); return; }
-  if (state.queueRunning) { toast('队列正在执行中，请稍候'); return; }
-  if (item.status === 'detecting' || item.status === 'applying') return;
-  const hasPendingDetect = state.queue.some(t => t.kind === 'detect' && t.itemId === item.id && (t.status === 'waiting' || t.status === 'running'));
-  if (hasPendingDetect) { toast('该项已在检测队列中'); return; }
-  const inQueueRunning = state.queue.find(t => t.kind === 'apply' && t.itemId === item.id && t.status === 'running');
-  if (inQueueRunning) { toast('该项正在队列中执行'); return; }
-
-  const strategyId = selectedStrategyIdForItem(item);
-  if (strategyId !== 'dns-hosts') {
-    toast(`当前选择的加速方法「${strategyName(strategyId)}」尚未开放`);
-    return;
-  }
-  const snap = {
-    status: item.status, bestIp: item.bestIp, latency: item.latency,
-    speed: item.speed, score: item.score, source: item.source,
-    lastCheck: item.lastCheck, errorMsg: item.errorMsg
-  };
-  item.status = 'detecting';
-  item.errorMsg = '';
-  patchTreeItem(item);
-  if (isCurrentlyDisplayed(item.id)) renderDetail();
-
-  try {
-    await sleep(180 + Math.random() * 200);
-    generateCandidates(item);
-    if (item.candidates.length === 0 || Math.random() < 0.05) throw new Error('DoH 查询超时，未获取到候选 IP');
-    const best = item.candidates[0];
-    item.bestIp = best.ip;
-    item.latency = best.latency;
-    item.speed = best.speed + ' MB/s';
-    item.score = best.score;
-    item.source = strategyName(strategyId);
-    item.lastCheck = nowStr();
-    if (!item.appliedIp) item.status = 'detected';
-    else if (item.bestIp === item.appliedIp) item.status = 'applied';
-    else item.status = 'stale';
-    item.errorMsg = '';
-  } catch (err) {
-    item.status = snap.status;
-    item.bestIp = snap.bestIp; item.latency = snap.latency; item.speed = snap.speed;
-    item.score = snap.score; item.source = snap.source; item.lastCheck = snap.lastCheck;
-    if (snap.bestIp) item.errorMsg = `本次检测失败：${err.message}（已保留上次结果）`;
-    else { item.status = 'error'; item.errorMsg = `检测失败：${err.message}`; }
-  }
-  patchTreeItem(item);
-  if (isCurrentlyDisplayed(item.id)) renderDetail();
-  renderStatus();
+  return detectAll({ targetItems: [item] });
 }
 
 async function detectAll({ allowStartupAutomation = false, targetItems = null, serviceId = null } = {}) {
@@ -2485,7 +2602,19 @@ async function detectAll({ allowStartupAutomation = false, targetItems = null, s
   });
   if (!targets.length) { toast('没有可检测的项（可能已在队列中）'); return null; }
 
-  state.queue = state.queue.filter(t => !(t.kind === 'detect' && (t.status === 'done' || t.status === 'failed' || t.status === 'cancelled')));
+  const networkProfile = { ...getNetworkProfile(state.settings.networkProfile) };
+  const candidateBudgetCapSnapshot = state.settings.maxCandidatesPerRun;
+  const theoreticalCandidateCount = targets.length * networkProfile.candidatesPerItem;
+  const candidateBudgetSnapshot = getEffectiveCandidateBudget(targets.length, networkProfile, candidateBudgetCapSnapshot);
+  if (candidateBudgetSnapshot < theoreticalCandidateCount) {
+    const confirmed = await confirmDialog({
+      title: '本轮预算可能无法覆盖全部候选',
+      bodyHtml: `当前范围有 <b>${targets.length}</b> 项，按「${networkProfile.label}」档最多可能需要 <b>${theoreticalCandidateCount}</b> 次候选 IP 探测；本轮上限为 <b>${candidateBudgetSnapshot}</b> 次。<br><br>DNS 查询单独计数。确认后按当前顺序检测，预算用完时剩余项目会标记为“预算不足，未检测”；如果实际返回的候选较少，可能覆盖更多项目。`,
+      confirmText: '按预算开始'
+    });
+    if (!confirmed) return null;
+  }
+  state.queue = state.queue.filter(t => !(t.kind === 'detect' && ['done','failed','cancelled','skipped'].includes(t.status)));
 
   const focusFollow = !!state.settings.detectFocusFollow;
   if (focusFollow) {
@@ -2511,41 +2640,58 @@ async function detectAll({ allowStartupAutomation = false, targetItems = null, s
   state.batchDetecting = true;
   state.detectingServiceId = serviceId;
   const serviceName = serviceId ? state.categories.find(category => category.id === serviceId)?.name : '';
-  toast(`开始检测${serviceName ? `「${serviceName}」` : ''} ${detectTasks.length} 项…`);
+  toast(`开始检测${serviceName ? `「${serviceName}」` : ''} ${detectTasks.length} 项（${networkProfile.label}，本轮最多 ${candidateBudgetSnapshot} 次候选 IP 探测；DNS 另计）…`);
   renderAll();
 
   let successCount = 0;
+  let remainingCandidateBudget = candidateBudgetSnapshot;
+  let pendingTasks = detectTasks.slice();
 
   try {
-    for (const task of detectTasks) {
-      if (task.status === 'cancelled') continue;
-      if (!state.queue.includes(task)) continue;
+    while (pendingTasks.length && remainingCandidateBudget > 0) {
+      let cursor = 0;
+      const deferredTasks = [];
+      const worker = async () => {
+        while (cursor < pendingTasks.length) {
+          const task = pendingTasks[cursor++];
+          if (task.status === 'cancelled' || !state.queue.includes(task)) continue;
 
-      const item = findItem(task.itemId);
-      if (!item) continue;
-      if (!item.checked && !serviceId) {
-        task.status = 'cancelled';
-        patchQueueRow(task);
-        renderQueueHeader();
-        continue;
-      }
+          const item = findItem(task.itemId);
+          if (!item) continue;
+          if (!item.checked && !serviceId && !targetItems) {
+            task.status = 'cancelled';
+            patchQueueRow(task);
+            renderQueueHeader();
+            continue;
+          }
 
-      if (focusFollow) {
-        const cat = findCategoryOfItem(item.id);
-        const newCatId = cat ? cat.id : null;
-        if (newCatId !== state.detectCurrentCatId) {
-          state.categories.forEach(c => {
-            if (c.id === newCatId) state.collapsed.delete(c.id);
-            else state.collapsed.add(c.id);
-          });
-          state.detectCurrentCatId = newCatId;
-          renderTree();
+          if (remainingCandidateBudget <= 0) {
+            deferredTasks.push(task);
+            continue;
+          }
+          const candidateLimit = Math.min(networkProfile.candidatesPerItem, remainingCandidateBudget);
+          remainingCandidateBudget -= candidateLimit;
+          state.activeDetectCount++;
+          const ok = await executeDetectTask(task, candidateLimit);
+          const attempted = Math.min(candidateLimit, task.candidateAttempts || 0);
+          remainingCandidateBudget += candidateLimit - attempted;
+          state.activeDetectCount--;
+          renderQueueHeader();
+          if (ok) successCount++;
         }
-      }
-
-      const ok = await executeDetectTask(task);
-      if (ok) successCount++;
+      };
+      const workerCount = Math.min(networkProfile.concurrency, pendingTasks.length);
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+      pendingTasks = deferredTasks;
     }
+
+    for (const task of pendingTasks) {
+      if (task.status !== 'waiting') continue;
+      task.status = 'skipped';
+      task.errorMsg = '本轮候选 IP 上限已用完，尚未检测';
+      patchQueueRow(task);
+    }
+    renderQueueHeader();
   } catch (err) {
     console.error('[detectAll] 异常:', err);
     toast('检测流程异常：' + (err && err.message ? err.message : String(err)));
@@ -2570,19 +2716,22 @@ async function detectAll({ allowStartupAutomation = false, targetItems = null, s
   const applied = targets.filter(i => i.status === 'applied').length;
   const stale = targets.filter(i => i.status === 'stale').length;
   const errs = targets.filter(i => i.status === 'error').length;
+  const skipped = detectTasks.filter(task => task.status === 'skipped').length;
   const parts = [];
   if (detected) parts.push(`待应用 ${detected}`);
   if (applied) parts.push(`已是最优 ${applied}`);
   if (stale) parts.push(`待更新 ${stale}`);
   if (errs) parts.push(`失败 ${errs}`);
+  if (skipped) parts.push(`预算不足，未检测 ${skipped}`);
   toast(`检测完成${serviceName ? `（${serviceName}）` : ''}：${parts.join(' · ') || '无变化'}`);
 
   return targets;
 }
 
-async function executeDetectTask(task) {
+async function executeDetectTask(task, candidateLimit = getNetworkProfile(state.settings.networkProfile).candidatesPerItem) {
   if (task.status === 'cancelled') return false;
   if (!state.queue.includes(task)) return false;
+  task.candidateAttempts = 0;
 
   const item = findItem(task.itemId);
   if (!item) {
@@ -2596,7 +2745,7 @@ async function executeDetectTask(task) {
   const snap = {
     status: item.status, bestIp: item.bestIp, latency: item.latency,
     speed: item.speed, score: item.score, source: item.source,
-    lastCheck: item.lastCheck, errorMsg: item.errorMsg
+    lastCheck: item.lastCheck, errorMsg: item.errorMsg, candidates: item.candidates
   };
 
   task.status = 'running';
@@ -2618,8 +2767,9 @@ async function executeDetectTask(task) {
       throw new Error(`加速方法「${strategyName(task.strategyId)}」尚未开放`);
     }
     await sleep(180 + Math.random() * 200);
-    generateCandidates(item);
+    generateCandidates(item, candidateLimit);
     if (item.candidates.length === 0 || Math.random() < 0.05) throw new Error('DoH 查询超时，未获取到候选 IP');
+    task.candidateAttempts = item.candidates.length;
     const best = item.candidates[0];
     item.bestIp = best.ip;
     item.latency = best.latency;
@@ -2645,6 +2795,7 @@ async function executeDetectTask(task) {
     item.score = snap.score;
     item.source = snap.source;
     item.lastCheck = snap.lastCheck;
+    item.candidates = snap.candidates;
 
     if (snap.bestIp) {
       item.errorMsg = `本次检测失败：${err.message}（已保留上次结果）`;
@@ -2668,68 +2819,7 @@ async function executeDetectTask(task) {
 }
 
 async function detectSubset(items) {
-  if (state.batchDetecting) return;
-  const targets = items.filter(it => it.status !== 'detecting' && it.status !== 'applying');
-  if (!targets.length) return;
-  state.queue = state.queue.filter(t => !(t.kind === 'detect' && (t.status === 'done' || t.status === 'failed' || t.status === 'cancelled')));
-
-  const focusFollow = !!state.settings.detectFocusFollow;
-  if (focusFollow) {
-    state.detectOriginalCollapsed = new Set(state.collapsed);
-    state.collapsed.clear();
-    state.detectCurrentCatId = null;
-  }
-
-  const tasks = targets.map(item => {
-    const task = {
-      id: 'd_' + (++state.taskSeq), kind: 'detect', itemId: item.id, name: labelOf(item),
-      strategyId: selectedStrategyIdForItem(item),
-      status: 'waiting', phase: null, phaseText: '', duration: '', errorMsg: '',
-      prevAppliedIp: item.appliedIp, startedAt: 0
-    };
-    state.queue.push(task);
-    return task;
-  });
-  state.batchDetecting = true;
-  renderAll();
-
-  try {
-    for (const task of tasks) {
-      if (task.status === 'cancelled') continue;
-      if (!state.queue.includes(task)) continue;
-
-      const item = findItem(task.itemId);
-      if (!item) continue;
-
-      if (focusFollow) {
-        const cat = findCategoryOfItem(item.id);
-        const newCatId = cat ? cat.id : null;
-        if (newCatId !== state.detectCurrentCatId) {
-          state.categories.forEach(c => {
-            if (c.id === newCatId) state.collapsed.delete(c.id);
-            else state.collapsed.add(c.id);
-          });
-          state.detectCurrentCatId = newCatId;
-          renderTree();
-        }
-      }
-
-      await executeDetectTask(task);
-    }
-  } catch (err) {
-    console.error('[detectSubset] 异常:', err);
-  } finally {
-    state.batchDetecting = false;
-    if (focusFollow) {
-      state.collapsed.clear();
-      if (state.detectOriginalCollapsed) {
-        state.detectOriginalCollapsed.forEach(id => state.collapsed.add(id));
-      }
-      state.detectOriginalCollapsed = null;
-      state.detectCurrentCatId = null;
-    }
-    renderAll();
-  }
+  return detectAll({ targetItems: items });
 }
 
 /* ============================================================================
@@ -3007,11 +3097,21 @@ async function applyQueue() {
       confirmText: '先检测再应用'
     });
     if (!ok) return;
-    await detectSubset(notDetected);
+    const detectionResult = await detectSubset(notDetected);
+    if (!detectionResult) return;
   }
 
   const applicable = selected.filter(i => canApply(i));
   if (!applicable.length) { toast('没有可应用的项（均未检测）'); return; }
+  if (applicable.length < selected.length) {
+    const unavailableCount = selected.length - applicable.length;
+    const confirmed = await confirmDialog({
+      title: '部分项目无法应用',
+      bodyHtml: `当前有 <b>${applicable.length}</b> 项具备可应用的检测结果，另有 <b>${unavailableCount}</b> 项未检测成功或没有候选 IP。<br><br>是否只将可应用的项目加入队列？`,
+      confirmText: '仅应用可用项目'
+    });
+    if (!confirmed) return;
+  }
   const added = enqueue(applicable);
   if (!added) { toast('所选项目已在队列中'); return; }
   toast(`已加入队列 ${added} 项`);
@@ -3556,6 +3656,7 @@ function renderSettingsThemeGrid() {
 }
 
 loadSettings();
+syncNetworkProfileUI();
 applyLayoutFromSettings();
 syncAutoApplyAvailability();
 renderAll();
