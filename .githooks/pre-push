@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # 推送前自动打包并重装本机 github-net（见 scripts/pre-push-reinstall.sh）。
+# root 侧优先交给免密的 root 助手，没配助手时才弹图形密码框要一次密码。
 # 跳过一次：GITHUB_NET_SKIP_REINSTALL=1 git push
 [ "${GITHUB_NET_SKIP_REINSTALL:-0}" = "1" ] && exit 0
 bash "$(dirname "$0")/../scripts/pre-push-reinstall.sh"
