@@ -370,6 +370,7 @@ Wails v3.0.0 的生命周期、绑定和事件 API 以锁定版本的生成结�
 - 临时文件、权限不足、DNS 服务差异和文件占用都返回明确错误。
 - 后端任务使用 `context.Context` 支持取消和关闭时清理。
 - Wails 绑定错误和版本升级保持兼容；破坏性 DTO 变更要同步更新前端和契约测试。
+- 桌面应用启用 Wails 单实例锁；二次启动只唤醒已有主窗口，不创建第二个窗口或进程。macOS 使用普通应用激活策略，并在 Dock 重开事件中还原、显示和聚焦主窗口；Linux 的 `Linux.ProgramName`、`.desktop` 文件名和 `StartupWMClass` 与实际启动器 ID 一致，确保运行窗口归入应用图标。
 - 依赖版本锁定，升级前检查变更说明、跨平台构建和回归测试。
 
 #### Wails v3 最小纵向验证
@@ -414,7 +415,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 
 #### Hosts 写入契约
 
-任何真实系统写入前，格式和冲突行为固定如下，并以版本化测试保护：
+任何真实系统写入前，格式和冲突行为固定如下，并以版本化测试保护（实装进度见后文 `internal/hosts/` 那条：2026-10-28 已按这份契约实现读侧判读，写侧还没接）：
 
 - 只管理一个区段，使用 `# BEGIN github-net managed hosts v1` 与 `# END github-net managed hosts v1` 两个固定标记。标记外的用户行必须原样保留；文件无标记时只追加区段。
 - 标记重复、嵌套、缺一端、顺序错误或版本未知时拒绝写入；不得猜测修复或删除用户数据。
@@ -811,7 +812,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 - `internal/config/`：默认配置、校验、版本迁移和原子保存；按稳定 `scopeID` 保存选择的方法 ID，不保存易过期的检测结果作为可直接应用的数据。
 - `config.Config` 中的 `defaultStrategyByScope` 用稳定加速范围 ID 映射用户选择的方法 ID。当前若多个二级菜单共享服务选择，它们映射到同一范围 ID；以后需要某菜单独立选择时，由产品目录定义独立范围。保存的方法不存在或不适用时不得静默切换到另一个方法，须清除有效选择并提示用户重新选择。
 - `internal/detector/`：DNS 查询、候选探测和评分；每个请求可取消并有超时。
-- `internal/hosts/`：Hosts 文件解析、备份、写入事务、验证和恢复；不负责选择系统路径或弹系统授权框。管理区段格式与冲突策略在真实写入前冻结，详见“Hosts 写入契约”。
+- `internal/hosts/`：Hosts 文件解析、备份、写入事务、验证和恢复；不负责选择系统路径或弹系统授权框。管理区段格式与冲突策略在真实写入前冻结，详见“Hosts 写入契约”。**只读这一半已落（2026-10-28）**：`parser.go` 按冻结的标记与冲突规则判读区段（`Parse` 返回 `Block{Present, Anomaly, Reason, Records}`，结构问题归进 `Anomaly` 带行号，不 panic、不报错），`manager.go` 只有 `Read(path)`（只读打开，路径为空/不存在/无权限/指向目录都归进 `ReadErr`），`hosts_test.go` 用临时文件覆盖 17 条结构异常与规范化。`renderer.go`、`backup.go`、`transaction.go` 还没写，本包目前不写 Hosts；系统路径仍由 `internal/app` 的 `HostsPath()` 决定。
 - `internal/privilege/`：普通权限主程序与受限特权辅助服务之间的固定 IPC 协议、客户端和安装器；不接受任意命令、任意路径或任意文件内容。
 - `internal/platform/`：操作系统差异适配，包括系统路径、DNS 刷新、打开文件、权限查询及辅助服务的系统级安装/启动/状态检查。特权 IPC 的协议、客户端请求校验和 Hosts 操作白名单由 `internal/privilege/` 唯一负责；平台实现不得再定义一套 IPC 协议。文件后缀使用 Go 识别的 `windows`、`darwin`、`linux`。
 - `cmd/privileged-helper/main.go`：独立的受限特权辅助服务入口，只接收固定 IPC 请求；不运行任意命令、不接受任意路径或脚本参数。
@@ -825,7 +826,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 
 #### Hosts 写入契约
 
-在任何真实系统写入前，格式和冲突行为固定如下，并以版本化测试保护：
+在任何真实系统写入前，格式和冲突行为固定如下，并以版本化测试保护（实装进度见后文 `internal/hosts/` 那条：2026-10-28 已按这份契约实现读侧判读，写侧还没接）：
 
 - 只管理一个工具区段，使用固定标记 `# BEGIN github-net managed hosts v1` 与 `# END github-net managed hosts v1`。标记外的用户行必须原样保留；文件不存在标记时只追加区段。
 - 存在重复、嵌套、缺一端或版本未知的标记时，视为文件冲突并拒绝写入；不得猜测修复或删除用户数据。
@@ -953,9 +954,11 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 
 ### 阶段一：目录和只读界面
 
-1. 从唯一正式原型抽取 `catalog.json`，完成稳定 ID、hostname 规范化、共享 hostname 关系和引用完整性测试。不同项目可共享规范化 hostname；每轮检测按 hostname 去重，不合并项目 ID。**已完成（2026-10-27）**：`internal/catalog/`（`catalog.json` + `catalog.go` + `catalog_test.go`）落进工程，11 分类 / 54 项目 / 去重后 65 个 hostname（引用 68 次），三条来自 URL 的原型字段只保留 hostname、`手动映射` 标为用户自填、演示状态 `init` 未迁移；`scopeID` 取分类 ID。三组共用主机名已逐项登记并写成断言，54 个 `protoLine` 由测试回查原型原文。`GetItems` 曾记为「随真实状态来源一起接」，2026-10-27 由用户改判先接：Hosts 状态这一列现在给 `unknown`（本意是「后端还没读过」，不是伪造的「未替换」），等阶段三「Hosts 与特权服务」的读取服务到位再换真值——总纲 TECHNICAL_PLAN 把同一件事编为阶段四，两份文档阶段编号不同，引用时以所在文件为准。
+1. 从唯一正式原型抽取 `catalog.json`，完成稳定 ID、hostname 规范化、共享 hostname 关系和引用完整性测试。不同项目可共享规范化 hostname；每轮检测按 hostname 去重，不合并项目 ID。**已完成（2026-10-27）**：`internal/catalog/`（`catalog.json` + `catalog.go` + `catalog_test.go`）落进工程，11 分类 / 54 项目 / 去重后 65 个 hostname（引用 68 次），三条来自 URL 的原型字段只保留 hostname、`手动映射` 标为用户自填、演示状态 `init` 未迁移；`scopeID` 取分类 ID。三组共用主机名已逐项登记并写成断言，54 个 `protoLine` 由测试回查原型原文。`GetItems` 曾记为「随真实状态来源一起接」，2026-10-27 由用户改判先接：那一轮 Hosts 状态给 `unknown`（本意是「后端还没读过」，不是伪造的「未替换」），等阶段三「Hosts 与特权服务」的读取服务到位再换真值——总纲 TECHNICAL_PLAN 把同一件事编为阶段四，两份文档阶段编号不同，引用时以所在文件为准。这句话在 2026-10-28 兑现，读取服务提前接进来了，见本阶段第 4 条。
 2. 搬入设计令牌和公共 UI 控件，按 `catalog`、详情、设置和队列的顺序迁移页面。
-3. 先接入只读后端状态；不把原型模拟数据伪装成真实检测或系统状态。**对外形状、错误格式、`GetItems`、`GetAppStatus`、`GetSettings`/`SaveSettings` 已接线（2026-10-27）**：`internal/app/dto.go` 给出 `CatalogCategory`/`CatalogItem`/`HostsState`/`ItemsSnapshot`/`AppStatus`/`HostsAccess`，`internal/app/errors.go` 给出稳定错误码（`empty_token`、`catalog_invalid`、`internal_error`、`invalid_settings`、`revision_conflict`、`settings_save_failed`、`config_schema_newer`）和带不可见 `cause` 的 `Error`；内部审计字段（原型行号、抽取来源、`schemaVersion`）不进对外 JSON，`HostsStatus` 当前只返回 `unknown`，其余五档等 Hosts 读取服务到位。设置本体在 `internal/config/`，按本文件第六节那份 JSON 走：字段级 patch + `expectedRevision` + `mutationID`、串行写、同目录唯一临时文件同步后原子替换、成功才递增 revision、失败明确返回且不改 revision；文件缺失给默认值不写盘，损坏隔离到 `<路径>.bad` 并在 `configNotice` 里说明，版本比程序新拒读拒改；目录 0700、文件 0600。权限一栏只是只读探测（以写模式打开但不截断、不写字节），Hosts 写入仍在阶段三。前端这一轮先落在自检面板上，2026-10-27 页面迁移后自检面板已删除，同样的数据改由正式页面显示：顶栏权限徽章、状态栏的 Hosts 路径与写权限、DNS 选型、档位、revision 和事件序号、左树的分类/项目/去重主机名数、工具栏档位切换；`unknown` 明写为「后端还没读过系统 Hosts，不是未替换」，档位切换用 `SaveSettings` 并按「保存中/已保存/保存失败」三态回显，保存期间控件禁用、失败后重读后端当前值，界面不停在旧副本上；前端不再有第二份配置副本，也没用 `localStorage`。页面迁移（本阶段第 2 条）已开工，第一屏是目录列表页（`frontend/src/app/App.tsx` + `src/api/` + `src/components/` + `src/features/items`）；完整设置对话框、任务队列面板、侧栏与队列拖拽、另外五套主题仍不在工程里。绑定已随这 4 个命令重新生成：`service.ts` 6 个方法，新增 `internal/config/models.ts`；`wails3 generate bindings` 必须带 `-ts`，否则会用 `.js` 覆盖并删掉工程里已提交的 `.ts`。
+3. 先接入只读后端状态；不把原型模拟数据伪装成真实检测或系统状态。**对外形状、错误格式、`GetItems`、`GetAppStatus`、`GetSettings`/`SaveSettings` 已接线（2026-10-27）**：`internal/app/dto.go` 给出 `CatalogCategory`/`CatalogItem`/`HostsState`/`ItemsSnapshot`/`AppStatus`/`HostsAccess`，`internal/app/errors.go` 给出稳定错误码（`empty_token`、`catalog_invalid`、`internal_error`、`invalid_settings`、`revision_conflict`、`settings_save_failed`、`config_schema_newer`）和带不可见 `cause` 的 `Error`；内部审计字段（原型行号、抽取来源、`schemaVersion`）不进对外 JSON，那一轮 `HostsStatus` 只返回 `unknown`，2026-10-28 换成现读真值（见本阶段第 4 条）。设置本体在 `internal/config/`，按本文件第六节那份 JSON 走：字段级 patch + `expectedRevision` + `mutationID`、串行写、同目录唯一临时文件同步后原子替换、成功才递增 revision、失败明确返回且不改 revision；文件缺失给默认值不写盘，损坏隔离到 `<路径>.bad` 并在 `configNotice` 里说明，版本比程序新拒读拒改；目录 0700、文件 0600。权限一栏只是只读探测（以写模式打开但不截断、不写字节），Hosts 写入仍在阶段三。前端这一轮先落在自检面板上，2026-10-27 页面迁移后自检面板已删除，同样的数据改由正式页面显示：顶栏权限徽章、状态栏的 Hosts 路径与写权限、DNS 选型、档位、revision 和事件序号、左树的分类/项目/去重主机名数、工具栏档位切换；`unknown` 明写为「后端还没读过系统 Hosts，不是未替换」（这一列在 2026-10-28 已经有真值，见本阶段第 4 条）；档位切换用 `SaveSettings` 并按「保存中/已保存/保存失败」三态回显，保存期间控件禁用、失败后重读后端当前值，界面不停在旧副本上；前端不再有第二份配置副本，也没用 `localStorage`。页面迁移（本阶段第 2 条）已开工，第一屏是目录列表页（`frontend/src/app/App.tsx` + `src/api/` + `src/components/` + `src/features/items`），第二屏（2026-10-28）接上设置中心对话框的布局页与网络与流量页；仍未在工程里的是任务队列面板、侧栏与队列拖拽、另外五套主题。绑定已随这 4 个命令重新生成：`service.ts` 6 个方法，新增 `internal/config/models.ts`；`wails3 generate bindings` 必须带 `-ts`，否则会用 `.js` 覆盖并删掉工程里已提交的 `.ts`。
+
+4. Hosts 只读链路接上，把界面里 `unknown` 那一列换成真值。**已接并实测（2026-10-28）**：`internal/hosts/parser.go` + `manager.go`（判读与只读读取，见前文 `internal/hosts/` 那条）→ `internal/app/dto.go` 的 `HostsStates` 按项目摊状态 → `Service.GetItems()` 每次调用现读一次，`hostsPath` 与读次数自增计数器挂在 `Service` 上，状态里带 `revision`（第几次读）和 `readAt`（UTC RFC3339）。现在后端只产出三档：`none`（读过，区段里没有该项目的记录）、`conflict`（区段判读不了，或有本工具映射却拿不到可比对的写入摘要——正对应上面「Hosts 写入契约」那条「存在工具标记但无有效恢复点/摘要时视为冲突」）、`readFailed`（读不到文件，原因在 `message`）；`applied`、`partial` 要有写入摘要才能比对，`unknown` 后端不再返回但保留在契约里。区段外用户手写的同名行不算本工具记录，所以 `none` 和「系统里已经能解析」可以并存。前端跟着改：`HostsLookup` 改名 `hostsOf` 并存整条 `HostsState`（`app/App.tsx` → `components/navigation/CategoryTree.tsx`/`CategoryNode.tsx` → `features/items/ItemDetail.tsx`），徽章把原因挂在 `title`（读屏读不到 `title`，所以详情页整行显示同一句话），详情页新增「这次读 Hosts 的时间」（`i18n/formatters.ts` 的 `formatDateTime` 走 `Intl`）并按档位取解释句，`badge.none` 文案改成「未替换」。刷新时机就是 `GetItems` 被调用的时刻：没有后台轮询、没有第二条缓存路径。已实测：`gofmt`/`go vet ./...`/`go test -count=1 ./...`（`app`、`catalog`、`config`、`event`、`hosts` 五个包）全绿，`npm run build`（含 tsc）全绿，`wails3 generate bindings -ts` 重新生成后绑定只有注释同步、形状零变化；测试全部用 `t.TempDir()`，没有碰系统 Hosts。真 WebView 也已用临时探针走查过（本机 Ubuntu 26.04，`XDG_DATA_HOME` 指临时目录）：11 个分类、展开后 54 个项目行、54 枚徽章全是「未替换」且 `title` 为空，详情页显示「这次读 Hosts 的时间=2026-10-28 04:04:11（第 1 次读取）」和 `none` 的解释句，徽章总数 54→55（详情页那一枚），本机 `/etc/hosts` 实测没有本工具标记；`conflict`、`readFailed` 两档在真二进制跑不到（Linux 下 Hosts 路径写死 `/etc/hosts`，本轮没为它加环境变量），只有单测覆盖。探针已删除并逐字节还原，重新构建后产物与 bundle 里 `PROBE`、`probe:hosts-state` 各 0 处（对照组各 2 处）。逐项数字与还原过程见技术规划阶段二对应条目。文案那侧同轮补齐：`detail.hint.*` 六句按档位取，时间＋次数整句在 `detail.readAt.value` 键里，组件不拼中文。
 
 ### 阶段二：检测与任务
 
@@ -966,7 +969,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 ### 阶段三：Hosts 与特权服务
 
 1. 在批准平台验证安装、授权、白名单 IPC、升级、卸载和故障行为。
-2. 按冻结的区段格式实现解析、事务写入、冲突检测、恢复和回滚。
+2. 按冻结的区段格式实现解析、事务写入、冲突检测、恢复和回滚。**解析与冲突判读已按冻结格式落地（2026-10-28，只读那半，见阶段一第 4 条）**；事务写入、备份、恢复和回滚仍未接，本阶段第 1、3 条（helper 验证与启用写入）也没开始。
 3. 仅通过临时文件集成测试和 helper 验收后启用对应平台的 Hosts 操作。
 
 ### 阶段四：发布能力
@@ -1008,6 +1011,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 - [ ] 辅助服务不可用、IPC 请求无效或授权失败时，明确报错且不修改系统；接口不能执行任意命令或访问任意路径。
 - [ ] 关闭并重新打开应用后可复用正常的 helper；服务损坏、授权撤销或用户移除时安全失败，不静默提权。
 - [ ] Wails 生成绑定不手改；重新生成后检查接口差异。
+- [ ] 同一用户再次启动应用只唤醒现有窗口；macOS Dock 图标点击可还原并聚焦窗口，Linux 启动器图标与运行窗口合并且显示系统运行标记。
 - [ ] 关键窗口尺寸、主题和页面通过视觉回归检查。
 - [ ] 所有已批准首发平台的 WebView 字体、DPI、滚动、快捷键和弹窗层级通过实机检查。
 - [ ] 在最大预期数据量下记录交互延迟和主线程长任务；超出门槛时有复现步骤和修复记录。

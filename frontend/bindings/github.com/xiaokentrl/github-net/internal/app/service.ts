@@ -31,8 +31,8 @@ export function GetAppStatus(): $CancellablePromise<$models.AppStatus> {
 
 /**
  * GetItems 返回产品目录和每个项目当前的 Hosts 状态，是目录的唯一来源；前端不再自己存一份列表。
- * Hosts 状态现在一律是 unknown——后端的 Hosts 读取服务还没实现，unknown 的意思是「还没读过」，
- * 不是「未替换」，前端必须按未读取显示，不许把它显示成一种检测结果。
+ * Hosts 状态是每次调用现读的：只读打开系统 Hosts，找出本工具的管理区段，按项目逐个判定。
+ * 读不到文件报 readFailed、区段判读不了报 conflict，这两种都不会被显示成「未替换」。
  */
 export function GetItems(): $CancellablePromise<$models.ItemsSnapshot> {
     return $Call.ByID(1316963034).then(($result: any) => {

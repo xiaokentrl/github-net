@@ -3,10 +3,12 @@ package app
 import (
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/xiaokentrl/github-net/internal/catalog"
 	"github.com/xiaokentrl/github-net/internal/config"
+	"github.com/xiaokentrl/github-net/internal/hosts"
 )
 
 // Service 是暴露给前端的唯一门面；这里只放前端确实需要的读操作。
@@ -25,6 +27,11 @@ type Service struct {
 	// 所以目录加载失败时这里是 nil，读设置会明确报错而不是回退成「没配置」。
 	settings    *config.Store
 	settingsErr error
+
+	// hostsPath 是系统 Hosts 的路径，每次读目录都现读一遍，不缓存结果。
+	// hostsReads 是「第几次读」的计数，只用来给前端一个能比大小的 revision。
+	hostsPath  string
+	hostsReads atomic.Int64
 }
 
 func NewService(appName, version string, sequence func() int64) *Service {
@@ -40,6 +47,7 @@ func NewService(appName, version string, sequence func() int64) *Service {
 		productCatalog: c,
 		// 加载失败时 c 是 nil，先把错误留下，读接口再负责翻译成人能看懂的错误码。
 		productCatalogErr: err,
+		hostsPath:         HostsPath(),
 	}
 	if err == nil {
 		s.settings, s.settingsErr = newSettingsStore(c)
@@ -81,16 +89,17 @@ func (s *Service) Ping(token string) (string, error) {
 }
 
 // GetItems 返回产品目录和每个项目当前的 Hosts 状态，是目录的唯一来源；前端不再自己存一份列表。
-// Hosts 状态现在一律是 unknown——后端的 Hosts 读取服务还没实现，unknown 的意思是「还没读过」，
-// 不是「未替换」，前端必须按未读取显示，不许把它显示成一种检测结果。
+// Hosts 状态是每次调用现读的：只读打开系统 Hosts，找出本工具的管理区段，按项目逐个判定。
+// 读不到文件报 readFailed、区段判读不了报 conflict，这两种都不会被显示成「未替换」。
 func (s *Service) GetItems() (ItemsSnapshot, error) {
 	if s.productCatalogErr != nil {
 		// 前端在这里只会拿到错误；快照仍给空数组形状，避免有人直接用返回值时撞上 null。
 		return ItemsSnapshot{Categories: []CatalogCategory{}, Hosts: []HostsState{}}, ToPublicError(s.productCatalogErr)
 	}
+	snapshot := hosts.Read(s.hostsPath)
 	return ItemsSnapshot{
 		Categories: CatalogToCategories(s.productCatalog),
-		Hosts:      UnknownHosts(s.productCatalog),
+		Hosts:      HostsStates(s.productCatalog, snapshot, s.hostsReads.Add(1)),
 	}, nil
 }
 

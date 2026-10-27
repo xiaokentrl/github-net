@@ -2,7 +2,7 @@ import type { CatalogCategory, CatalogItem } from '../../../bindings/github.com/
 import { t } from '../../i18n'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ErrorMessage } from '../../components/ui/ErrorMessage'
-import { CategoryNode, type StatusLookup } from './CategoryNode'
+import { CategoryNode, type HostsLookup } from './CategoryNode'
 import styles from './CategoryTree.module.css'
 
 export type TreeLoad = 'loading' | 'ready' | 'error'
@@ -19,7 +19,7 @@ function matches(category: CatalogCategory, needle: string): CatalogItem[] {
 // 左侧目录树：数据全部来自后端 GetItems，这里不保存第二份清单。
 export function CategoryTree({
   categories,
-  statusOf,
+  hostsOf,
   query,
   expanded,
   selectedId,
@@ -30,7 +30,7 @@ export function CategoryTree({
   onSelect,
 }: {
   categories: CatalogCategory[]
-  statusOf: StatusLookup
+  hostsOf: HostsLookup
   query: string
   expanded: ReadonlySet<string>
   selectedId: string
@@ -58,7 +58,7 @@ export function CategoryTree({
           key={category.id}
           category={category}
           items={items}
-          statusOf={statusOf}
+          hostsOf={hostsOf}
           expanded={needle !== '' || expanded.has(category.id)}
           selectedId={selectedId}
           onToggle={onToggle}

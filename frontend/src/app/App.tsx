@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { HostsStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import type { AppStatus, CatalogCategory, CatalogItem, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { getAppStatus, getItems, getSettings, type NetworkProfile } from '../api/client'
 import { subscribeRuntimeStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
@@ -9,7 +8,7 @@ import { SettingsEntry } from '../components/layout/SettingsEntry'
 import { StatusBar } from '../components/layout/StatusBar'
 import { Toolbar } from '../components/layout/Toolbar'
 import { CategoryTree } from '../components/navigation/CategoryTree'
-import type { StatusLookup } from '../components/navigation/CategoryNode'
+import type { HostsLookup } from '../components/navigation/CategoryNode'
 import { SearchBox } from '../components/navigation/SearchBox'
 import { SettingsDialog, type SettingsPaneID } from '../features/settings/SettingsDialog'
 import { ItemDetail } from '../features/items/ItemDetail'
@@ -149,9 +148,10 @@ export function App() {
     }
   }, [loadStatus, loadSettings, loadCatalog])
 
-  const statusOf: StatusLookup = useMemo(() => {
-    const map = new Map<string, HostsStatus>()
-    for (const state of snapshot?.hosts ?? []) map.set(state.itemId, state.status)
+  // 后端每次 GetItems 都现读一遍 Hosts，这里只留最新一份：itemId → 那次读出来的整条状态。
+  const hostsOf: HostsLookup = useMemo(() => {
+    const map = new Map<string, HostsState>()
+    for (const state of snapshot?.hosts ?? []) map.set(state.itemId, state)
     return map
   }, [snapshot])
 
@@ -226,7 +226,7 @@ export function App() {
       {catalogLoad === 'ready' && <SearchBox value={query} onChange={setQuery} />}
       <CategoryTree
         categories={snapshot?.categories ?? []}
-        statusOf={statusOf}
+        hostsOf={hostsOf}
         query={debouncedQuery}
         expanded={expanded}
         selectedId={selectedId}
@@ -260,7 +260,7 @@ export function App() {
         }
         sidebar={sidebar}
         sidebarFooter={<SettingsEntry onOpen={() => openSettings('layout')} />}
-        detail={<ItemDetail item={selected.item} category={selected.category} status={statusOf.get(selectedId)} />}
+        detail={<ItemDetail item={selected.item} category={selected.category} hosts={hostsOf.get(selectedId)} />}
         statusbar={
           <StatusBar
             status={status}

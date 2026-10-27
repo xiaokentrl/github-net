@@ -1,7 +1,10 @@
 package app
 
 import (
+	"time"
+
 	"github.com/xiaokentrl/github-net/internal/catalog"
+	"github.com/xiaokentrl/github-net/internal/hosts"
 )
 
 // RuntimeInfo 是后端交给前端的真实运行环境信息，不含任何演示数据。
@@ -39,17 +42,24 @@ type CatalogItem struct {
 type HostsStatus string
 
 const (
-	// HostsUnknown 表示后端还没读过系统 Hosts。当前阶段只能返回这一档。
+	// HostsUnknown 表示后端还没读过系统 Hosts。
+	// Hosts 只读链路已经接上，后端不再返回这一档；留着是因为它仍是对外契约的一部分，
+	// 前端把它和「后端没给状态」一样按「没读过」显示，不许当成一种检测结论。
 	HostsUnknown HostsStatus = "unknown"
-	// HostsNone 表示已读过，管理区里没有本工具为该项目的记录。
+	// HostsNone 表示已读过，管理区段里没有本工具为该项目的记录。
+	// 区段外用户手写的同名行不算本工具记录，所以「系统里已有解析」和这一档可以并存。
 	HostsNone HostsStatus = "none"
 	// HostsPartial 表示已读过，该项目只有部分 hostname 有本工具记录。
+	// 这一档要拿写入摘要比对才能确认，等 Hosts 写入接上才会由后端产出。
 	HostsPartial HostsStatus = "partial"
 	// HostsApplied 表示已读过，该项目全部 hostname 都有本工具记录且区段摘要校验通过。
+	// 同上：没有写入摘要就没有可比对的东西，这一档目前不由后端产出。
 	HostsApplied HostsStatus = "applied"
-	// HostsConflict 表示管理区被外部改动或摘要不匹配，后端已停止写入并保留现场。
+	// HostsConflict 表示区段判读不了（标记异常或被外部改过），
+	// 或者区段里有本工具映射却拿不到可比对的写入摘要；后端停在这里，不覆盖、不假装已生效。
 	HostsConflict HostsStatus = "conflict"
-	// HostsReadFailed 表示读不到 Hosts（权限不足、文件占用等）；它和 HostsNone 是两回事，不能合并显示。
+	// HostsReadFailed 表示读不到 Hosts（文件不存在、没有读权限、路径拿不到等）；
+	// 它和 HostsNone 是两回事，不能合并显示。
 	HostsReadFailed HostsStatus = "readFailed"
 )
 
@@ -117,13 +127,55 @@ func CatalogToCategories(c *catalog.Catalog) []CatalogCategory {
 	return out
 }
 
-// UnknownHosts 给目录里的每个项目生成「后端还没读过」的状态占位，不伪装成已读结果。
-func UnknownHosts(c *catalog.Catalog) []HostsState {
+// HostsStates 把「读了一次 Hosts」的结果摊成每个项目的状态，顺序跟目录一致。
+// 现在后端能产出的档位是 none、conflict、readFailed 三种：
+// applied 和 partial 要求拿最后一次成功写入的区段摘要来比对，而写入还没接，
+// 所以「区段里有本工具映射、却没有可比对的摘要」按冲突报——这是规划定下来的处理，不是猜的。
+func HostsStates(c *catalog.Catalog, snap hosts.Snapshot, revision int64) []HostsState {
 	out := make([]HostsState, 0)
+	readAt := snap.ReadAt.UTC().Format(time.RFC3339)
+	status, message := hostsVerdict(snap)
+	partialVerdict := status == HostsConflict && snap.Block.Present && snap.Block.Usable()
 	for _, cat := range c.Categories {
 		for _, item := range cat.Items {
-			out = append(out, HostsState{ItemID: item.ID, Status: HostsUnknown})
+			state := HostsState{
+				ItemID:   item.ID,
+				Status:   status,
+				Message:  message,
+				Revision: revision,
+				ReadAt:   readAt,
+			}
+			// 区段能判读时逐个项目看自己有没有映射：没有的就是「已读过、没替过」。
+			if partialVerdict && !itemHasRecord(snap.Block, item.Hostnames) {
+				state.Status = HostsNone
+				state.Message = ""
+			}
+			out = append(out, state)
 		}
 	}
 	return out
+}
+
+// hostsVerdict 给出这一份 Hosts 的整体结论。
+// 读不到和区段判读不了是全区一个说法：这两种情况下逐个判断都没有意义。
+func hostsVerdict(snap hosts.Snapshot) (HostsStatus, string) {
+	switch {
+	case !snap.OK():
+		return HostsReadFailed, snap.ReadErr
+	case snap.Block.Present && !snap.Block.Usable():
+		return HostsConflict, snap.Block.Reason
+	case !snap.Block.Present:
+		return HostsNone, ""
+	default:
+		return HostsConflict, "区段里有本工具写的映射，但还没有可比对的写入摘要（Hosts 写入还没接），先按冲突处理，不假装已生效。"
+	}
+}
+
+func itemHasRecord(block hosts.Block, hostnames []string) bool {
+	for _, hostname := range hostnames {
+		if block.HasRecord(hostname) {
+			return true
+		}
+	}
+	return false
 }

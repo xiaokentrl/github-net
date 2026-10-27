@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xiaokentrl/github-net/internal/catalog"
+	"github.com/xiaokentrl/github-net/internal/hosts"
 )
 
 func mustCatalog(t *testing.T) *catalog.Catalog {
@@ -113,7 +117,7 @@ func TestUserSuppliedOnlyOnManualItem(t *testing.T) {
 
 func TestSnapshotJSONHasNoAuditFields(t *testing.T) {
 	c := mustCatalog(t)
-	snapshot := ItemsSnapshot{Categories: CatalogToCategories(c), Hosts: UnknownHosts(c)}
+	snapshot := ItemsSnapshot{Categories: CatalogToCategories(c), Hosts: HostsStates(c, emptySnapshot(), 1)}
 	data, err := json.Marshal(snapshot)
 	if err != nil {
 		t.Fatalf("序列化失败: %v", err)
@@ -143,11 +147,36 @@ func TestSnapshotJSONHasNoAuditFields(t *testing.T) {
 	}
 }
 
-func TestUnknownHostsIsHonestPlaceholder(t *testing.T) {
+// emptySnapshot 是「读到了文件但里面一个区段标记都没有」的形状，也就是本机现在的真实情况。
+func emptySnapshot() hosts.Snapshot {
+	return hosts.Snapshot{Path: "/etc/hosts", ReadAt: time.Date(2026, 10, 28, 3, 0, 0, 0, time.UTC)}
+}
+
+func readHosts(t *testing.T, content string) hosts.Snapshot {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "hosts")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("写临时 Hosts 失败：%v", err)
+	}
+	return hosts.Read(path)
+}
+
+func stateFor(t *testing.T, states []HostsState, itemID string) HostsState {
+	t.Helper()
+	for _, state := range states {
+		if state.ItemID == itemID {
+			return state
+		}
+	}
+	t.Fatalf("状态列表里没有项目 %s", itemID)
+	return HostsState{}
+}
+
+func TestHostsStatesOrderAndReadTrace(t *testing.T) {
 	c := mustCatalog(t)
-	hosts := UnknownHosts(c)
-	if len(hosts) != 54 {
-		t.Fatalf("状态条数 = %d，期望 54", len(hosts))
+	states := HostsStates(c, emptySnapshot(), 7)
+	if len(states) != 54 {
+		t.Fatalf("状态条数 = %d，期望 54", len(states))
 	}
 	var itemIDs []string
 	for _, cat := range c.Categories {
@@ -155,23 +184,100 @@ func TestUnknownHostsIsHonestPlaceholder(t *testing.T) {
 			itemIDs = append(itemIDs, item.ID)
 		}
 	}
-	for i, h := range hosts {
-		if h.ItemID != itemIDs[i] {
-			t.Fatalf("第 %d 条状态指向 %s，期望 %s", i, h.ItemID, itemIDs[i])
+	for i, state := range states {
+		if state.ItemID != itemIDs[i] {
+			t.Fatalf("第 %d 条状态指向 %s，期望 %s", i, state.ItemID, itemIDs[i])
 		}
-		if h.Status != HostsUnknown {
-			t.Errorf("项目 %s 的状态 = %q，期望 unknown", h.ItemID, h.Status)
-		}
-		if h.Revision != 0 || h.ReadAt != "" || h.Message != "" {
-			t.Errorf("项目 %s 的占位状态带上了已读过的痕迹: %+v", h.ItemID, h)
+		// 读过了就必须带 revision 和读取时间，前端靠这两个值丢旧快照、说「什么时候读的」。
+		if state.Revision != 7 || state.ReadAt == "" {
+			t.Errorf("项目 %s 没带上这次读取的痕迹: %+v", state.ItemID, state)
 		}
 	}
-	data, err := json.Marshal(UnknownHosts(c)[0])
+	data, err := json.Marshal(states[0])
 	if err != nil {
 		t.Fatalf("序列化失败: %v", err)
 	}
 	if strings.Contains(string(data), `"message"`) {
-		t.Fatalf("占位状态不该带 message 字段: %s", data)
+		t.Fatalf("没问题的状态不该带 message 字段: %s", data)
+	}
+}
+
+func TestHostsStatesWithoutBlockIsNoneForEveryItem(t *testing.T) {
+	c := mustCatalog(t)
+	states := HostsStates(c, emptySnapshot(), 1)
+	for _, state := range states {
+		if state.Status != HostsNone {
+			t.Fatalf("项目 %s 的状态 = %q，区段不存在时只能报 none，不能报成检测结果", state.ItemID, state.Status)
+		}
+		if state.Message != "" {
+			t.Errorf("项目 %s 的 none 带了原因文本 %q，界面上会像出了问题", state.ItemID, state.Message)
+		}
+	}
+}
+
+func TestHostsStatesReadFailedCarriesReason(t *testing.T) {
+	c := mustCatalog(t)
+	snap := hosts.Snapshot{ReadAt: time.Now(), ReadErr: "文件不存在：/etc/hosts"}
+	states := HostsStates(c, snap, 3)
+	for _, state := range states {
+		if state.Status != HostsReadFailed || state.Message != "文件不存在：/etc/hosts" {
+			t.Fatalf("读不到时必须逐条报 readFailed 并带上原因，实际 %+v", state)
+		}
+	}
+}
+
+func TestHostsStatesDamagedBlockIsConflictForAll(t *testing.T) {
+	c := mustCatalog(t)
+	// 有头没尾：整段区段判读不了，谁都不许报成 none 或 applied。
+	snap := readHosts(t, "127.0.0.1 localhost\n"+hosts.MarkerBegin()+"\n1.2.3.4 github.com\n")
+	states := HostsStates(c, snap, 1)
+	if snap.Block.Usable() {
+		t.Fatal("这条构造应当判读不了")
+	}
+	for _, state := range states {
+		if state.Status != HostsConflict || state.Message == "" {
+			t.Fatalf("区段判读不了要逐条报 conflict 并带原因，实际 %+v", state)
+		}
+	}
+}
+
+func TestHostsStatesBlockWithoutSummary(t *testing.T) {
+	c := mustCatalog(t)
+	// 区段完整可读，但本工具还没写过、也就没有可比对的写入摘要：
+	// 有映射的项目按 conflict 报（不假装已生效），没映射的项目照实报 none。
+	content := "127.0.0.1 localhost\n" +
+		hosts.MarkerBegin() + "\n140.82.113.4 github.com\n" + hosts.MarkerEnd() + "\n"
+	snap := readHosts(t, content)
+	if !snap.OK() || !snap.Block.Usable() || !snap.Block.HasRecord("github.com") {
+		t.Fatalf("构造的区段应当可读且含 github.com，实际 %+v", snap.Block)
+	}
+	states := HostsStates(c, snap, 2)
+
+	var conflicted, none int
+	for _, state := range states {
+		switch state.Status {
+		case HostsConflict:
+			conflicted++
+			if state.Message == "" {
+				t.Errorf("项目 %s 报 conflict 却没说原因", state.ItemID)
+			}
+		case HostsNone:
+			none++
+		default:
+			t.Errorf("项目 %s 报了没料到的档位 %q", state.ItemID, state.Status)
+		}
+	}
+	// github.com 被 gh-main 和 cu-china 两个项目共用（目录里量出来的），所以正好两条 conflict。
+	if conflicted != 2 || none != 52 {
+		t.Errorf("conflict=%d none=%d，期望 2 和 52（共 54 项）", conflicted, none)
+	}
+
+	// 区段外的用户手写行不算本工具记录：同一份文件去掉标记，那一行就该报 none。
+	noBlock := readHosts(t, "127.0.0.1 localhost\n140.82.113.4 github.com\n")
+	for _, state := range HostsStates(c, noBlock, 1) {
+		if state.Status != HostsNone {
+			t.Fatalf("区段外的手写行被当成了本工具记录：%+v", state)
+		}
 	}
 }
 
@@ -209,6 +315,14 @@ func TestToPublicErrorBranches(t *testing.T) {
 
 func TestGetItemsServesCatalogWithHonestStatus(t *testing.T) {
 	s := NewService("github-net", "test", nil)
+	// 指向临时文件，测试不读真实的 /etc/hosts：这台机器上的 Hosts 会变，断言不能跟着变。
+	path := filepath.Join(t.TempDir(), "hosts")
+	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n127.0.1.1 kentrl\n"), 0o600); err != nil {
+		t.Fatalf("写临时 Hosts 失败：%v", err)
+	}
+	s.hostsPath = path
+	defer func() { s.hostsPath = HostsPath() }()
+
 	snapshot, err := s.GetItems()
 	if err != nil {
 		t.Fatalf("内嵌目录合法，GetItems 不该失败: %v", err)
@@ -236,8 +350,12 @@ func TestGetItemsServesCatalogWithHonestStatus(t *testing.T) {
 		t.Fatalf("状态条数 = %d，期望 54", len(snapshot.Hosts))
 	}
 	for _, h := range snapshot.Hosts {
-		if h.Status != HostsUnknown {
-			t.Fatalf("Hosts 读取服务还不存在，状态却报 %q，等于伪装真实状态", h.Status)
+		// 临时文件里没有区段标记，唯一诚实的结论是「已读过、区段里没有本工具的记录」。
+		if h.Status != HostsNone {
+			t.Fatalf("项目 %s 的状态 = %q，无标记的 Hosts 只能报 none", h.ItemID, h.Status)
+		}
+		if h.Revision != 1 || h.ReadAt == "" {
+			t.Fatalf("项目 %s 没带上这次读取的痕迹: %+v", h.ItemID, h)
 		}
 	}
 
@@ -255,6 +373,31 @@ func TestGetItemsServesCatalogWithHonestStatus(t *testing.T) {
 	}
 	if raw.Name != "Raw 文件" || len(raw.Hostnames) != 1 || raw.Hostnames[0] != "raw.githubusercontent.com" {
 		t.Errorf("gh-raw 内容与目录不一致: %+v", raw)
+	}
+}
+
+// revision 是「第几次读」的计数：前端靠它丢掉旧快照，所以每次读都必须比上一次大。
+func TestGetItemsRevisionIncreasesPerRead(t *testing.T) {
+	s := NewService("github-net", "test", nil)
+	path := filepath.Join(t.TempDir(), "hosts")
+	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0o600); err != nil {
+		t.Fatalf("写临时 Hosts 失败：%v", err)
+	}
+	s.hostsPath = path
+
+	first, err := s.GetItems()
+	if err != nil {
+		t.Fatalf("GetItems 不该失败: %v", err)
+	}
+	second, err := s.GetItems()
+	if err != nil {
+		t.Fatalf("第二次 GetItems 不该失败: %v", err)
+	}
+	if !(first.Hosts[0].Revision < second.Hosts[0].Revision) {
+		t.Errorf("第二次读到的 revision = %d，没比第一次 %d 大", second.Hosts[0].Revision, first.Hosts[0].Revision)
+	}
+	if first.Hosts[0].ReadAt > second.Hosts[0].ReadAt {
+		t.Errorf("读取时间倒退了：%q 晚于 %q", first.Hosts[0].ReadAt, second.Hosts[0].ReadAt)
 	}
 }
 

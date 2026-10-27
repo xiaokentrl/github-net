@@ -25,7 +25,7 @@
 | `InlineStatus` | 在操作附近显示处理中、成功、错误和重试提示 | 设置、表单、详情操作 |
 | `OperationFeedback` | 持续显示任务步骤、进度、耗时和取消入口 | 检测、应用、恢复、更新 |
 | `ServiceStrategySelector` | 用“加速方法”等直白文字展示当前服务可用方式，并通过后端设置接口保存该服务以后默认使用的方法 | 当前服务详情；属于策略功能，不是通用 UI 控件 |
-| `StatusBadge` | 显示状态文字和颜色 | 分类树、详情、队列 |
+| `StatusBadge` | 显示状态文字和颜色 | 分类树、详情、队列。现状（2026-10-28，Hosts 只读接入）：入参是 `status` 加可选 `reason`（后端在冲突/读不到时给的那句），`reason` 只挂在 `title` 上——读屏读不到 `title`，所以详情页会把同一句话整行显示，徽章本身不判断任何规则 |
 | `ProgressBar` | 展示可确定的任务进度 | 工具栏、更新页面 |
 | `EmptyState` | 展示没有项目、搜索无结果或没有候选数据 | 分类树、详情、队列 |
 | `SettingsSection` | 统一设置页标题、说明和内容区域 | 设置中心 |
@@ -35,7 +35,7 @@
 | `LanguageSelect` | 提供受支持语言选项；繁体中文未通过完整性测试和人工审校前明确显示“翻译未完成” | 设置中心 |
 | `Table` | 统一表头、空状态和键盘可访问性；具体列由业务页面提供 | 详情、队列 |
 
-现状（2026-10-28，页面迁移第二屏）：本表里已建的是 `InlineStatus`、`EmptyState`、`ErrorMessage`、`Select`、`StatusBadge`、`Segmented` 六个，其余仍是对应功能的待接项，没有为空表放空壳。`Segmented` 建好就有两处真实调用（设置中心的侧栏宽度、队列高度），队列高度那处整组禁用并写明「任务队列面板还没迁进界面」。`NetworkProfileControl` 这一轮的落点是业务页 `frontend/src/features/settings/NetworkPane.tsx` 里的三张档位卡，不是通用控件——档位数字（每域名候选数、并发上限）的唯一来源是 `features/settings/profileOptions.ts`，工具栏那条三档解释和设置页卡片共用同一份；等检测区快速入口出现第三个复用点再抽成公共控件。
+现状（2026-10-28，页面迁移第二屏）：本表里已建的是 `InlineStatus`、`EmptyState`、`ErrorMessage`、`Select`、`StatusBadge`、`Segmented` 六个，其余仍是对应功能的待接项，没有为空表放空壳。`Segmented` 建好就有两处真实调用（设置中心的侧栏宽度、队列高度），队列高度那处整组禁用并写明「任务队列面板还没迁进界面」。`NetworkProfileControl` 这一轮的落点是业务页 `frontend/src/features/settings/NetworkPane.tsx` 里的三张档位卡，不是通用控件——档位数字（每域名候选数、并发上限）的唯一来源是 `features/settings/profileOptions.ts`，工具栏那条三档解释和设置页卡片共用同一份；等检测区快速入口出现第三个复用点再抽成公共控件。Hosts 只读接入那一轮（2026-10-28）没有新增公共控件，只给 `StatusBadge` 加了可选 `reason`，并把 `badge.none` 的文案从「无映射」改成「未替换」——后端真的读过 Hosts 了，这一档才有这个含义。
 
 组件只接收所需数据和事件回调。例如状态徽章接收状态值，负责显示；它不自行判断检测或应用规则。
 
@@ -76,14 +76,14 @@
 
 | 文件 | 方法或内容 | 责任与边界 |
 |---|---|---|
-| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`getTasks`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则。现状（2026-10-27，正式页面迁移第一屏）：这一层已建，包了后端已接的 4 个命令（`getAppStatus`、`getItems`、`getSettings`、`saveSettings`），纵向样例面板连同它对绑定的直接 `import` 一起删掉了，工程里只剩这一处调用入口；本表其余 14 个命令在后端仍是契约，所以没有为它们写空壳封装。现状（2026-10-28，设置中心第二屏）：`saveSettings` 的入参从「只有档位」扩成 `SettingsPatch` 四个可缺省字段（`networkProfile`、`maxCandidateProbesPerRun`、`sidebarWidth`、`queueHeight`），没给的字段在后端 `Patch` 里是 `null`＝这次不改，所以改宽度不会清零网络设置；仍然只传 `expectedRevision` 和 `mutationID`，写入链路没变 |
+| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`getTasks`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则。现状（2026-10-27，正式页面迁移第一屏）：这一层已建，包了后端已接的 4 个命令（`getAppStatus`、`getItems`、`getSettings`、`saveSettings`），纵向样例面板连同它对绑定的直接 `import` 一起删掉了，工程里只剩这一处调用入口；本表其余 14 个命令在后端仍是契约，所以没有为它们写空壳封装。现状（2026-10-28，设置中心第二屏）：`saveSettings` 的入参从「只有档位」扩成 `SettingsPatch` 四个可缺省字段（`networkProfile`、`maxCandidateProbesPerRun`、`sidebarWidth`、`queueHeight`），没给的字段在后端 `Patch` 里是 `null`＝这次不改，所以改宽度不会清零网络设置；仍然只传 `expectedRevision` 和 `mutationID`，写入链路没变。现状（2026-10-28，Hosts 只读接入）：这一层四个命令的签名和调用方式都没动，只有 `getItems` 返回值里的 `hosts` 从占位 `unknown` 换成后端现读出来的真状态（`status`/`revision`/`readAt`/可选 `message`） |
 | `frontend/src/api/errors.ts` | `toAppError`、`getErrorMessage` | 把调用异常整理成稳定错误码和可展示文案；保留原错误供日志，不能改成成功或空数据。现状（2026-10-27）：已建，按后端线格式 `code: message[: 原因]` 拆码，认得全部 7 个稳定错误码，认不出的归 `unknown` 并保留原文；组件只拿到码和可展示文案 |
 | `frontend/src/api/events.ts` | `subscribeTaskProgress` | 订阅带单调递增 `sequence` 的 `TaskProgress` 事件（不是命令接口）并返回取消订阅函数；组件或 hook 销毁时必须调用。现状（2026-10-27）：文件已建，但里面是运行状态事件 `subscribeRuntimeStatus`（事件名 `app:runtime-status` 只在这一处出现，组件不再直接 `import` `@wailsio/runtime`）；`subscribeTaskProgress` 等任务队列接通后端再加，不提前放空壳 |
 | `frontend/src/utils/format.ts` | `formatLatency`、`formatBytes`、`formatDuration`、`formatTimestamp` | 统一数值和时间格式，单位明确，日期数字走 `Intl`；不显示没有下载实测依据的“下载速度” |
 | `frontend/src/utils/validation.ts` | `validateSettings`、`validateRequiredValue`、`validateNumberRange` | 检查前端表单格式并返回字段级错误；后端仍负责最终校验 |
 | `frontend/src/utils/safeText.ts` | `isTrustedExternalURL` | 仅在打开动态外链时检查 `https:` 和允许的 GitHub 主机；普通文字使用 React 默认转义 |
-| `frontend/src/i18n/index.ts` | `t`、`setLocale`、`getLocale` | 按稳定文案键读取资源、替换命名参数并统一回退；组件不手工拼翻译片段 |
-| `frontend/src/i18n/formatters.ts` | `formatLocaleDate`、`formatLocaleNumber` | 用当前语言和 `Intl` 格式化日期、数字；不自建日期格式规则。现状（2026-10-27）：文件已建，但只有页面真正用到的 `formatInteger`（状态栏计数）；日期和耗时格式化等对应功能接上再加，不放空壳 |
+| `frontend/src/i18n/index.ts` | `t`、`setLocale`、`getLocale` | 按稳定文案键读取资源、替换命名参数并统一回退；组件不手工拼翻译片段。现状（2026-10-28）：详情页「这次读 Hosts 的时间」那一行最初在组件里拼中文，界面复验前改回文案键 `detail.readAt.value`（组件只填 `{time}`、`{count}`），这条纪律就是给这种情况用的 |
+| `frontend/src/i18n/formatters.ts` | `formatLocaleDate`、`formatLocaleNumber` | 用当前语言和 `Intl` 格式化日期、数字；不自建日期格式规则。现状（2026-10-28）：文件已建，页面真正用到的是 `formatInteger`（状态栏计数、读取次数）和 `formatDateTime`（详情页显示后端 `readAt` 那个 RFC3339 时间，按当前语言环境排版）；耗时格式化等对应功能接上再加，不放空壳 |
 | `frontend/src/hooks/useAppStatus.ts` | `useAppStatus` | 读取并订阅权限、平台和服务状态；负责加载反馈和取消订阅，不复制全局状态 |
 | `frontend/src/hooks/useDebouncedValue.ts` | `useDebouncedValue` | 仅合并搜索等高频输入；组件卸载时清理计时器，不用来掩盖慢请求 |
 | `frontend/src/hooks/useSettingsSave.ts` | `useSettingsSave` | 所有设置写入的唯一通道：带 `expectedRevision` 与 `mutationID` 提交 patch，返回「保存中 / 已保存（第几版·改的哪一项）/ 保存失败」三态，失败后重新读后端快照，只认最后一次请求的结果。工具栏档位、设置中心各控件都走它，组件不再各自拼保存逻辑（2026-10-28 第二屏建） |
@@ -185,7 +185,8 @@
 | `internal/detector/resolver.go` | `Resolve` | 可取消、有超时的系统 DNS 解析；首期不自动向第三方解析器发送查询 |
 | `internal/detector/probe.go` | `ProbeTCP`、`ProbeHTTPS` | 共享候选连通性检测；HTTPS 保留主机名和证书验证 |
 | `internal/detector/ranking.go` | `RankCandidates` | 统一排序候选，不把不同方法的评分硬合并 |
-| `internal/hosts/parser.go`、`renderer.go` | `Parse`、`RenderManagedBlock` | 统一解析和生成版本化管理区段；标记异常或用户改动冲突时拒绝覆盖，区段外用户记录原样保留 |
+| `internal/hosts/parser.go`、`renderer.go` | `Parse`、`RenderManagedBlock` | 统一解析和生成版本化管理区段；标记异常或用户改动冲突时拒绝覆盖，区段外用户记录原样保留。现状（2026-10-28）：`parser.go` 已建并只读接入——`Parse(content)` 返回 `Block{Present, Anomaly, Reason, Version, Records}`，加 `HasRecord(hostname)`、`NormalizeHostname(hostname)`；标记固定为 v1 那一对，缺一端/重复/嵌套/顺序错/版本未知/区段内非法行全部归进 `Anomaly` 并带行号，解析本身不报错。`renderer.go` 还没写，本包现在不生成也不写内容 |
+| `internal/hosts/manager.go` | `Read` | 现状（2026-10-28）：已建。只读打开指定路径并把内容、读取时刻交给 `Parse`，失败（路径为空、文件不存在、无读权限、指向目录）归进 `Snapshot.ReadErr` 一句话，不 panic；选系统路径不是它的活（由 `internal/app` 的 `HostsPath()` 决定） |
 | `internal/hosts/transaction.go` | `Apply`、`RestoreItem`、`RestoreAll` | 持久化每个活动项目应用前的工具映射/所有权；单项正常还原只恢复对应项目映射，共享映射仍被其他项目使用时保留；原始文件快照只用于事务回滚 |
 | `internal/platform/platform.go` | `HostPath`、`FlushDNS`、`OpenFile`、`PrivilegeServiceStatus` | 统一跨平台接口，系统差异由平台文件实现 |
 | `internal/privilege/client.go` | `Status`、`ReadHosts`、`ApplyHosts`、`RestoreHosts` | 固定 IPC 白名单；不暴露通用文件和命令接口 |
@@ -300,6 +301,7 @@ internal/
 │   ├── event.go
 │   └── publisher.go
 ├── hosts/
+│   ├── manager.go
 │   ├── parser.go
 │   ├── renderer.go
 │   ├── backup.go

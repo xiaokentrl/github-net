@@ -227,32 +227,39 @@ export enum HostsStatus {
     $zero = "",
 
     /**
-     * HostsUnknown 表示后端还没读过系统 Hosts。当前阶段只能返回这一档。
+     * HostsUnknown 表示后端还没读过系统 Hosts。
+     * Hosts 只读链路已经接上，后端不再返回这一档；留着是因为它仍是对外契约的一部分，
+     * 前端把它和「后端没给状态」一样按「没读过」显示，不许当成一种检测结论。
      */
     HostsUnknown = "unknown",
 
     /**
-     * HostsNone 表示已读过，管理区里没有本工具为该项目的记录。
+     * HostsNone 表示已读过，管理区段里没有本工具为该项目的记录。
+     * 区段外用户手写的同名行不算本工具记录，所以「系统里已有解析」和这一档可以并存。
      */
     HostsNone = "none",
 
     /**
      * HostsPartial 表示已读过，该项目只有部分 hostname 有本工具记录。
+     * 这一档要拿写入摘要比对才能确认，等 Hosts 写入接上才会由后端产出。
      */
     HostsPartial = "partial",
 
     /**
      * HostsApplied 表示已读过，该项目全部 hostname 都有本工具记录且区段摘要校验通过。
+     * 同上：没有写入摘要就没有可比对的东西，这一档目前不由后端产出。
      */
     HostsApplied = "applied",
 
     /**
-     * HostsConflict 表示管理区被外部改动或摘要不匹配，后端已停止写入并保留现场。
+     * HostsConflict 表示区段判读不了（标记异常或被外部改过），
+     * 或者区段里有本工具映射却拿不到可比对的写入摘要；后端停在这里，不覆盖、不假装已生效。
      */
     HostsConflict = "conflict",
 
     /**
-     * HostsReadFailed 表示读不到 Hosts（权限不足、文件占用等）；它和 HostsNone 是两回事，不能合并显示。
+     * HostsReadFailed 表示读不到 Hosts（文件不存在、没有读权限、路径拿不到等）；
+     * 它和 HostsNone 是两回事，不能合并显示。
      */
     HostsReadFailed = "readFailed",
 };

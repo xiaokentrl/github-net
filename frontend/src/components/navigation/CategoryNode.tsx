@@ -1,15 +1,17 @@
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import type { CatalogCategory, CatalogItem } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { CatalogCategory, CatalogItem, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import styles from './CategoryTree.module.css'
 
-export type StatusLookup = Map<string, HostsStatus>
+// 项目 ID → 后端这次读出来的 Hosts 状态。整条状态都留着：
+// 树上的徽章只用 status，冲突和读不到的原因文本要能就地看到。
+export type HostsLookup = Map<string, HostsState>
 
 // 分类行：整行可点，点一次展开或收起；caret 只是提示，不是第二个按钮。
 export function CategoryNode({
   category,
   items,
-  statusOf,
+  hostsOf,
   expanded,
   selectedId,
   onToggle,
@@ -17,7 +19,7 @@ export function CategoryNode({
 }: {
   category: CatalogCategory
   items: CatalogItem[]
-  statusOf: StatusLookup
+  hostsOf: HostsLookup
   expanded: boolean
   selectedId: string
   onToggle: (categoryID: string) => void
@@ -53,7 +55,10 @@ export function CategoryNode({
                 <span className={styles.name} title={item.hostnames.join(', ')}>
                   {item.name}
                 </span>
-                <StatusBadge status={statusOf.get(item.id) ?? HostsStatus.HostsUnknown} />
+                <StatusBadge
+                  status={hostsOf.get(item.id)?.status ?? HostsStatus.HostsUnknown}
+                  reason={hostsOf.get(item.id)?.message}
+                />
               </button>
             </li>
           ))}
