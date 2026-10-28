@@ -6,6 +6,9 @@
  * HostsAccess 只报探测结果，不代表本工具已具备写 Hosts 的能力——写入仍要等特权服务阶段。
  * DNSDetectionReady 为 false 表示解析器选型已定，但检测任务还没接入。
  * ConfigNotice 是配置加载时的用户可见说明，例如原文件损坏已隔离并用默认值运行。
+ * BuildTime/BuildRevision/BuildModified 是给「关于我们」用的构建事实，来自二进制自带的 VCS 标记：
+ * 它是构建所用源码的提交时间与哈希，不是打包那一刻的钟表时间，也没有第二个地方能读到。
+ * 标记没打进来时前两个是空串、第三个是 false，前端显示「未提供」，不许拿当前时间顶上去。
  */
 export interface AppStatus {
     "app": string;
@@ -18,6 +21,9 @@ export interface AppStatus {
     "dnsDetectionReady": boolean;
     "configPath": string;
     "configNotice"?: string;
+    "buildTime"?: string;
+    "buildRevision"?: string;
+    "buildModified": boolean;
 }
 
 /**

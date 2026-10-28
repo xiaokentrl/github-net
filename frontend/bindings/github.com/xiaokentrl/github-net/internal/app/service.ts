@@ -19,7 +19,8 @@ import * as config$0 from "../config/models.js";
 import * as $models from "./models.js";
 
 /**
- * GetAppStatus 返回平台、Hosts 写权限探测结果、DNS 解析选型和应用版本。
+ * GetAppStatus 返回平台、Hosts 写权限探测结果、DNS 解析选型和应用版本，
+ * 外加这份构建的源码提交时间与哈希（「关于我们」用，来自二进制自带的 VCS 标记）。
  * Hosts 权限只是「能不能打开来写」的探测，本工具当前不写 Hosts；
  * DNS 一栏报的是首期选型（系统解析器），检测任务还没接入，所以 DetectionReady 是 false。
  */

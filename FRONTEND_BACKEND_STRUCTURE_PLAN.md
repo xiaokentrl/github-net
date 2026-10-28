@@ -538,6 +538,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 │       │   └── ErrorBoundary.tsx
 │       ├── api/
 │       │   ├── client.ts
+│       │   ├── browser.ts
 │       │   ├── errors.ts
 │       │   ├── events.ts
 │       │   └── generated/
@@ -546,6 +547,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 │       │   ├── layout/
 │       │   │   ├── AppShell.tsx
 │       │   │   ├── AppShell.module.css
+│       │   │   ├── useSidebarResize.ts
 │       │   │   ├── SettingsEntry.tsx
 │       │   │   ├── Toolbar.tsx
 │       │   │   ├── StatusBar.tsx
@@ -605,10 +607,13 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 │       │   │   ├── SettingsDialog.module.css
 │       │   │   ├── LayoutPane.tsx
 │       │   │   ├── NetworkPane.tsx
+│       │   │   ├── AboutPane.tsx
 │       │   │   ├── profileOptions.ts
 │       │   │   ├── SettingsNavigation.tsx
 │       │   │   ├── AppearanceSettings.tsx
 │       │   │   └── StartupSettings.tsx
+│       │   ├── about/
+│       │   │   └── aboutInfo.ts
 │       │   ├── theme/
 │       │   │   ├── ThemePicker.tsx
 │       │   │   └── themes.ts
@@ -626,6 +631,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 │       ├── hooks/
 │       │   ├── useAppStatus.ts
 │       │   ├── useDebouncedValue.ts
+│       │   ├── useExternalLink.ts
 │       │   └── useSettingsSave.ts
 │       ├── stores/
 │       │   ├── appStore.ts
@@ -769,13 +775,18 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 - `features/`：按业务功能组织页面、状态、类型和事件处理。
 - `features/strategies/`：服务方法选择和方法检测状态的业务组件；`strategyStore.ts` 只管理方法列表及临时检测结果，不保存用户偏好，默认方法以 `settingsStore` 从后端读取的配置为唯一来源。方法列表动态来自后端自注册目录；零方法时显示空状态并禁用检测/应用。检测结果只对应用户当前选择的方法，不是多策略比较列表。
 - `features/settings/`：设置中心对话框本体与分页内容；共享设置状态的落点见本节末尾 `stores/settingsStore.ts` 的现状说明。业务设置与需持久化的界面偏好都经后端配置 API 保存；前端不维护 `localStorage` 副本。
-- `features/settings/SettingsDialog.tsx`（2026-10-28 已建，2026-10-29 加到四页）：设置中心模态框。导航只列已真正实现的页，2026-10-29 这一屏之后是偏好组「布局 / 界面缩放 / 外观」加工作组「网络与流量」共四项，原型剩下四页（托盘、开机自启动、检测升级、关于我们）没有放假入口；副标题随页切换，取自原型 `PANE_SUBTITLES`（第 1810–1816 行）。Esc 监听挂在 `document` 上（焦点没进对话框时键盘也能退出），打开时初始焦点落在「关闭」按钮，点遮罩同样关闭；因为页内每项都即时保存，页脚只有「关闭」。导航列表暂时留在本文件里，没有单独拆成规划中的 `SettingsNavigation.tsx`——它只有一处调用，等出现第二个需要同一份导航的界面再拆。这些行为都在真 WebView 里逐项实测过，见技术规划阶段二对应条目。
-- `features/settings/LayoutPane.tsx`（2026-10-28 已建，即本节原先规划的 `LayoutSettings.tsx`）：布局页；侧栏宽度 240/340/480 三档预设即时保存并立刻改变界面宽度。队列高度三档预设按原型原样呈现但整组禁用，并写明「任务队列面板还没迁进界面」，不假装可调。原型同页的「检测与应用 → 焦点跟随」两个开关本轮没搬：后端配置字段已在，但界面还没有检测/应用执行过程可跟随。
+- `features/settings/SettingsDialog.tsx`（2026-10-28 已建，2026-10-29 加到四页，同日再加到五页）：设置中心模态框。导航只列已真正实现的页，现在是偏好组「布局 / 界面缩放 / 外观」＋工作组「网络与流量」＋信息组「关于我们」共五项，原型剩下三页（托盘、开机自启动、检测升级）没有放假入口；副标题随页切换，取自原型 `PANE_SUBTITLES`（第 1810–1816 行），关于我们那一页用的是它的原话「应用信息与反馈」。Esc 监听挂在 `document` 上（焦点没进对话框时键盘也能退出），打开时初始焦点落在「关闭」按钮，点遮罩同样关闭；因为页内每项都即时保存，页脚只有「关闭」。关于我们这一页不改任何设置，所以它不走 `useSettingsSave` 那条通道，只读 `App.tsx` 已经持有的 `status`（后端 `GetAppStatus`）；状态还没读回来时这一页照样能打开，缺哪项就写「未提供」。导航列表暂时留在本文件里，没有单独拆成规划中的 `SettingsNavigation.tsx`——它只有一处调用，等出现第二个需要同一份导航的界面再拆。对话框这些行为（Esc、初始焦点、点遮罩关闭、即时保存没有页脚）都在真 WebView 里逐项实测过，见技术规划阶段二对应条目；关于我们这一页本身还没做真窗口人眼走查，同节那条写清了边界。
+- `features/settings/LayoutPane.tsx`（2026-10-28 已建，即本节原先规划的 `LayoutSettings.tsx`）：布局页；侧栏宽度 240/340/480 三档预设即时保存并立刻改变界面宽度。队列高度三档预设按原型原样呈现但整组禁用，并写明「任务队列面板还没迁进界面」，不假装可调。原型同页的「检测与应用 → 焦点跟随」两个开关本轮没搬：后端配置字段已在，但界面还没有检测/应用执行过程可跟随。2026-10-29 补了自由宽度：三档预设之外还能拖主界面的分隔条取范围内任意整数宽度，页内说明与文案同步改口；两条通道共用同一个 `changeSidebarWidth`，所以 revision 与幂等键只有一份走法。
 - `features/settings/NetworkPane.tsx`（2026-10-28 已建；即本节原先规划的 `NetworkUsageSettings.tsx`，实现时按页内命名收敛为 `NetworkPane`）：网络与流量页；三张档位卡（`aria-pressed` 表选中态）与每轮候选上限输入框，数字唯一来源是 `profileOptions.ts`，预算预览用后端目录的真实主机名数（65）算「一轮全量需要多少次、还差多少盖不住」。输入框先在前端挡非整数与越界并显示 `aria-invalid`＋原因，**不发给后端**，所以 revision 不动；合法值才提交。设置仍由后端 config 权威保存。
+- `features/settings/AboutPane.tsx`（2026-10-29 已建）：关于我们页。显示的六项全有真来源，没有一项是界面自己编的：应用名/版本/数据目录取 `GetAppStatus` 的 `app`/`version`/`configPath`，构建时间与源码版本取同一份返回里新增的 `buildTime`/`buildRevision`/`buildModified`（后端从二进制的 VCS 标记读，见技术规划对应条目），许可证名取 `features/about/aboutInfo.ts` 那一份并被 Go 门对着仓库根的 `LICENSE` 核。读不到的项一律显示「未提供」，不拿本次打开界面的时间顶上。三个外链按钮点击走 `hooks/useExternalLink.ts`，失败当场在页内显示原因（`role="alert"`），不留「点了没反应」。
+- `features/about/aboutInfo.ts`（2026-10-29 已建）：关于页三个外链地址和许可证名字的唯一前端来源。它们是事实陈述不是文案，所以不放进 i18n；`internal/app/about_parity_test.go` 用整行形状把它们钉在 `go.mod` 的 module 路径、`LICENSE` 第一行和 `README.md` 上，谁单独改就红。
 - `components/layout/SettingsEntry.tsx` + `AppShell.tsx` 的 `sidebarFooter` 槽（2026-10-28 已建）：侧栏底部「⚙ 设置中心」入口。`AppShell` 因此把侧栏改成「树滚动区 + 固定底部」两段（`.treeScroll`/`.sideFoot`），照搬原型第 125–133 行的 `.sidebar`/`.tree-scroll`/`.sidebar-footer`/`.sf-btn`；原型底部那另一个「重算演示状态」按钮属于演示逻辑，仍然不迁（见阶段二第一屏）。入口属于布局骨架，不放进 `CategoryTree`。
 - 检测按钮附近显示当前档位和本轮请求预算，并提供紧凑的快速切换入口；它与详情顶部加速方法选择保持同一行的既有布局约束，不增加详情栏高度。完整设置仍从设置中心进入。
+- `components/layout/useSidebarResize.ts`（2026-10-29 已建）：左树与详情区之间那条竖直分隔条的拖拽逻辑，唯一一份「侧栏可拖范围」的前端来源。按下捕获指针、移动按 rAF 合帧只算预览、松手才提交一次，所以一次拖动只产生一版配置；提交前在前端夹到 `SIDEBAR_MIN_WIDTH`–`SIDEBAR_MAX_WIDTH` 的整数，后端 `internal/config` 再判一次，后端拒了就把预览撤掉并回读快照。这两个常量由 `AppShell.tsx` 写成 `--sidebar-min-w`/`--sidebar-max-w` 交给 CSS，`.sidebar` 的 `min/max-width` 只读变量、不写死像素；相等关系由新增的 `internal/config/layout_bounds_parity_test.go` 钉住（前端边界＝后端 `SidebarWidthMin/Max`、三档预设都在范围内），漂移当场红。设置还没读回来（`sidebarWidth === null`）时不渲染分隔条。键盘方向键微调没做——原型这条只有鼠标，读屏与键盘全流程走查是单独一项待放行。
 - `features/theme/`（2026-10-29 已建）：`themes.ts` 是六套主题 id 与色块预览的唯一清单（id 必须与 `internal/config` 的 `allowedThemes` 逐个相等，等值断言在 `internal/config/appearance_parity_test.go`），`ThemeGrid.tsx` 是选择界面（卡片用 `aria-pressed` 表示当前档）。这里只登记 id 和色块，配色值不在本目录，名字与说明走 i18n。主题选择读写的是 `useSettingsSave` 那条唯一保存通道里的 `settings`，没有另建 `themeStore`。
-- `api/client.ts`：前端唯一的后端调用入口；业务组件不直接使用 Wails 运行时 API。公共方法集中在此文件，禁止业务组件自行拼接调用。
+- `api/client.ts`：后端**服务命令**的唯一调用入口；业务组件不直接使用 Wails 运行时 API。公共方法集中在此文件，禁止业务组件自行拼接调用。
+- `api/browser.ts`（2026-10-29 已建）：打开系统浏览器的唯一落点，走 Wails 运行时的 `Browser.OpenURL`，不是服务命令、也不进那 18 个命令的清单，所以单独成一个文件而不是塞进 `client.ts`；组件仍然不直接 import 运行时。地址由后端先校验并清洗（`javascript:`/`data:`/`file:`/`ftp:` 一律拒，http/https 必须有主机名），失败会 reject，调用方必须接住。
+- `hooks/useExternalLink.ts`（2026-10-29 已建）：把上面那层调用的失败变成一个看得见的状态（`failed` 文案 + `open`）。单独成一个 hook 只为这一件事：外链点了没打开又没提示是最难查的状态，必须当场说清；每次点先清掉上一条。
 - `api/errors.ts`：把后端错误转换为稳定错误码和可展示消息；不能把失败伪装成成功或空数据。
 - `api/events.ts`：提供任务事件订阅并返回清理函数；页面退出时取消订阅。
 - `api/generated/`：Wails 生成的绑定文件。目录内的 README 说明生成方式；实际文件以锁定版本模板为准，禁止手工编辑。
@@ -962,7 +973,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 
 1. 从唯一正式原型抽取 `catalog.json`，完成稳定 ID、hostname 规范化、共享 hostname 关系和引用完整性测试。不同项目可共享规范化 hostname；每轮检测按 hostname 去重，不合并项目 ID。**已完成（2026-10-27）**：`internal/catalog/`（`catalog.json` + `catalog.go` + `catalog_test.go`）落进工程，11 分类 / 54 项目 / 去重后 65 个 hostname（引用 68 次），三条来自 URL 的原型字段只保留 hostname、`手动映射` 标为用户自填、演示状态 `init` 未迁移；`scopeID` 取分类 ID。三组共用主机名已逐项登记并写成断言，54 个 `protoLine` 由测试回查原型原文。`GetItems` 曾记为「随真实状态来源一起接」，2026-10-27 由用户改判先接：那一轮 Hosts 状态给 `unknown`（本意是「后端还没读过」，不是伪造的「未替换」），等阶段三「Hosts 与特权服务」的读取服务到位再换真值——总纲 TECHNICAL_PLAN 把同一件事编为阶段四，两份文档阶段编号不同，引用时以所在文件为准。这句话在 2026-10-28 兑现，读取服务提前接进来了，见本阶段第 4 条。
 2. 搬入设计令牌和公共 UI 控件，按 `catalog`、详情、设置和队列的顺序迁移页面。
-3. 先接入只读后端状态；不把原型模拟数据伪装成真实检测或系统状态。**对外形状、错误格式、`GetItems`、`GetAppStatus`、`GetSettings`/`SaveSettings` 已接线（2026-10-27）**：`internal/app/dto.go` 给出 `CatalogCategory`/`CatalogItem`/`HostsState`/`ItemsSnapshot`/`AppStatus`/`HostsAccess`，`internal/app/errors.go` 给出稳定错误码（`empty_token`、`catalog_invalid`、`internal_error`、`invalid_settings`、`revision_conflict`、`settings_save_failed`、`config_schema_newer`）和带不可见 `cause` 的 `Error`；内部审计字段（原型行号、抽取来源、`schemaVersion`）不进对外 JSON，那一轮 `HostsStatus` 只返回 `unknown`，2026-10-28 换成现读真值（见本阶段第 4 条）。设置本体在 `internal/config/`，按本文件第六节那份 JSON 走：字段级 patch + `expectedRevision` + `mutationID`、串行写、同目录唯一临时文件同步后原子替换、成功才递增 revision、失败明确返回且不改 revision；文件缺失给默认值不写盘，损坏隔离到 `<路径>.bad` 并在 `configNotice` 里说明，版本比程序新拒读拒改；目录 0700、文件 0600。权限一栏只是只读探测（以写模式打开但不截断、不写字节），Hosts 写入仍在阶段三。前端这一轮先落在自检面板上，2026-10-27 页面迁移后自检面板已删除，同样的数据改由正式页面显示：顶栏权限徽章、状态栏的 Hosts 路径与写权限、DNS 选型、档位、revision 和事件序号、左树的分类/项目/去重主机名数、工具栏档位切换；`unknown` 明写为「后端还没读过系统 Hosts，不是未替换」（这一列在 2026-10-28 已经有真值，见本阶段第 4 条）；档位切换用 `SaveSettings` 并按「保存中/已保存/保存失败」三态回显，保存期间控件禁用、失败后重读后端当前值，界面不停在旧副本上；前端不再有第二份配置副本，也没用 `localStorage`。页面迁移（本阶段第 2 条）已开工并推进到第三屏（目录列表页 → 设置中心布局与网络与流量 → 设置中心外观与界面缩放），第一屏是目录列表页（`frontend/src/app/App.tsx` + `src/api/` + `src/components/` + `src/features/items`），第二屏（2026-10-28）接上设置中心对话框的布局页与网络与流量页；仍未在工程里的是任务队列面板、侧栏与队列拖拽、另外五套主题。绑定已随这 4 个命令重新生成：`service.ts` 6 个方法，新增 `internal/config/models.ts`；`wails3 generate bindings` 必须带 `-ts`，否则会用 `.js` 覆盖并删掉工程里已提交的 `.ts`。
+3. 先接入只读后端状态；不把原型模拟数据伪装成真实检测或系统状态。**对外形状、错误格式、`GetItems`、`GetAppStatus`、`GetSettings`/`SaveSettings` 已接线（2026-10-27）**：`internal/app/dto.go` 给出 `CatalogCategory`/`CatalogItem`/`HostsState`/`ItemsSnapshot`/`AppStatus`/`HostsAccess`，`internal/app/errors.go` 给出稳定错误码（`empty_token`、`catalog_invalid`、`internal_error`、`invalid_settings`、`revision_conflict`、`settings_save_failed`、`config_schema_newer`）和带不可见 `cause` 的 `Error`；内部审计字段（原型行号、抽取来源、`schemaVersion`）不进对外 JSON，那一轮 `HostsStatus` 只返回 `unknown`，2026-10-28 换成现读真值（见本阶段第 4 条）。设置本体在 `internal/config/`，按本文件第六节那份 JSON 走：字段级 patch + `expectedRevision` + `mutationID`、串行写、同目录唯一临时文件同步后原子替换、成功才递增 revision、失败明确返回且不改 revision；文件缺失给默认值不写盘，损坏隔离到 `<路径>.bad` 并在 `configNotice` 里说明，版本比程序新拒读拒改；目录 0700、文件 0600。权限一栏只是只读探测（以写模式打开但不截断、不写字节），Hosts 写入仍在阶段三。前端这一轮先落在自检面板上，2026-10-27 页面迁移后自检面板已删除，同样的数据改由正式页面显示：顶栏权限徽章、状态栏的 Hosts 路径与写权限、DNS 选型、档位、revision 和事件序号、左树的分类/项目/去重主机名数、工具栏档位切换；`unknown` 明写为「后端还没读过系统 Hosts，不是未替换」（这一列在 2026-10-28 已经有真值，见本阶段第 4 条）；档位切换用 `SaveSettings` 并按「保存中/已保存/保存失败」三态回显，保存期间控件禁用、失败后重读后端当前值，界面不停在旧副本上；前端不再有第二份配置副本，也没用 `localStorage`。页面迁移（本阶段第 2 条）已开工并推进到第五屏（目录列表页 → 设置中心布局与网络与流量 → 设置中心外观与界面缩放 → 布局页分隔条拖拽 → 设置中心关于我们），第一屏是目录列表页（`frontend/src/app/App.tsx` + `src/api/` + `src/components/` + `src/features/items`），第二屏（2026-10-28）接上设置中心对话框的布局页与网络与流量页；仍未在工程里的是任务队列面板与队列高度拖拽（这句是 2026-10-28 的原话；其中「侧栏拖拽」已在 2026-10-29 接上并做了真窗口实测，「另外五套主题」与界面缩放同批迁入，见本节的 `useSidebarResize.ts` 条目与技术规划阶段二末尾两条——队列高度拖拽仍没做，因为它要等队列面板本身出现才有对象可拖；「关于我们」已在 2026-10-29 作为第五屏迁入，原型剩下三页（托盘、开机自启动、检测升级）仍未迁，见本节 `AboutPane.tsx` 条目与技术规划阶段二对应条目）。绑定已随这 4 个命令重新生成：`service.ts` 6 个方法，新增 `internal/config/models.ts`；`wails3 generate bindings` 必须带 `-ts`，否则会用 `.js` 覆盖并删掉工程里已提交的 `.ts`。
 
 4. Hosts 只读链路接上，把界面里 `unknown` 那一列换成真值。**已接并实测（2026-10-28）**：`internal/hosts/parser.go` + `manager.go`（判读与只读读取，见前文 `internal/hosts/` 那条）→ `internal/app/dto.go` 的 `HostsStates` 按项目摊状态 → `Service.GetItems()` 每次调用现读一次，`hostsPath` 与读次数自增计数器挂在 `Service` 上，状态里带 `revision`（第几次读）和 `readAt`（UTC RFC3339）。现在后端只产出三档：`none`（读过，区段里没有该项目的记录）、`conflict`（区段判读不了，或有本工具映射却拿不到可比对的写入摘要——正对应上面「Hosts 写入契约」那条「存在工具标记但无有效恢复点/摘要时视为冲突」）、`readFailed`（读不到文件，原因在 `message`）；`applied`、`partial` 要有写入摘要才能比对，`unknown` 后端不再返回但保留在契约里。区段外用户手写的同名行不算本工具记录，所以 `none` 和「系统里已经能解析」可以并存。前端跟着改：`HostsLookup` 改名 `hostsOf` 并存整条 `HostsState`（`app/App.tsx` → `components/navigation/CategoryTree.tsx`/`CategoryNode.tsx` → `features/items/ItemDetail.tsx`），徽章把原因挂在 `title`（读屏读不到 `title`，所以详情页整行显示同一句话），详情页新增「这次读 Hosts 的时间」（`i18n/formatters.ts` 的 `formatDateTime` 走 `Intl`）并按档位取解释句，`badge.none` 文案改成「未替换」。刷新时机就是 `GetItems` 被调用的时刻：没有后台轮询、没有第二条缓存路径。已实测：`gofmt`/`go vet ./...`/`go test -count=1 ./...`（`app`、`catalog`、`config`、`event`、`hosts` 五个包）全绿，`npm run build`（含 tsc）全绿，`wails3 generate bindings -ts` 重新生成后绑定只有注释同步、形状零变化；测试全部用 `t.TempDir()`，没有碰系统 Hosts。真 WebView 也已用临时探针走查过（本机 Ubuntu 26.04，`XDG_DATA_HOME` 指临时目录）：11 个分类、展开后 54 个项目行、54 枚徽章全是「未替换」且 `title` 为空，详情页显示「这次读 Hosts 的时间=2026-10-28 04:04:11（第 1 次读取）」和 `none` 的解释句，徽章总数 54→55（详情页那一枚），本机 `/etc/hosts` 实测没有本工具标记；`conflict`、`readFailed` 两档在真二进制跑不到（Linux 下 Hosts 路径写死 `/etc/hosts`，本轮没为它加环境变量），只有单测覆盖。探针已删除并逐字节还原，重新构建后产物与 bundle 里 `PROBE`、`probe:hosts-state` 各 0 处（对照组各 2 处）。逐项数字与还原过程见技术规划阶段二对应条目。文案那侧同轮补齐：`detail.hint.*` 六句按档位取，时间＋次数整句在 `detail.readAt.value` 键里，组件不拼中文。
 

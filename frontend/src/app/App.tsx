@@ -263,6 +263,7 @@ export function App() {
         statusError={statusError}
         onRetryStatus={loadStatus}
         sidebarWidth={settings?.layout.sidebarWidth ?? null}
+        onSidebarResize={changeSidebarWidth}
         toolbar={
           <Toolbar
             settings={settings}
@@ -291,6 +292,7 @@ export function App() {
           pane={dialogPane}
           settings={settings}
           hostnames={counts.hostnames}
+          status={status}
           save={save}
           onPaneChange={setDialogPane}
           onClose={() => setDialogOpen(false)}

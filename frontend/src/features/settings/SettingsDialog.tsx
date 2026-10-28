@@ -1,23 +1,26 @@
 import { useEffect, useRef } from 'react'
+import type { AppStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { NetworkProfile } from '../../api/client'
 import { t } from '../../i18n'
 import type { SaveState } from '../../hooks/useSettingsSave'
+import { AboutPane } from './AboutPane'
 import { AppearancePane } from './AppearancePane'
 import { LayoutPane } from './LayoutPane'
 import { NetworkPane } from './NetworkPane'
 import { ZoomPane } from './ZoomPane'
 import styles from './SettingsDialog.module.css'
 
-export type SettingsPaneID = 'layout' | 'zoom' | 'appearance' | 'network'
+export type SettingsPaneID = 'layout' | 'zoom' | 'appearance' | 'network' | 'about'
 
-// 只有真正做出界面来的四屏进导航：布局、界面缩放、外观、网络与流量。
-// 原型另外四屏（托盘、开机自启、检测升级、关于）还没迁，这里不放点了没反应的入口。
+// 只有真正做出界面来的五屏进导航：布局、界面缩放、外观、网络与流量、关于我们。
+// 原型另外三屏（托盘、开机自启、检测升级）还没迁，这里不放点了没反应的入口。
 const PANES: { id: SettingsPaneID; group: string; label: string; ico: string }[] = [
   { id: 'layout', group: 'settings.nav.groupPref', label: 'settings.nav.layout', ico: '▦' },
   { id: 'zoom', group: 'settings.nav.groupPref', label: 'settings.nav.zoom', ico: '⤢' },
   { id: 'appearance', group: 'settings.nav.groupPref', label: 'settings.nav.appearance', ico: '◐' },
   { id: 'network', group: 'settings.nav.groupNetwork', label: 'settings.nav.network', ico: '⌁' },
+  { id: 'about', group: 'settings.nav.groupInfo', label: 'settings.nav.about', ico: 'ⓘ' },
 ]
 
 const PANE_SUB: Record<SettingsPaneID, string> = {
@@ -25,12 +28,14 @@ const PANE_SUB: Record<SettingsPaneID, string> = {
   zoom: 'settings.zoom.sub',
   appearance: 'settings.appearance.sub',
   network: 'settings.network.sub',
+  about: 'settings.about.sub',
 }
 
 export function SettingsDialog({
   pane,
   settings,
   hostnames,
+  status,
   save,
   onPaneChange,
   onClose,
@@ -43,6 +48,7 @@ export function SettingsDialog({
   pane: SettingsPaneID
   settings: Config
   hostnames: number
+  status: AppStatus | null
   save: SaveState
   onPaneChange: (pane: SettingsPaneID) => void
   onClose: () => void
@@ -112,6 +118,7 @@ export function SettingsDialog({
             {pane === 'layout' && <LayoutPane settings={settings} save={save} onSidebarWidth={onSidebarWidth} />}
             {pane === 'zoom' && <ZoomPane settings={settings} save={save} onZoom={onZoom} />}
             {pane === 'appearance' && <AppearancePane settings={settings} save={save} onTheme={onTheme} />}
+            {pane === 'about' && <AboutPane status={status} />}
           </div>
         </div>
 

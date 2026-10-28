@@ -32,6 +32,9 @@ type Service struct {
 	// hostsReads 是「第几次读」的计数，只用来给前端一个能比大小的 revision。
 	hostsPath  string
 	hostsReads atomic.Int64
+
+	// stamp 是这份构建自带的 VCS 标记，进程活着就不会变，所以构造时读一次。
+	stamp buildStamp
 }
 
 func NewService(appName, version string, sequence func() int64) *Service {
@@ -48,6 +51,7 @@ func NewService(appName, version string, sequence func() int64) *Service {
 		// 加载失败时 c 是 nil，先把错误留下，读接口再负责翻译成人能看懂的错误码。
 		productCatalogErr: err,
 		hostsPath:         HostsPath(),
+		stamp:             currentBuildStamp(),
 	}
 	if err == nil {
 		s.settings, s.settingsErr = newSettingsStore(c)
@@ -103,7 +107,8 @@ func (s *Service) GetItems() (ItemsSnapshot, error) {
 	}, nil
 }
 
-// GetAppStatus 返回平台、Hosts 写权限探测结果、DNS 解析选型和应用版本。
+// GetAppStatus 返回平台、Hosts 写权限探测结果、DNS 解析选型和应用版本，
+// 外加这份构建的源码提交时间与哈希（「关于我们」用，来自二进制自带的 VCS 标记）。
 // Hosts 权限只是「能不能打开来写」的探测，本工具当前不写 Hosts；
 // DNS 一栏报的是首期选型（系统解析器），检测任务还没接入，所以 DetectionReady 是 false。
 func (s *Service) GetAppStatus() (AppStatus, error) {
@@ -116,6 +121,9 @@ func (s *Service) GetAppStatus() (AppStatus, error) {
 		HostsAccess:       ProbeHostsAccess(HostsPath()),
 		DNSResolver:       DNSResolverSystem,
 		DNSDetectionReady: false,
+		BuildTime:         s.stamp.Time,
+		BuildRevision:     s.stamp.Revision,
+		BuildModified:     s.stamp.Modified,
 	}
 	if s.settings != nil {
 		status.ConfigPath = s.settings.Path()

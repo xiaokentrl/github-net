@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import { HostsAccess } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { AppStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
+import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, useSidebarResize } from './useSidebarResize'
 import styles from './AppShell.module.css'
 
 // 存文案键而不是成品句子：语言来自后端设置，切语言时下一屏要跟着变。
@@ -28,6 +29,7 @@ export function AppShell({
   statusError,
   onRetryStatus,
   sidebarWidth,
+  onSidebarResize,
   toolbar,
   sidebar,
   sidebarFooter,
@@ -40,14 +42,24 @@ export function AppShell({
   statusError: string
   onRetryStatus: () => void
   sidebarWidth: number | null
+  onSidebarResize: (width: number) => void
   toolbar: ReactNode
   sidebar: ReactNode
   sidebarFooter: ReactNode
   detail: ReactNode
   statusbar: ReactNode
 }) {
-  // 后端没给布局数值时不写这个变量，让 tokens.css 的默认值生效，避免第二份「默认 240」。
-  const sidebarStyle = sidebarWidth === null ? undefined : ({ '--sidebar-w': `${sidebarWidth}px` } as CSSProperties)
+  const resize = useSidebarResize(sidebarWidth, onSidebarResize)
+  // 拖动期间用本地预览值，松手提交后由配置快照接管。
+  const shownWidth = resize.liveWidth ?? sidebarWidth
+  // 可拖范围的唯一前端来源是 useSidebarResize 那两个常量，这里当场写成变量给 CSS 用，
+  // 免得同一对数字在 CSS 里再抄一遍（抄了就会漂；漂了由后端的相等断言拦）。
+  // 后端没给宽度时不写 --sidebar-w，让 tokens.css 的默认值生效，避免第二份「默认 240」。
+  const sidebarStyle = {
+    '--sidebar-min-w': `${SIDEBAR_MIN_WIDTH}px`,
+    '--sidebar-max-w': `${SIDEBAR_MAX_WIDTH}px`,
+  } as CSSProperties
+  if (shownWidth !== null) (sidebarStyle as Record<string, string>)['--sidebar-w'] = `${shownWidth}px`
 
   return (
     <div className={styles.app}>
@@ -80,10 +92,22 @@ export function AppShell({
       <div className={styles.toolbar}>{toolbar}</div>
 
       <main className={styles.main}>
-        <aside className={styles.sidebar} style={sidebarStyle}>
+        <aside ref={resize.sidebarRef} className={styles.sidebar} style={sidebarStyle}>
           <div className={styles.treeScroll}>{sidebar}</div>
           <div className={styles.sideFoot}>{sidebarFooter}</div>
         </aside>
+        {sidebarWidth !== null && (
+          <div
+            className={`${styles.resizer} ${resize.dragging ? styles.resizerDragging : ''}`}
+            role="separator"
+            aria-orientation="vertical"
+            title={t('layout.resizer.title')}
+            onPointerDown={resize.onPointerDown}
+            onPointerMove={resize.onPointerMove}
+            onPointerUp={resize.onPointerUp}
+            onPointerCancel={resize.onPointerUp}
+          />
+        )}
         <section className={styles.detail}>{detail}</section>
       </main>
 

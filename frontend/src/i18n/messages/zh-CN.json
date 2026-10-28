@@ -29,7 +29,7 @@
   "settings.subject.zoom": "界面缩放",
   "settings.subject.theme": "配色主题",
   "settings.entry": "设置中心",
-  "settings.entry.hint": "打开设置中心：布局、界面缩放、外观、网络与流量",
+  "settings.entry.hint": "打开设置中心：布局、界面缩放、外观、网络与流量、关于我们",
   "settings.dialog.title": "设置中心",
   "settings.close": "关闭",
   "settings.nav.groupPref": "偏好",
@@ -38,6 +38,8 @@
   "settings.nav.appearance": "外观",
   "settings.nav.groupNetwork": "网络",
   "settings.nav.network": "网络与流量",
+  "settings.nav.groupInfo": "信息",
+  "settings.nav.about": "关于我们",
 
   "settings.zoom.title": "界面缩放",
   "settings.zoom.sub": "调整整体缩放比例",
@@ -56,6 +58,24 @@
   "settings.appearance.themeDesc": "一共 6 套配色：晨光白、樱花粉、森林绿、深海蓝、午夜蓝、极夜黑。点下方任意卡片立即切换，不用重启。",
   "settings.appearance.themeCurrent": "当前：{name}",
 
+  "settings.about.title": "关于我们",
+  "settings.about.sub": "应用信息与反馈",
+  "settings.about.paneDesc": "应用信息与反馈入口。",
+  "about.tagline": "让 GitHub 访问更稳定、更快速。项目采用 MIT 协议开源。",
+  "about.link.home": "项目主页",
+  "about.link.issues": "反馈问题",
+  "about.link.license": "许可协议",
+  "about.link.failed": "没能打开：{reason}",
+  "about.versionTitle": "版本信息",
+  "about.row.version": "当前版本",
+  "about.row.buildTime": "构建时间",
+  "about.row.buildRevision": "源码版本",
+  "about.row.dirty": "（含未提交改动）",
+  "about.row.license": "许可协议",
+  "about.row.dataDir": "数据目录",
+  "about.row.note": "「构建时间」「源码版本」记的是打包这份程序时用的那笔代码，不是这次打开界面的时间；后端读不到就显示「未提供」，不拿今天的时间顶上。",
+  "about.value.none": "未提供",
+
   "theme.grid.label": "配色主题",
   "theme.light.name": "晨光白",
   "theme.light.desc": "清爽浅色 · 日间适用",
@@ -72,9 +92,9 @@
 
   "settings.layout.title": "布局",
   "settings.layout.sub": "调整主界面元素尺寸",
-  "settings.layout.paneDesc": "改完立刻保存并反映到界面上。拖动分隔条调整尺寸还没迁进来，这一屏先用预设值。",
+  "settings.layout.paneDesc": "改完立刻保存并反映到界面上。主菜单宽度既能按三档预设选，也能拖左侧列表和详情之间的那条分隔条取任意宽度；任务队列面板还没迁进界面，所以队列高度只有预设、也没有分隔条。",
   "settings.layout.sidebarTitle": "主菜单宽度",
-  "settings.layout.sidebarDesc": "左侧类目树的宽度，预设 240、340、480 像素；后端允许 200–600。",
+  "settings.layout.sidebarDesc": "左侧类目树的宽度，预设 240、340、480 像素，拖分隔条可以取范围内的任意整数宽度；两种都受后端 200–600 的限制，越界的会被后端拒掉并回读原值。",
   "settings.layout.queueTitle": "队列高度",
   "settings.layout.queueDesc": "底部任务队列面板的高度，可选 180、252、360 像素。",
   "settings.layout.queueOff": "任务队列面板还没迁进界面，这个值暂时只能存在配置里，所以这里不可调；迁进来后这里就能选。",
@@ -146,6 +166,7 @@
   "statusbar.notice": "配置说明：{notice}",
 
   "settings.error": "设置读取失败：{reason}",
+  "layout.resizer.title": "拖动调整主菜单宽度",
 
   "common.retry": "重试",
 

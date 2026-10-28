@@ -345,6 +345,106 @@
   line-height: 1.5;
 }
 
+/* 关于屏逐条抄唯一原型：.about-hero(470) .about-logo-lg(471) .about-hero-info(472–474)
+   .about-links(475) .btn.ghost(57–58)；版本行抄原型 1105–1110 的内联样式（行内边距 4px 0、值用等宽字体）。
+   .aboutMark 的渐变和顶栏 .logo 是同一对色值（原型 25 与 471 行），品牌标识不跟主题走：
+   六套主题都没覆盖它，所以这里继续写死，两边由 internal/app/about_parity_test.go 盯着必须一模一样。 */
+.aboutHero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 0 16px;
+}
+
+.aboutMark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #2563eb, #0ea5a4);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25);
+}
+
+.aboutInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.aboutName {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.aboutTagline {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.aboutLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.linkBtn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.linkBtn:hover {
+  background: var(--band);
+  color: var(--text);
+}
+
+.linkBtn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.linkFailed {
+  margin: 8px 0 0;
+  color: var(--red);
+  font-size: 11.5px;
+}
+
+.aboutRows > .row {
+  padding: 4px 0;
+}
+
+.rowLabel {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.rowValue {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  text-align: right;
+}
+
+.rowCode {
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--text-2);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 .note {
   padding: 10px 12px;
   border-radius: 7px;
