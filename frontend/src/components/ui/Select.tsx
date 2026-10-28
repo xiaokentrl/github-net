@@ -11,28 +11,34 @@ export function Select({
   value,
   options,
   disabled,
+  disabledHint,
   onChange,
 }: {
   label: string
   value: string
   options: SelectOption[]
   disabled?: boolean
-  onChange: (value: string) => void
+  disabledHint?: string
+  // 整组不可用时没有可改的值，所以这里允许不传（与 Segmented 同一形状）。
+  onChange?: (value: string) => void
 }) {
   return (
-    <label className={styles.field}>
-      <span>{label}</span>
-      <select
-        value={value}
-        disabled={disabled}
-        onChange={(event: ChangeEvent<HTMLSelectElement>) => onChange(event.target.value)}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className={styles.fieldGroup}>
+      <label className={styles.field}>
+        <span>{label}</span>
+        <select
+          value={value}
+          disabled={disabled}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) => onChange?.(event.target.value)}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {disabled && disabledHint && <p className={styles.hint}>{disabledHint}</p>}
+    </div>
   )
 }

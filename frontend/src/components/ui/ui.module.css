@@ -60,6 +60,13 @@
   color: var(--text-2);
 }
 
+/* 下拉整组不可用时，原因写在下面一行，所以外面套一层竖向容器。 */
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .field select {
   padding: 4px 8px;
   border: 1px solid var(--border-strong);
@@ -118,7 +125,9 @@
 
 .seg button.segOn {
   background: var(--primary);
-  color: #fff;
+  /* 原型只在主题卡角的 ✓ 上用 --on-primary，选中态这里漏了，深绿和樱花的亮主色配白字看不清。
+     接到同一个变量：晨光白的值是 #fff，浅色界面一个像素没变。 */
+  color: var(--on-primary);
 }
 
 .seg button:disabled {

@@ -12,13 +12,15 @@ import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/int
 
 export type NetworkProfile = 'low' | 'standard' | 'full'
 
-// 设置对话框那一屏会改的四类值：档位、每轮候选上限、侧栏宽度、队列高度。
-// 没列出来的字段（语言、主题、缩放、开机自启等）后端已接但界面还没有对应的真实控件，这里不加。
+// 设置对话框那几屏会改的值：档位、每轮候选上限、侧栏宽度、队列高度、缩放、主题。
+// 没列出来的字段（语言、开机自启等）后端已接但界面还没有能真正改的控件，这里不加。
 export type SettingsPatch = {
   networkProfile?: NetworkProfile
   maxCandidateProbesPerRun?: number
   sidebarWidth?: number
   queueHeight?: number
+  zoom?: number
+  theme?: string
 }
 
 export function getAppStatus(): Promise<AppStatus> {
@@ -42,8 +44,8 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     confirmUpdateDownloadOnMetered: null,
     defaultStrategyByScope: null,
     language: null,
-    theme: null,
-    zoom: null,
+    theme: patch.theme ?? null,
+    zoom: patch.zoom ?? null,
     sidebarWidth: patch.sidebarWidth ?? null,
     queueHeight: patch.queueHeight ?? null,
     detectFocusFollow: null,

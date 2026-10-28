@@ -2,8 +2,8 @@
    颜色在原型 :root（第 8–17 行）和 html 兜底层（第 529–530 行），
    尺寸在 .topbar(24) .toolbar(51) .sidebar(126) .node(145) .node.item(154) .queue(301) .statusbar(376)，
    基准字号在 html,body(20)。
-   目前只有晨光白（light）一套；另外五套主题等 ThemePicker 那一屏一起搬，
-   切换机制是原型第 2 行的 html[data-theme="..."]，先不在这里留空的规则块。 */
+   六套配色都在 themes.css 里按同一批变量整块覆盖，这里只登记晨光白（light）一份；
+   切换机制是 html[data-theme="..."]，页面组件不写自己的主题色。 */
 :root {
   --bg: #f5f6f8;
   --panel: #fff;
@@ -26,6 +26,16 @@
   --hov: #f5f6f8;
   --hov2: #eef1f5;
   --band: #f0f2f5;
+
+  /* 对话框与主色底上的字（原型 html 兜底层 + 各主题的点名覆盖）。
+     值抄的是原型浅色那一份；另外五套在 themes.css 里各覆盖一次，页面只引用变量。 */
+  --mask: rgba(15, 23, 42, 0.45);
+  --pop: 0 20px 60px rgba(16, 24, 40, 0.25);
+  --on-primary: #fff;
+  --nav-bg: #fafbfc;
+  --nav-hov: #eef1f6;
+  --strip: #fbfcfd;
+  --card-hov: #d6dbe3;
 
   --radius: 8px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.06);

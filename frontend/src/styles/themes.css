@@ -1,0 +1,162 @@
+/* 另外五套主题的令牌映射。六套配色逐条抄唯一正式原型第 529–585 行，
+   晨光白（light）不用写在这里：它就是 tokens.css 里那一份，原型自己也没给它任何覆盖。
+   规则只有一条——换肤只改这批变量，页面组件不许各写一套主题色。
+
+   下面没抄的四组是原型里为还没迁进界面的东西准备的变量，留着空值等于撒谎，等那一屏一起来：
+   --line-a/--line-w/--line-d 给队列头部，--toast 给提示条，--gold 给搜索命中高亮，
+   --on-green 给原型第 291 行那个绿底白字的小 tag（正式工程的状态徽章走 -soft 底 + 彩色字，没有这种块）。 */
+
+html[data-theme='midnight'] {
+  color-scheme: dark;
+  --bg: #0a0c10;
+  --panel: #11141b;
+  --border: #222835;
+  --border-strong: #3d4757;
+  --text: #e7ecf5;
+  --text-2: #8b95ab;
+  --text-3: #5b6578;
+  --primary: #5b9cff;
+  --primary-soft: rgba(91, 156, 255, 0.13);
+  --green: #3dd68c;
+  --green-soft: rgba(61, 214, 140, 0.13);
+  --amber: #f5a623;
+  --amber-soft: rgba(245, 166, 35, 0.13);
+  --red: #ff5c5c;
+  --red-soft: rgba(255, 92, 92, 0.13);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.45);
+
+  --ctl: #171b24;
+  --hov: #1c2130;
+  --hov2: #232838;
+  --band: #1f2430;
+  --mask: rgba(0, 0, 0, 0.62);
+  --pop: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --on-primary: #0a0c10;
+}
+
+html[data-theme='oled'] {
+  color-scheme: dark;
+  --bg: #000;
+  --panel: #08090b;
+  --border: #1a1e26;
+  --border-strong: #333a45;
+  --text: #f5f7fa;
+  --text-2: #98a1b3;
+  --text-3: #5e6776;
+  --primary: #60a5fa;
+  --primary-soft: rgba(96, 165, 250, 0.14);
+  --green: #34d399;
+  --green-soft: rgba(52, 211, 153, 0.14);
+  --amber: #fbbf24;
+  --amber-soft: rgba(251, 191, 36, 0.14);
+  --red: #f87171;
+  --red-soft: rgba(248, 113, 113, 0.14);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 1px 3px rgba(0, 0, 0, 0.6);
+
+  --ctl: #0f1115;
+  --hov: #15181f;
+  --hov2: #1c2027;
+  --band: #12151b;
+  --mask: rgba(0, 0, 0, 0.8);
+  --pop: 0 12px 32px rgba(0, 0, 0, 0.85);
+  --on-primary: #000000;
+}
+
+html[data-theme='forest'] {
+  color-scheme: dark;
+  --bg: #0b1512;
+  --panel: #101d18;
+  --border: #22392f;
+  --border-strong: #3a5a4b;
+  --text: #e3efe9;
+  --text-2: #8aa89a;
+  --text-3: #5a7267;
+  --primary: #4ade80;
+  --primary-soft: rgba(74, 222, 128, 0.14);
+  --green: #22c55e;
+  --green-soft: rgba(34, 197, 94, 0.14);
+  --amber: #facc15;
+  --amber-soft: rgba(250, 204, 21, 0.14);
+  --red: #f87171;
+  --red-soft: rgba(248, 113, 113, 0.14);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.5);
+
+  --ctl: #15241e;
+  --hov: #1a2c25;
+  --hov2: #213630;
+  --band: #172a22;
+  --mask: rgba(0, 10, 6, 0.66);
+  --pop: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --on-primary: #0b1512;
+}
+
+html[data-theme='ocean'] {
+  color-scheme: dark;
+  --bg: #080e1a;
+  --panel: #0d1625;
+  --border: #1e3252;
+  --border-strong: #35547e;
+  --text: #e0e8f5;
+  --text-2: #8ba3c7;
+  --text-3: #5a7194;
+  --primary: #38bdf8;
+  --primary-soft: rgba(56, 189, 248, 0.14);
+  --green: #2dd4bf;
+  --green-soft: rgba(45, 212, 191, 0.14);
+  --amber: #fbbf24;
+  --amber-soft: rgba(251, 191, 36, 0.14);
+  --red: #fb7185;
+  --red-soft: rgba(251, 113, 133, 0.14);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.5);
+
+  --ctl: #122035;
+  --hov: #182a44;
+  --hov2: #1e3453;
+  --band: #152539;
+  --mask: rgba(0, 6, 18, 0.66);
+  --pop: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --on-primary: #080e1a;
+}
+
+/* 樱花粉是浅色主题，唯一的一套：正文色仍走深色字，只是底色换成浅粉。 */
+html[data-theme='sakura'] {
+  color-scheme: light;
+  --bg: #fdf7f8;
+  --panel: #fff;
+  --border: #f0d8e0;
+  --border-strong: #e0bccb;
+  --text: #3a2530;
+  --text-2: #7a5563;
+  --text-3: #a88793;
+  --primary: #ec4899;
+  --primary-soft: rgba(236, 72, 153, 0.1);
+  --green: #059669;
+  --green-soft: rgba(5, 150, 105, 0.12);
+  --amber: #d97706;
+  --amber-soft: rgba(217, 119, 6, 0.12);
+  --red: #e11d48;
+  --red-soft: rgba(225, 29, 72, 0.1);
+  --shadow: 0 1px 2px rgba(190, 120, 150, 0.1), 0 1px 3px rgba(190, 120, 150, 0.14);
+
+  --ctl: #fff;
+  --hov: #fbeef2;
+  --hov2: #f7e4eb;
+  --band: #f9eff3;
+  --mask: rgba(80, 40, 60, 0.35);
+  --pop: 0 12px 32px rgba(190, 120, 150, 0.3);
+  --on-primary: #2a1a22;
+}
+
+/* 非晨光白的四张条带：原型是靠「点名到具体类」覆盖的，正式工程用 CSS Module，类名每次构建都会变，
+   所以改成同一批变量在这五套里各给一个值，效果与原型的点名一一对应：
+   设置导航底 → 控件底(--ctl)、导航悬停与页脚条带 → 条带底(--band)、卡片悬停边框 → 强边框(--border-strong)。 */
+html[data-theme='midnight'],
+html[data-theme='oled'],
+html[data-theme='forest'],
+html[data-theme='ocean'],
+html[data-theme='sakura'] {
+  --nav-bg: var(--ctl);
+  --nav-hov: var(--band);
+  --strip: var(--band);
+  --card-hov: var(--border-strong);
+}

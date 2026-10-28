@@ -1,6 +1,7 @@
 /* 骨架尺寸逐条抄原型：.app(22) .topbar(24) .toolbar(51) .main(124) .sidebar(126) .tree-scroll(127)
    .sidebar-footer(130) .sf-btn(131–133) .detail(230) .statusbar(376)。
-   可拖拽的分栏（.sidebar-resizer/.resizer）属布局那一屏，这里先不放假的手柄。 */
+   可拖拽的分栏（.sidebar-resizer/.resizer）属布局那一屏，这里先不放假的手柄。
+   .logo 那两个色值不换成令牌：原型第 25 行的品牌标识在六套主题里都没被覆盖，换肤不该把它一起换掉。 */
 .app {
   display: flex;
   flex-direction: column;
@@ -135,7 +136,7 @@
   gap: 6px;
   padding: 8px;
   border-top: 1px solid var(--border);
-  background: #fbfcfd;
+  background: var(--strip);
 }
 
 .sfBtn {

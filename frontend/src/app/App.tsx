@@ -19,17 +19,15 @@ import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/int
 
 type Load = 'loading' | 'ready' | 'error'
 
-// 目前只搬了晨光白一套配色；其它主题在后端设置里存着，界面先按 light 显示并说明原因，
-// 不假装已经切换成功（另外五套主题等 ThemePicker 那一屏一起搬）。
-const PORTED_THEMES = new Set(['light'])
+// 六套配色的令牌都在 styles/themes.css 里，所以后端给哪个主题就挂哪个：
+// 挂的是 html 的 data-theme，页面组件不写自己的主题色（原型第 2 行与 531–585 行同一机制）。
+function applyTheme(theme: string) {
+  document.documentElement.dataset.theme = theme
+}
 
-function applyTheme(theme: string): string {
-  if (PORTED_THEMES.has(theme)) {
-    document.documentElement.dataset.theme = theme
-    return ''
-  }
-  document.documentElement.dataset.theme = 'light'
-  return t('theme.pending', { name: theme })
+// 缩放抄原型第 1631 行：给 body 设 CSS zoom，只作用在本机界面上，不写进任何文件。
+function applyZoom(zoom: number) {
+  document.body.style.zoom = String(zoom)
 }
 
 export function App() {
@@ -48,7 +46,6 @@ export function App() {
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [selectedId, setSelectedId] = useState('')
-  const [themeNotice, setThemeNotice] = useState('')
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogPane, setDialogPane] = useState<SettingsPaneID>('layout')
@@ -80,11 +77,12 @@ export function App() {
       })
   }, [])
 
-  // 一份配置快照落到界面上要做的事只有这些：语言、主题、数据本身。
+  // 一份配置快照落到界面上要做的事只有这些：语言、主题、缩放、数据本身。
   // 读回来的和保存成功返回的都走这里，省得两条链路对同一份配置处理得不一样。
   const applyConfig = useCallback((next: Config) => {
     setLocale(next.appearance.language)
-    setThemeNotice(applyTheme(next.appearance.theme))
+    applyTheme(next.appearance.theme)
+    applyZoom(next.appearance.zoom)
     setSettings(next)
     setSettingsLoad('ready')
   }, [])
@@ -215,6 +213,22 @@ export function App() {
     [settings, submit],
   )
 
+  const changeZoom = useCallback(
+    (factor: number) => {
+      if (!settings || settings.appearance.zoom === factor) return
+      submit({ zoom: factor }, t('settings.subject.zoom'), 'zoom')
+    },
+    [settings, submit],
+  )
+
+  const changeTheme = useCallback(
+    (id: string) => {
+      if (!settings || settings.appearance.theme === id) return
+      submit({ theme: id }, t('settings.subject.theme'), 'theme')
+    },
+    [settings, submit],
+  )
+
   const openSettings = useCallback((pane: SettingsPaneID) => {
     setDialogPane(pane)
     setDialogOpen(true)
@@ -269,7 +283,6 @@ export function App() {
             counts={counts}
             sequence={sequence}
             dropped={dropped}
-            themeNotice={themeNotice}
           />
         }
       />
@@ -284,6 +297,8 @@ export function App() {
           onProfile={changeProfile}
           onBudget={changeBudget}
           onSidebarWidth={changeSidebarWidth}
+          onZoom={changeZoom}
+          onTheme={changeTheme}
         />
       )}
     </>

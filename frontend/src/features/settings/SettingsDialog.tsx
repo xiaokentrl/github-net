@@ -3,21 +3,27 @@ import type { Config } from '../../../bindings/github.com/xiaokentrl/github-net/
 import type { NetworkProfile } from '../../api/client'
 import { t } from '../../i18n'
 import type { SaveState } from '../../hooks/useSettingsSave'
+import { AppearancePane } from './AppearancePane'
 import { LayoutPane } from './LayoutPane'
 import { NetworkPane } from './NetworkPane'
+import { ZoomPane } from './ZoomPane'
 import styles from './SettingsDialog.module.css'
 
-export type SettingsPaneID = 'layout' | 'network'
+export type SettingsPaneID = 'layout' | 'zoom' | 'appearance' | 'network'
 
-// 只有真正做出界面来的两屏进导航：布局、网络与流量。
-// 原型另外六屏（缩放、外观、托盘、开机自启、检测升级、关于）还没迁，这里不放点了没反应的入口。
+// 只有真正做出界面来的四屏进导航：布局、界面缩放、外观、网络与流量。
+// 原型另外四屏（托盘、开机自启、检测升级、关于）还没迁，这里不放点了没反应的入口。
 const PANES: { id: SettingsPaneID; group: string; label: string; ico: string }[] = [
   { id: 'layout', group: 'settings.nav.groupPref', label: 'settings.nav.layout', ico: '▦' },
+  { id: 'zoom', group: 'settings.nav.groupPref', label: 'settings.nav.zoom', ico: '⤢' },
+  { id: 'appearance', group: 'settings.nav.groupPref', label: 'settings.nav.appearance', ico: '◐' },
   { id: 'network', group: 'settings.nav.groupNetwork', label: 'settings.nav.network', ico: '⌁' },
 ]
 
 const PANE_SUB: Record<SettingsPaneID, string> = {
   layout: 'settings.layout.sub',
+  zoom: 'settings.zoom.sub',
+  appearance: 'settings.appearance.sub',
   network: 'settings.network.sub',
 }
 
@@ -31,6 +37,8 @@ export function SettingsDialog({
   onProfile,
   onBudget,
   onSidebarWidth,
+  onZoom,
+  onTheme,
 }: {
   pane: SettingsPaneID
   settings: Config
@@ -41,6 +49,8 @@ export function SettingsDialog({
   onProfile: (profile: NetworkProfile) => void
   onBudget: (value: number) => void
   onSidebarWidth: (width: number) => void
+  onZoom: (factor: number) => void
+  onTheme: (id: string) => void
 }) {
   const closeRef = useRef<HTMLButtonElement>(null)
 
@@ -96,11 +106,12 @@ export function SettingsDialog({
           </nav>
 
           <div className={styles.content}>
-            {pane === 'network' ? (
+            {pane === 'network' && (
               <NetworkPane settings={settings} hostnames={hostnames} save={save} onProfile={onProfile} onBudget={onBudget} />
-            ) : (
-              <LayoutPane settings={settings} save={save} onSidebarWidth={onSidebarWidth} />
             )}
+            {pane === 'layout' && <LayoutPane settings={settings} save={save} onSidebarWidth={onSidebarWidth} />}
+            {pane === 'zoom' && <ZoomPane settings={settings} save={save} onZoom={onZoom} />}
+            {pane === 'appearance' && <AppearancePane settings={settings} save={save} onTheme={onTheme} />}
           </div>
         </div>
 

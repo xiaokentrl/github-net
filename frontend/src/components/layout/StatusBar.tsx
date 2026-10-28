@@ -14,14 +14,12 @@ export function StatusBar({
   counts,
   sequence,
   dropped,
-  themeNotice,
 }: {
   status: AppStatus | null
   settings: Config | null
   counts: CatalogCounts
   sequence: number
   dropped: number
-  themeNotice: string
 }) {
   return (
     <>
@@ -44,11 +42,6 @@ export function StatusBar({
       {status?.configNotice && (
         <span className={styles.item} role="alert">
           {t('statusbar.notice', { notice: status.configNotice })}
-        </span>
-      )}
-      {themeNotice && (
-        <span className={styles.item} role="status">
-          {themeNotice}
         </span>
       )}
       <span className={styles.item}>

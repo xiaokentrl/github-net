@@ -3,7 +3,11 @@
    .settings-nav/.nav-group/.nav-item(408–415) .settings-content/.settings-pane(416–418)
    .pane-title/.pane-desc(419–421) .set-card(422–427) .set-card-desc(428) .set-row(429)
    .network-profile-*(96–112) .settings-foot(476–477) .btn(52)。
-   动效关键帧 fadeIn/popIn 抄原型 384–386 行。 */
+   动效关键帧 fadeIn/popIn 抄原型 384–386 行。
+   颜色一律走令牌：原型在暗色下用一串「点名到具体类」的覆盖（原型 586–620 行），
+   CSS Module 的类名带哈希、点不到，所以这里把同一批差异收进令牌本身——
+   底色用 --ctl（晨光白和 --panel 同为 #fff，浅色下一像素不差），
+   悬停用 --hov，悬停边框用 --card-hov，只有导航底和条带是这套里独有的 --nav-bg/--nav-hov/--strip。 */
 .mask {
   position: fixed;
   inset: 0;
@@ -11,7 +15,7 @@
   align-items: center;
   justify-content: center;
   z-index: 70;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--mask);
   animation: fadeIn 0.15s ease;
 }
 
@@ -43,8 +47,8 @@
   max-width: calc(100vw - 40px);
   max-height: calc(100vh - 60px);
   border-radius: 12px;
-  background: var(--panel);
-  box-shadow: 0 20px 60px rgba(16, 24, 40, 0.25);
+  background: var(--ctl);
+  box-shadow: var(--pop);
   overflow: hidden;
   animation: popIn 0.2s ease;
 }
@@ -104,7 +108,7 @@
   width: 168px;
   padding: 10px 8px;
   border-right: 1px solid var(--border);
-  background: #fafbfc;
+  background: var(--nav-bg);
   overflow-y: auto;
 }
 
@@ -135,7 +139,7 @@
 }
 
 .navItem:hover {
-  background: #eef1f6;
+  background: var(--nav-hov);
 }
 
 .navOn {
@@ -187,7 +191,7 @@
   padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--panel);
+  background: var(--ctl);
   transition: border-color 0.12s, opacity 0.12s;
 }
 
@@ -196,13 +200,13 @@
 }
 
 .card:hover {
-  border-color: #d6dbe3;
+  border-color: var(--card-hov);
 }
 
 /* 后端还没有能应用这个值的地方，整卡按不可用呈现，不给能点但没作用的入口。 */
 .cardOff {
   opacity: 0.55;
-  background: #fbfcfd;
+  background: var(--strip);
 }
 
 .cardTitle {
@@ -234,6 +238,12 @@
   gap: 12px;
 }
 
+/* 抄原型 .update-status(451)：主题那行「当前：深海蓝」用的就是它。 */
+.currentTheme {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
 .profileGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -249,7 +259,7 @@
   padding: 13px;
   border: 1px solid var(--border);
   border-radius: 9px;
-  background: var(--panel);
+  background: var(--ctl);
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -258,7 +268,7 @@
 
 .profileCard:hover:not(:disabled) {
   border-color: var(--border-strong);
-  background: var(--bg);
+  background: var(--hov);
 }
 
 .profileCard:focus-visible,
@@ -315,7 +325,7 @@
   padding: 0 8px;
   border: 1px solid var(--border-strong);
   border-radius: 5px;
-  background: var(--panel);
+  background: var(--ctl);
   color: var(--text);
 }
 
@@ -351,7 +361,7 @@
   gap: 8px;
   padding: 12px 20px;
   border-top: 1px solid var(--border);
-  background: #fbfcfd;
+  background: var(--strip);
 }
 
 .footBtn {
