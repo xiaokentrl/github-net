@@ -19,6 +19,13 @@ const (
 	CodeSettingsSaveFailed = "settings_save_failed"
 	CodeConfigSchemaNewer  = "config_schema_newer"
 
+	// 方法选择这一组的码：前端按码分支，不解析中文。
+	// unknown_scope 一种分支：这一屏没有可显示的选择区（没给范围、或范围不在目录里）。
+	// strategy_unavailable 一种分支：这次点的方法存不了（没给方法 ID、方法不在注册表、方法不适用本范围）。
+	// 同一分支内的几种原因界面动作完全一样，所以共用一个码，具体原因只写进可展示消息。
+	CodeUnknownScope        = "unknown_scope"
+	CodeStrategyUnavailable = "strategy_unavailable"
+
 	// 队列这一组的码：前端按码分支，不解析中文。
 	// 这里只翻现在真能抛出来的那三个哨兵；队列的 ErrQueueStopped 和 ErrInvalidRequest 只有
 	// Enqueue 会抛，而排任务的入口还没接，提前给它们建翻译等于写一条没人走到的分支。

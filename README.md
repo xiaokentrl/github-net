@@ -108,8 +108,8 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 ├── cmd/
 │   └── identity/            # 取值小命令：给脚本和构建项读产品身份（--key / --shell）
 ├── internal/
-│   ├── app/                 # 暴露给前端的接口、DTO 和错误转换
-│   ├── accelerator/         # 【部分建】检测执行编排已落（budget.go 算一轮预算、detect.go 串起取候选与验候选，管并发/时限/逐候选状态与事件）；没接队列与界面，根包零生产调用点
+│   ├── app/                 # 暴露给前端的接口、DTO 和错误转换；队列那 7 条命令在 queue.go，检测任务的执行器适配在 detect.go（已写好、零调用点）
+│   ├── accelerator/         # 【部分建】检测执行编排已落（budget.go 算一轮预算、detect.go 串起取候选与验候选，管并发/时限/逐候选状态与事件）；接到队列的执行器也已写好（在 app/detect.go，没换装），仍没接界面，根包零生产调用点
 │   │   └── strategies/      # 加速方法单文件自注册：契约、注册表与 dns-hosts（注册表已进应用装配层；编排层已落，但整条检测路径还没有生产入口）
 │   ├── catalog/             # 服务、项目、域名等产品数据（catalog.json）
 │   ├── config/              # 用户配置：校验、revision、原子保存
@@ -119,7 +119,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 │   ├── identity/            # 产品名字的唯一手写源：户口层常量、派生路径与钉死它们的金标准测试
 │   ├── platform/            # 【未建】Windows/macOS/Linux 系统差异适配
 │   ├── privilege/           # 【未建】受限特权辅助服务的 IPC 客户端与协议
-│   ├── task/                # 【已落但没接线】内存任务队列：串行执行、九档状态、取消/暂停/重试/两项清理，事件序号与快照水位同源；做事的动作交给注入的执行器，现在还没人注入
+│   ├── task/                # 【已落但没接入口】内存队列由 `internal/app` 构造（7 条队列命令已进绑定层，退出时停队列）：串行执行、九档状态、取消/暂停/重试/两项清理，事件序号与快照水位同源；做事的动作交给注入的执行器，现在注入的还是「这一类任务没接上执行动作」的占位，检测那只真执行器已写好但没换装
 │   └── updater/             # 【未建】稳定版检查与更新包校验
 ├── frontend/
 │   ├── bindings/            # Wails 生成的绑定（不手改）
@@ -267,8 +267,8 @@ Entries marked [not built] exist only in the plan — those directories are not 
 ├── cmd/
 │   └── identity/            # Small value command: lets scripts and build steps read the product identity (--key / --shell)
 ├── internal/
-│   ├── app/                 # Frontend-facing API, DTOs and error mapping
-│   ├── accelerator/         # [partly built] detection orchestration landed: budget.go works out one round's budget, detect.go chains candidate lookup with probing and owns concurrency, the 5-second item deadline, per-candidate statuses and sequenced events; not wired to the queue or the UI, no production callers yet
+│   ├── app/                 # Frontend-facing API, DTOs and error mapping; the 7 queue commands live in queue.go, the detection task's executor adapter in detect.go (written, zero call sites)
+│   ├── accelerator/         # [partly built] detection orchestration landed: budget.go works out one round's budget, detect.go chains candidate lookup with probing and owns concurrency, the 5-second item deadline, per-candidate statuses and sequenced events; the queue-side executor that would drive it is now written too (in app/detect.go, not swapped in), so it is still not wired to the UI and has no production callers
 │   │   └── strategies/      # Acceleration methods, one file each: contract, registry and dns-hosts (the registry is wired into the app assembly; the orchestration layer exists, but the detection path still has no production entry point)
 │   ├── catalog/             # Product data: services, items, domains (catalog.json)
 │   ├── config/              # User config: validation, revision, atomic saves
@@ -278,7 +278,7 @@ Entries marked [not built] exist only in the plan — those directories are not 
 │   ├── identity/            # The only handwritten source of product names: identity constants, derived paths and the golden test that pins them
 │   ├── platform/            # [not built] Windows/macOS/Linux system adapters
 │   ├── privilege/           # [not built] Restricted privileged helper IPC client and protocol
-│   ├── task/                # [built, not wired] in-memory queue: serial execution, nine statuses, cancel/pause/retry/two cleanups, event sequence shared with the snapshot watermark; work happens through an injected executor and nothing injects one yet
+│   ├── task/                # [built, entry points missing] the queue is now constructed by `internal/app` (7 queue commands bound, stopped on exit): serial execution, nine statuses, cancel/pause/retry/two cleanups, event sequence shared with the snapshot watermark; work happens through an injected executor, and what is injected still answers "this kind of task has no executor yet" — the real detection executor is written but not swapped in
 │   └── updater/             # [not built] Stable-release checks and update verification
 ├── frontend/
 │   ├── bindings/            # Wails-generated bindings (do not edit by hand)

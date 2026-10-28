@@ -39,6 +39,11 @@ type Service struct {
 	// 队列不落地，没有历史文件可读可写。
 	tasks *task.Queue
 
+	// strategyTable 是方法注册表的读取接缝，零值即生产行为（读包级全局表）。
+	// 声明在 Service 上而不是每个命令各自读包级函数，是为了让方法选择区的
+	// 「真表走不到的分支」有测试落点，见 strategies.go。
+	strategyTable strategyTable
+
 	// stamp 是这份构建自带的 VCS 标记，进程活着就不会变，所以构造时读一次。
 	stamp buildStamp
 }
