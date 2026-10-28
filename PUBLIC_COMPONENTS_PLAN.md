@@ -185,9 +185,10 @@
 | `internal/detector/resolver.go` | `Resolve` | 可取消、有超时的系统 DNS 解析；首期不自动向第三方解析器发送查询 |
 | `internal/detector/probe.go` | `ProbeTCP`、`ProbeHTTPS` | 共享候选连通性检测；HTTPS 保留主机名和证书验证 |
 | `internal/detector/ranking.go` | `RankCandidates` | 统一排序候选，不把不同方法的评分硬合并 |
-| `internal/hosts/parser.go`、`renderer.go` | `Parse`、`RenderManagedBlock` | 统一解析和生成版本化管理区段；标记异常或用户改动冲突时拒绝覆盖，区段外用户记录原样保留。现状（2026-10-28）：`parser.go` 已建并只读接入——`Parse(content)` 返回 `Block{Present, Anomaly, Reason, Version, Records}`，加 `HasRecord(hostname)`、`NormalizeHostname(hostname)`；标记固定为 v1 那一对，缺一端/重复/嵌套/顺序错/版本未知/区段内非法行全部归进 `Anomaly` 并带行号，解析本身不报错。`renderer.go` 还没写，本包现在不生成也不写内容 |
+| `internal/hosts/parser.go`、`renderer.go` | `Parse`、`Render` | 统一解析和生成版本化管理区段；标记异常或用户改动冲突时拒绝覆盖，区段外用户记录原样保留。现状（2026-10-29）：`parser.go` 已建并只读接入——`Parse(content)` 返回 `Block{Present, Anomaly, Reason, Version, Records}`，加 `HasRecord(hostname)`、`NormalizeHostname(hostname)`；标记固定为 v1 那一对，缺一端/重复/嵌套/顺序错/版本未知/区段内非法行全部归进 `Anomaly` 并带行号，解析本身不报错。`renderer.go` **已落但没接线**——`Render(content, desired)` 只算字符串：区段外逐行原样保留、无标记时只追加、判读不了就回 `ErrConflict`、待写记录规范化＋去重＋稳定排序；本包现在仍然不写盘，`main.go`/`internal/app` 没有一处引用它 |
 | `internal/hosts/manager.go` | `Read` | 现状（2026-10-28）：已建。只读打开指定路径并把内容、读取时刻交给 `Parse`，失败（路径为空、文件不存在、无读权限、指向目录）归进 `Snapshot.ReadErr` 一句话，不 panic；选系统路径不是它的活（由 `internal/app` 的 `HostsPath()` 决定） |
-| `internal/hosts/transaction.go` | `Apply`、`RestoreItem`、`RestoreAll` | 持久化每个活动项目应用前的工具映射/所有权；单项正常还原只恢复对应项目映射，共享映射仍被其他项目使用时保留；原始文件快照只用于事务回滚 |
+| `internal/hosts/backup.go` | `Recovery`、`Digest`、`Check`、`Marshal`、`UnmarshalMetadata` | `backups/hosts/` 里那唯一一份恢复元数据的形状与判定：`Recovery{SchemaVersion, Original, Digest, Entries, Projects}`；`Digest` 比规范化后的映射集合而不是字节；`Check` 给 clean/matched/conflict 三档加一句可直接显示的原因；`Marshal`/`UnmarshalMetadata` 两端各把一次形状门（版本不认识、未知字段、排序或规范化不对、认领项目与快照对不上账都整体拒）。现状（2026-10-29）：**已落但没接线**——本包不读写这个目录，落盘、原子替换与删除前重新校验都还没做 |
+| `internal/hosts/transaction.go` | `Apply`、`RestoreItem`、`RestoreAll` | 持久化每个活动项目应用前的工具映射/所有权；单项正常还原只恢复对应项目映射，共享映射仍被其他项目使用时保留；原始文件快照只用于事务回滚。现状（2026-10-29）：**已落但没接线**——快照按主机名累计、只在没有其他项目认领时才记当下 IP（所以全部还原与顺序无关）；别人认领且指向另一地址时回 `ErrSharedOwner` 不动现场；`Owners` 为空是允许的元数据形状。`RestoreAll` 现在是全有或全无，契约要的逐项失败清单属服务层，见技术规划第 9 节 |
 | `internal/platform/platform.go` | `HostPath`、`FlushDNS`、`OpenFile`、`PrivilegeServiceStatus` | 统一跨平台接口，系统差异由平台文件实现 |
 | `internal/privilege/client.go` | `Status`、`ReadHosts`、`ApplyHosts`、`RestoreHosts` | 固定 IPC 白名单；不暴露通用文件和命令接口 |
 | `internal/updater/client.go` | `CheckStableRelease` | 查询 GitHub 最新正式稳定版，不自动安装 |
@@ -198,7 +199,7 @@
 
 ### 6.4 加速方法单文件扩展约束
 
-- `internal/accelerator/strategies/` 是一个已由应用装配层固定依赖的 Go package。该目录中的方法文件属于同一 package，正常构建会自动编译，不需要逐个 import。
+- `internal/accelerator/strategies/` 是一个已由应用装配层固定依赖的 Go package（**2026-10-29 已实际接上**：`internal/app/app.go` 导入该包并把 `strategies.IDs()` 作为默认方法的校验集合）。该目录中的方法文件属于同一 package，正常构建会自动编译，不需要逐个 import。
 - 一种方法的实现、稳定 `strategyID`、目标 `scopeID`、名称/说明、能力和 factory 放在同一个 `.go` 文件中；文件通过包内 `init` 调用既有 `register`。新增方法不编辑中心 registry、服务路由、产品目录、Wails API/DTO、前端或设置 schema。
 - 单文件指源码新增后重新构建应用，不代表运行中热加载；策略使用标准库和项目已有依赖，新增方法不为此改依赖清单。
 - `registry.go` 和 `contract.go` 仅是一次性基础设施：集中收集描述符、校验 ID/范围/能力，输出稳定排序的只读方法列表。注册错误必须保存并在启动时作为普通 error 返回；不 panic、不静默覆盖、不依赖文件系统扫描或 Go 插件。
@@ -240,7 +241,7 @@
 - 依据 Go 官方 TLS API，可使用可取消的 TLS 握手进行连通性验证而不下载网页；Go HTTP 的 HEAD 仍是 HTTP 请求，不能视为绝对零流量。Apple 能通过 `NWPath.isExpensive` 标识蜂窝/个人热点，但该 API 不代表 Windows/Linux 均有同等能力。参考：[Go TLS](https://pkg.go.dev/crypto/tls)、[Go HTTP](https://pkg.go.dev/net/http)、[Apple `NWPath.isExpensive`](https://developer.apple.com/documentation/network/nwpath/isexpensive)。
 - 用户在设置对话框的“网络与流量”分类调整档位和每轮上限；检测按钮旁常驻一个紧凑状态标签（当前档位 + 本轮候选预算），点击可快速切档或跳转完整设置。
 - 设置页必须解释各档对候选覆盖、并发和流量的区别；提供“自动检测”与计量网络下载确认选项，省流档默认关闭自动全量检测。设置保存失败要显示在控件旁，不允许只更新标签就当成功。
-- 首次安装或没有有效配置时默认“省流”（每 hostname 最多 2 个候选、并发 2）；用户设置的总候选探测上限暂定为 108，来源为现有 54 个菜单项目 × 每项 2 个候选的估算。菜单项目数不等于唯一 hostname 数，108 是可调整的默认预算，不保证完整扫描，也不是后端硬上限；实现前须按规范化唯一 hostname 数验证最大范围；该验证已于 2026-10-27 完成：目录去重后 65 个 hostname，省流档全量一轮理论值 130，高于默认 108，所以按现值执行时全量一轮覆盖不住，界面必须在启动前给出确认并标出未检测项；默认上限是否上调待用户落句，落句前一律按 108 实现。实际每轮预算随范围和档位动态计算；自动检测默认关闭。
+- 首次安装或没有有效配置时默认“省流”（每 hostname 最多 2 个候选、并发 2）；用户设置的总候选探测上限**已于 2026-10-29 落句：默认 130、可填上限 1040**，来源是目录实数（去重后 65 个 hostname × 档位每 hostname 候选上限 2／16），不再用原型那份「54 个菜单项目 × 每项 2 个候选 = 108」的估算——菜单项目数不等于唯一 hostname 数。默认 130 就是默认档位默认能盖住一轮全量，上限 1040 让完整档一轮全量也开得满。实际每轮预算仍随范围和档位动态计算，只统计实际启动的候选 IP 探测，DNS 查询单独计数；预算不够覆盖本轮范围时启动前给确认并标出未检测项。自动检测默认关闭。前后端数字由 `internal/config/budget_parity_test.go` 与 `internal/app/budget_parity_test.go` 钉住。
 
 ## 7. 建议目录
 

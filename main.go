@@ -4,6 +4,8 @@ import (
 	"context"
 	"embed"
 	"log"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -155,6 +157,20 @@ func main() {
 	}()
 
 	if err := platformApp.Run(); err != nil {
-		log.Fatal(err)
+		log.Fatal(startupFailureText(err))
 	}
+}
+
+// startupFailureText 把启动失败说成一句能照着查的话。
+// 原来只印一句底层英文错误：从桌面图标点进来的人看不到 stderr，只会以为双击没反应。
+// 最常见的一种原因是这台会话没有 DBus 会话总线——单实例锁要靠它把二次启动转给已运行的实例，
+// 拿不到就当场报错退出。这里只在能确认时补这句原因；
+// 变量在但总线已经死了的情况判不出来，那时照原样带出底层错误，不编原因。
+// 提示只落到 stderr：图形对话框要等界面真的起来才谈得上，这一层还没有能力弹框。
+func startupFailureText(err error) string {
+	message := "界面没能启动：" + err.Error()
+	if runtime.GOOS == "linux" && os.Getenv("DBUS_SESSION_BUS_ADDRESS") == "" {
+		message += "（这个会话没有 DBus 会话总线，单实例锁拿不到它；从桌面环境里启动，或先在终端设好 DBUS_SESSION_BUS_ADDRESS）"
+	}
+	return message
 }

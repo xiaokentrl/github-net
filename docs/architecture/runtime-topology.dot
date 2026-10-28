@@ -1,4 +1,4 @@
-// github-net 运行时拓扑（部署/进程视角，不是逻辑分层）　生成日期 2026-10-28
+// github-net 运行时拓扑（部署/进程视角，不是逻辑分层）　生成日期 2026-10-28　复核日期 2026-10-29（只改 DNS 那条边的说法）
 // 问的问题：这套东西在用户机器上到底跑成几个进程、碰哪些文件、跨哪条信任边界。
 // 渲染：dot -Tsvg runtime-topology.dot -o runtime-topology.svg（graphviz 14.1.2 实测；SVG 是派生产物，改图请改本文件）
 digraph runtime {
@@ -40,7 +40,7 @@ digraph runtime {
     goroot -> tray [label="建/销毁（cleanup 里取消 3 个订阅 + tray.Destroy）"];
 
     dns [label="操作系统配置的 DNS\nnet.DefaultResolver，2 秒预算", shape=ellipse, fillcolor="#f6f8fa", fontcolor="#8a5a00"];
-    goroot -> dns [label="当前不查：dns-hosts 策略代码在但没进运行时\n（隐私规则：绝不转发第三方解析器）", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
+    goroot -> dns [label="当前不查：策略 2026-10-29 已注册进装配层，\n但没有执行路径调用 Lookup（检测那一屏没做）\n（隐私规则：绝不转发第三方解析器）", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
   }
 
   // ── 提权边界 ───────────────────────────────────────────────────

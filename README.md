@@ -110,12 +110,12 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 ├── internal/
 │   ├── app/                 # 暴露给前端的接口、DTO 和错误转换
 │   ├── accelerator/         # 【部分建】加速流程协调与按服务的方法路由（根包还没写，目前只有 strategies/）
-│   │   └── strategies/      # 加速方法单文件自注册：契约、注册表与 dns-hosts（还没接进应用装配层）
+│   │   └── strategies/      # 加速方法单文件自注册：契约、注册表与 dns-hosts（注册表已进应用装配层，检测执行路径还没上）
 │   ├── catalog/             # 服务、项目、域名等产品数据（catalog.json）
 │   ├── config/              # 用户配置：校验、revision、原子保存
 │   ├── detector/            # 【未建】DNS 解析、候选探测与排序
 │   ├── event/               # 给前端推事件的统一出口
-│   ├── hosts/               # Hosts 管理区段判读与只读读取（备份、写入、还原还没做）
+│   ├── hosts/               # Hosts 管理区段判读、渲染、恢复元数据与事务逻辑（都已落但没接线，本包不写盘）
 │   ├── identity/            # 产品名字的唯一手写源：户口层常量、派生路径与钉死它们的金标准测试
 │   ├── platform/            # 【未建】Windows/macOS/Linux 系统差异适配
 │   ├── privilege/           # 【未建】受限特权辅助服务的 IPC 客户端与协议
@@ -269,12 +269,12 @@ Entries marked [not built] exist only in the plan — those directories are not 
 ├── internal/
 │   ├── app/                 # Frontend-facing API, DTOs and error mapping
 │   ├── accelerator/         # [partly built] Acceleration flow and per-service method routing (only strategies/ exists)
-│   │   └── strategies/      # Acceleration methods, one file each: contract, registry and dns-hosts (not wired into the app yet)
+│   │   └── strategies/      # Acceleration methods, one file each: contract, registry and dns-hosts (registry is now wired into the app assembly; no execution path calls it yet)
 │   ├── catalog/             # Product data: services, items, domains (catalog.json)
 │   ├── config/              # User config: validation, revision, atomic saves
 │   ├── detector/            # [not built] DNS resolution, candidate probing and ranking
 │   ├── event/               # Single outlet for events pushed to the frontend
-│   ├── hosts/               # Hosts managed-block parsing and read-only access (backup, writes and restore not built)
+│   ├── hosts/               # Hosts managed-block parsing, rendering, recovery metadata and transaction logic (built, not wired; this package writes nothing)
 │   ├── identity/            # The only handwritten source of product names: identity constants, derived paths and the golden test that pins them
 │   ├── platform/            # [not built] Windows/macOS/Linux system adapters
 │   ├── privilege/           # [not built] Restricted privileged helper IPC client and protocol

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/xiaokentrl/github-net/internal/catalog"
 	"github.com/xiaokentrl/github-net/internal/config"
 )
 
@@ -108,7 +109,7 @@ func TestGetSettingsGivesDefaultsWithoutWriting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("没配置文件时应回默认值: %v", err)
 	}
-	if cfg.Revision != 0 || cfg.Network.Profile != config.ProfileLow || cfg.Network.MaxCandidateProbesPerRun != 108 {
+	if cfg.Revision != 0 || cfg.Network.Profile != config.ProfileLow || cfg.Network.MaxCandidateProbesPerRun != 130 {
 		t.Errorf("默认值不对: %+v", cfg.Network)
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
@@ -255,17 +256,45 @@ func TestServiceWithoutSettingsStoreAlwaysReturnsError(t *testing.T) {
 	}
 }
 
-func TestStrategyChoicesStayRejectedUntilRegistryExists(t *testing.T) {
-	s, _ := newServiceWithStore(t, map[string]bool{"github": true}, nil)
-	_, err := s.SaveSettings(config.Patch{DefaultStrategyByScope: &map[string]string{"github": "dns-hosts"}}, 0, "m1")
-	if err == nil {
-		t.Fatal("方法注册表还没实现，任何默认方法选择都不该被接受")
+// 注册表接进装配层之后，这条拒绝的理由就只剩「方法本身不存在」了。
+// 用真实装配路径（NewService，配置写到临时目录）验：dns-hosts 存得进去，没注册的方法和不在目录里的范围照样被拒。
+func TestStrategyChoicesUseTheRealRegistryAfterAssembly(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	s := NewService("github-net", "test", nil)
+	if s.settingsErr != nil {
+		t.Fatalf("装配失败：%v", s.settingsErr)
 	}
-	var publicErr *Error
-	if !errors.As(err, &publicErr) || publicErr.Code != CodeInvalidSettings {
-		t.Errorf("错误码 = %v", err)
+	scopeIDs, err := catalog.Load()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(publicErr.Message, "没有注册") {
-		t.Errorf("消息该说明方法没注册，得到 %q", publicErr.Message)
+	github := scopeIDs.ScopeIDs()
+	if !github["github"] {
+		t.Fatal("目录里没有 github 范围，这条用例的前提没了")
+	}
+	cfg, err := s.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := s.SaveSettings(config.Patch{DefaultStrategyByScope: &map[string]string{"github": "dns-hosts"}}, cfg.Revision, "m-registry")
+	if err != nil {
+		t.Fatalf("已注册的方法应存得进去：%v", err)
+	}
+	if saved.Accelerator.DefaultStrategyByScope["github"] != "dns-hosts" {
+		t.Errorf("保存结果没带上选择：%+v", saved.Accelerator)
+	}
+	reopened := NewService("github-net", "test", nil)
+	again, err := reopened.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Accelerator.DefaultStrategyByScope["github"] != "dns-hosts" {
+		t.Errorf("重开读不到已保存的方法：%+v", again.Accelerator)
+	}
+	if _, err := s.SaveSettings(config.Patch{DefaultStrategyByScope: &map[string]string{"github": "no-such-method"}}, saved.Revision, "m-unknown"); err == nil {
+		t.Error("没注册的方法应被拒")
+	}
+	if _, err := s.SaveSettings(config.Patch{DefaultStrategyByScope: &map[string]string{"nope": "dns-hosts"}}, saved.Revision, "m-scope"); err == nil {
+		t.Error("不在目录里的范围应被拒")
 	}
 }

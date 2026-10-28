@@ -33,7 +33,7 @@ workspace "github-net" "GitHub / Steam 网络加速桌面工具的整体架构�
         hostsPkg = component "Hosts 只读解析 internal/hosts" "在本工具管理区段（BEGIN/END 标记 v1）里读映射；结构毛病走 Anomaly，不报错也不猜修。证据 internal/hosts/parser.go:89-170 internal/hosts/manager.go:25-38 confidence:high" "Go"
         eventPkg = component "运行状态事件 internal/event" "独占单调递增序号，只发 app:runtime-status 一个事件；不注册成服务，所以前端推不动序号。证据 internal/event/event.go:9-36 confidence:high" "Go"
         identityPkg = component "产品身份 internal/identity" "三层定名的唯一手写源：可换的脸（DisplayName、Description）、默认冻结的户口（AppID、Slug、DataDir、HostsMarkerID）、不动的骨头（模块路径）。16 个键供 cmd/identity 输出。证据 internal/identity/identity.go:15-111 confidence:high（代码）；main.go 与构建配置仍未引用它" "Go"
-        strategyPkg = component "加速方法自注册表 internal/accelerator/strategies" "contract + registry + 首个方法 dns-hosts（系统解析器、2 秒预算、按档位裁剪候选）。靠 init 自注册，注册错误攒进 Errors 等装配层启动时取。证据 strategies/contract.go strategies/registry.go:13-59 strategies/hosts_dns_lookup.go:38-56 confidence:high（代码）；当前没有任何包 import 它，还没进运行时" "Go"
+        strategyPkg = component "加速方法自注册表 internal/accelerator/strategies" "contract + registry + 首个方法 dns-hosts（系统解析器、2 秒预算、按档位裁剪候选）。靠 init 自注册，注册错误攒进 Errors 等装配层启动时取。证据 strategies/contract.go strategies/registry.go:13-59 strategies/hosts_dns_lookup.go:38-56 confidence:high（代码）；2026-10-29 已接进装配层（internal/app/app.go 固定导入并用 strategies.IDs() 作校验集合），但没有执行路径真的调用 Lookup，检测那一屏还没做" "Go"
       }
 
       // ── L2 容器 2：WebView 里的前端 ────────────────────────────────

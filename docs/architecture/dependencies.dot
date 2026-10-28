@@ -1,4 +1,4 @@
-// github-net 依赖图（包/模块级）　生成日期 2026-10-28　复核日期 2026-10-28（行号与调用点逐条重跑）
+// github-net 依赖图（包/模块级）　生成日期 2026-10-28　复核日期 2026-10-29（只重跑 strategies 相关边；其余行号仍是 10-28 的）
 // 边全部来自 import 或调用点，证据位置见同目录 evidence.md 的第 1、2 节。
 // 线型口径：实线=运行时已接上；虚线=应接未接的缺口（代码存在，但执行路径到不了）；点线=构建期或推送期。
 // 渲染：dot -Tsvg dependencies.dot -o dependencies.svg（graphviz 14.1.2 实测无警告；SVG 是派生产物，改图请改本文件）
@@ -7,7 +7,7 @@ digraph deps {
   compound=true;
   nodesep=0.36; ranksep=0.72;
   fontname="Helvetica"; labelloc=t;
-  label="github-net 依赖图（实线=运行时已接上，虚线=代码在但没接线，点线=构建/推送期）\n生成 2026-10-28，依据 main 工作树（远端 4475f5b + 未提交阶段三起手）";
+  label="github-net 依赖图（实线=运行时已接上，虚线=代码在但没接线，点线=构建/推送期）\n生成 2026-10-28、strategies 相关边 2026-10-29 复核，依据 main 工作树（远端 4475f5b + 未提交的阶段三与七项落句）";
   fontsize=15;
 
   node [shape=box, style="rounded,filled", fillcolor="#ffffff", color="#c8ccd1", fontsize=11];
@@ -21,7 +21,7 @@ digraph deps {
     config      [label="internal/config\n读盘/校验/原子保存", fillcolor="#eaf3ff"];
     hosts       [label="internal/hosts\n区段只读解析", fillcolor="#eaf3ff"];
     event       [label="internal/event\n状态序号与事件名", fillcolor="#eaf3ff"];
-    strategies  [label="internal/accelerator/strategies\n方法自注册表 + dns-hosts", fillcolor="#fff5e6", fontcolor="#8a5a00"];
+    strategies  [label="internal/accelerator/strategies\n方法自注册表 + dns-hosts\n（已注册；检测执行路径未上）", fillcolor="#eaf3ff"];
     identity    [label="internal/identity\n产品身份唯一手写源", fillcolor="#f3eefc", fontcolor="#5b3a8e"];
     cmdidentity [label="cmd/identity\n取值 CLI", fillcolor="#f3eefc", fontcolor="#5b3a8e"];
   }
@@ -76,11 +76,13 @@ digraph deps {
   api -> bindingsT;
   bindingsT -> wails [label="@wailsio/runtime 桥"];
 
-  // ── 未接线边（阶段三起手，代码在但没有 importer）─────────────────
-  strategies -> catalog    [label="init 取 scopeIDs", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
+  // ── strategies 相关：2026-10-29 装配层接线后重判 ─────────────────
+  // 固定导入让 init 真的在进程启动时跑，所以「取 scopeIDs」这条已经是运行时路径；
+  // Lookup（NormalizeHostname、候选 IP 查询）还没有调用点，保持虚线。
+  strategies -> catalog    [label="init 取 scopeIDs（装配后启动即执行）"];
   strategies -> hosts      [label="NormalizeHostname", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
-  strategies -> xdgDNS     [label="候选 IP 查询", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
-  app -> strategies        [label="缺口：NewStore 的 strategies 传 nil，注册表没进装配层", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
+  strategies -> xdgDNS     [label="候选 IP 查询：没有执行路径调用", style=dashed, color="#b26a00", fontcolor="#8a5a00"];
+  app -> strategies        [label="NewStore(path, 目录 scopeIDs, strategies.IDs())：2026-10-29 接上"];
   main -> identity         [label="缺口：main.go 仍写死 appName/appID/version 字面量", style=dashed, color="#6f42c1", fontcolor="#5b3a8e"];
 
   // ── 身份与构建期边 ───────────────────────────────────────────────

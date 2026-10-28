@@ -8,6 +8,8 @@ import styles from './AppShell.module.css'
 
 // 工具栏上的紧凑流量状态：档位可以在这里改，改动立刻走后端保存。
 // 三档解释必须一直看得见（规划要求同时说明请求量、等待和覆盖面），所以这一栏允许换成两行。
+// 那颗跳转按钮是「跳进网络与流量页」的入口：这里只放得下单个档位选择，
+// 每轮上限、覆盖率算式这些都在设置页里，不在这儿摊开。
 export function Toolbar({
   settings,
   error,
@@ -15,6 +17,7 @@ export function Toolbar({
   saveText,
   busy,
   onProfileChange,
+  onOpenNetwork,
 }: {
   settings: Config | null
   error: string
@@ -22,6 +25,7 @@ export function Toolbar({
   saveText: string
   busy: boolean
   onProfileChange: (profile: NetworkProfile) => void
+  onOpenNetwork: () => void
 }) {
   if (error) return <span className={styles.text}>{t('settings.error', { reason: error })}</span>
   if (!settings) return <span className={styles.text}>{t('detail.loading')}</span>
@@ -38,6 +42,9 @@ export function Toolbar({
         onChange={(value) => onProfileChange(value as NetworkProfile)}
       />
       <span className={styles.text}>{t('toolbar.profile.summary', { cap: settings.network.maxCandidateProbesPerRun })}</span>
+      <button type="button" className={styles.jump} title={t('toolbar.network.jumpHint')} onClick={onOpenNetwork}>
+        {t('toolbar.network.jump')}
+      </button>
       <InlineStatus kind={saveKind} text={saveText} />
       <span className={styles.spacer} />
       <span className={styles.text}>{t('toolbar.settings.revision', { revision: settings.revision })}</span>

@@ -24,12 +24,17 @@ const (
 	ProfileFull     = "full"
 )
 
-// 下面的边界取自唯一正式原型，不是新发明：
-// 档位每 hostname 候选上限 2/8/16、总上限默认 108（原型也把它当可调上限的最大值）、
+// 下面的边界取自唯一正式原型：档位每 hostname 候选上限 2/8/16、
 // 缩放只有 90%/100%/110%/125% 四档、侧栏宽度 200–600、队列高度最小 120。
+//
+// 候选预算这两个数不是原型那对 108，而是按目录实数算出来的（原型抄的是它自己那份估算）：
+// 目录去重后 65 个主机名，所以一轮全量理论需要 65×2=130（省流）、65×8=520（标准）、65×16=1040（完整）。
+// 默认取 130，意思是「默认档位默认就能盖住一轮全量」，不让第一次使用就撞上「覆盖不全要确认」；
+// 可填上限取 1040，意思是「完整档一轮全量也允许开得满」。这两个数和目录规模、档位数字绑在一起，
+// 目录或档位改了，internal/app 的预算门会先红，见 budget_parity_test.go。
 const (
-	MaxCandidateProbesDefault = 108
-	MaxCandidateProbesLimit   = 108
+	MaxCandidateProbesDefault = 130
+	MaxCandidateProbesLimit   = 1040
 	MinCandidateProbes        = 1
 	SidebarWidthMin           = 200
 	SidebarWidthMax           = 600

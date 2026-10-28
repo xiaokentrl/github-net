@@ -1,15 +1,20 @@
 name: Cleanup Workflow Runs
 
 # 手动清空 All workflows 的历史运行记录：Actions 页面手动触发（workflow_dispatch），
-# 另加每周日零点定时兜底。删到只剩正在跑的这一条；要多留几条历史就把 keep 调大（上限 10）。
+# 另加每周日零点定时兜底。这个动作删的是**整个仓库所有工作流**的运行记录（不带过滤条件时），
+# keep 是「按最新往后跳过几条」，所以要多留几条历史就把 keep 调大（上限 10）。
+#
+# keep 从 1 调到 10 的理由（2026-10-29）：keep=1 会把门禁作业的正文和日志一起删掉，
+# 而推送那一轮之外还要复核「当时 CI 到底绿不绿」就只能重新推一次。留最近 10 条，
+# 页面仍然不会堆成几百条，近期几次推送的证据还在。要彻底不清历史就把 schedule 去掉、只留手动。
 #
 # 两个踩过的坑，改之前先看：
 # 1. 没有 actions/checkout 时工作目录里没有 .git，gh 会在「git remote 探测」一步死掉
 #    （failed to determine base repo）。GH_REPO 是 gh 的官方覆盖项，优先于 git 探测，
 #    所以设它就够了，不必为删记录克隆整个仓库。
 # 2. keep 不能取 0：该动作把 keep 换算成起始行号再 tail，keep=0 会落进未定义行为——
-#    实测要么一条都不删但作业判绿，要么把正在跑的这条也删。keep=1 的语义是明确的：
-#    跳过最新一行（本清理作业自己，GitHub 也不允许删正在跑的记录），其余全删。
+#    实测要么一条都不删但作业判绿，要么把正在跑的这条也删。keep≥1 的语义是明确的：
+#    跳过最新 keep 行（至少含本清理作业自己，GitHub 也不允许删正在跑的记录），其余全删。
 
 on:
   schedule:
@@ -27,4 +32,4 @@ jobs:
     steps:
       - uses: iamazeem/delete-workflow-runs-action@v1
         with:
-          keep: 1
+          keep: 10

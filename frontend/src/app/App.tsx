@@ -272,6 +272,7 @@ export function App() {
             saveText={save.text}
             busy={save.kind === 'pending'}
             onProfileChange={changeProfile}
+            onOpenNetwork={() => openSettings('network')}
           />
         }
         sidebar={sidebar}

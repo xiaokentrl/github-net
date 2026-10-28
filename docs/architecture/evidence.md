@@ -4,6 +4,7 @@
 
 - 首轮核对：2026-10-28（逐文件读代码）
 - **本轮复核：2026-10-28，逐条重跑取证命令**，修正了 6 处行号越界、2 处比代码弱的说法，并把出包/装包链路查到实际调用点。核对方式列在每条证据里。
+- **2026-10-29 追加，只动了 Hosts 这一块**：新增渲染、恢复元数据、事务纯逻辑三条 component 证据（行号来自 `grep -n "^func Render\|Digest\|Check\|validate\|Apply\|RestoreItem\|RestoreAll\|restoreInto"` 的当场输出），并把「零调用点」这条命令实跑过一遍（`grep -rn "hosts\.Render\|hosts\.Apply\|RestoreItem\|RestoreAll\|hosts\.Check\|hosts\.Digest\|hosts\.Recovery" main.go internal/app` → 0 命中）。其余各行仍是 2026-10-28 那轮的事实，本轮没复核，也没改。
 
 可信度口径：**high**＝代码/配置/产物直接支持；**medium**＝多处间接信号一致但无直接来源；**low**＝按命名或惯例推断；**unknown**＝故意留白，待查。
 
@@ -25,14 +26,17 @@
 | `internal/config.Store`（revision + 幂等 + 原子替换 + 隔离） | component | current | `internal/config/config.go:272-490` `config.go:458-490`（writeAtomic） | high |
 | `config.json` 路径规则（三平台） | data | current | `internal/config/config.go:147-171` | high |
 | `internal/hosts` 区段只读解析（BEGIN/END v1） | component | current | `internal/hosts/parser.go:89-170` `internal/hosts/manager.go:25-38` | high |
+| `internal/hosts` 区段渲染（只算字符串，不写盘、无调用点） | component | current | `internal/hosts/renderer.go:27`（`Render`；改坏实测 15 次见技术规划阶段四） | high |
+| `internal/hosts` 恢复元数据与冲突判定（`Recovery`/`Digest`/`Check`/形状门） | component | current | `internal/hosts/backup.go:106`（`Digest`） `:134`（`Check`） `:252`（`validate`）；改坏实测 M1、M3–M10 | high |
+| `internal/hosts` 应用与还原的事务纯逻辑（`Apply`/`RestoreItem`/`RestoreAll`，快照累计与共认领） | component | current | `internal/hosts/transaction.go:34`（`Apply`） `:115`（`RestoreItem`） `:136`（`RestoreAll`） `:158`（`restoreInto`）；改坏实测 M11–M21，`main.go`/`internal/app` 零引用 | high |
 | Hosts 写权限探测（打开即关，不写） | component | current | `internal/app/privilege.go:40-53` | high |
 | `app:runtime-status` 事件（2 秒、序号单调递增） | event | current | `internal/event/event.go:9-36` `main.go:25`（`statusTick`） `main.go:140-155` | high |
 | 前端事件订阅与丢弃计数 | component | current | `frontend/src/api/events.ts:3-20` `frontend/src/app/App.tsx:128-149`（useEffect：133 订阅、134-137 丢弃并计数、142-148 清理） | high |
 | 7 个稳定错误码 | contract | current | `internal/app/errors.go:12-20`（empty_token、catalog_invalid、internal_error、invalid_settings、revision_conflict、settings_save_failed、config_schema_newer） | high |
-| `internal/accelerator/strategies`（contract/registry/dns-hosts） | component | current 代码、**未进运行时** | `strategies/registry.go:13-59` `strategies/hosts_dns_lookup.go:38-56`；`grep -rn "accelerator/strategies" --include=*.go .` 实跑零命中 | high（代码存在）/ high（确认没接线） |
+| `internal/accelerator/strategies`（contract/registry/dns-hosts） | component | current 代码、**已进运行时**（2026-10-29 接进装配层） | `strategies/registry.go:13-59` `strategies/hosts_dns_lookup.go:38-56`；`grep -rn "accelerator/strategies" --include=*.go .` 2026-10-29 重跑：`internal/app/app.go` 2 命中（import + `strategies.IDs()`），此前零命中 | high（代码存在）/ high（确认已接线） |
 | `internal/identity` 16 个身份键 | component | current 代码 | `internal/identity/identity.go:15-57` `identity.go:67-86` | high |
 | 系统 Hosts 文件 | external | current（只读） | `internal/app/privilege.go:24-36` | high |
-| 操作系统 DNS | external | **仅存在于未接线的策略里** | `strategies/hosts_dns_lookup.go:36`（`net.DefaultResolver`） | high（代码）/ low（运行时会用到） |
+| 操作系统 DNS | external | **策略已注册进装配层，但还没有执行路径真的调它** | `strategies/hosts_dns_lookup.go:36`（`net.DefaultResolver`） | high（代码）/ low（运行时会不会走到，取决于检测那一屏） |
 | GTK4 + WebKitGTK 6.0 运行库 | external | current | `.github/workflows/ci.yml` 的 `RUNTIME_LIBS`（3 个 .so）`build/linux/nfpm/nfpm.yaml` 的 `depends` | high |
 | GitHub Actions CI（4 条作业 + 门一门二） | external | current | `.github/workflows/ci.yml` 全文（本轮整读） | high |
 | 打包（deb/rpm/aur） | build | current，**只在本地链上跑** | `build/linux/Taskfile.yml:153-166`（`wails3 tool package -config ./build/linux/nfpm/nfpm.yaml`）`scripts/pre-push-reinstall.sh:80`（`wails3 task linux:create:deb`）；`ci.yml` 里没有任何打包步骤 | high |
@@ -53,7 +57,7 @@
 | SPA → Go（6 方法） | Wails JS↔Go 桥，同步 Promise | `frontend/bindings/.../service.ts:26-65` | high |
 | Go → SPA（状态事件） | Wails 事件，异步 | `main.go:142`（`Event.Emit`）`frontend/src/api/events.ts:15`（`Events.On`） | high |
 | SPA 资源加载 | 内置资源服务器（自定义 scheme 还是本地回环未定） | `main.go:66-68`（`AssetFileServerFS(assets)`）`main.go:88`（`URL:"/"`） | high（挂载）/ medium（传输方式） |
-| `strategies` → `catalog`/`hosts` | 进程内，**当前不在任何执行路径上** | `hosts_dns_lookup.go:61`（`catalog.Load`）`hosts_dns_lookup.go:85`（`NormalizeHostname`） | high（代码） |
+| `strategies` → `catalog`/`hosts` | 进程内，**注册时走 catalog，检测执行路径还没上** | `hosts_dns_lookup.go:61`（`catalog.Load`）`hosts_dns_lookup.go:85`（`NormalizeHostname`） | high（代码） |
 | `pre-push` → `cmd/identity` | shell，eval 一次 | `identity-guard.sh:39` | high |
 | 推送 → 出包 → 停进程 → 卸装 → 删配置 | shell，顺序实读 | `pre-push-reinstall.sh:80`（`wails3 task linux:create:deb`）→ `:90`（`pkill -x`）→ `:70-76`（`dpkg --purge` + `apt-get install -y ./deb`）→ `:98-99`（先过空值门再 `rm -rf` 三个用户目录） | high |
 | root 助手实际用的包命令 | shell | `scripts/github-net-root-install.sh:37`（`dpkg --purge`）`:39`（`apt-get install -y "$DEB"`，不是 `dpkg -i`） | high |
@@ -74,12 +78,15 @@
 
 ## 4. 待你落句、图上未定案的分歧
 
+2026-10-29 一轮把下表前五项全部落句并落地，只剩「关窗口＝退出」仍是已定行为、没改。落句口径的完整说明在 `TECHNICAL_PLAN.md` 阶段二末尾「七项待落句一次落定」。
+
 | 项 | 现状 | 影响哪块 |
 | --- | --- | --- |
-| 每轮候选探测上限 108 vs 130 | 代码写 108（`config.go:31-33`） | `internal/config` 校验边界、界面预算输入 |
-| 托盘两个开关、工具栏 A/B | 未定 | 前端布局与 `internal/config` 开关 |
-| `cleanup-actions.yml` 是否删历史 | 已在跑（每周日 + 手动，keep=1） | 发布与运维流程，不在运行架构里 |
-| 五个未引用资源 | 未定 | 资源与包内容 |
+| 每轮候选探测上限 108 vs 130 | **已落句：默认 130、可填上限 1040**（按目录去重后 65 个 hostname × 档位候选上限 2／16 现算；`config.go` 同名常量） | `internal/config` 校验边界、界面预算输入；两道 parity 门钉住前后端数字 |
+| 托盘两个开关 | **已落句：本轮不加**——托盘屏未迁进工程，没有真实行为可指，先加就是假开关 | `internal/config` `startup` 分组保持已定形状 |
+| 工具栏 A/B | **已落句：B 案**——保留第一屏实测过的档位下拉，旁边补一颗跳转「网络与流量」的按钮 | 前端 `Toolbar.tsx`/`App.tsx`，新增两个文案键 |
+| `cleanup-actions.yml` 是否删历史 | **已落句：继续跑，`keep` 1→10**，保住门禁正文/日志的证据窗口；触发不变 | 发布与运维流程，不在运行架构里 |
+| 五个未引用资源 | **已落句：删掉**（`frontend/public` 下 5 个，合计 702,045 B 原本随 `embed all:frontend/dist` 进二进制）；同目录的 `Inter Font License.txt` 不在点名的五个里，仍等一句 | 资源与包内容 |
 | 「关窗口＝退出」是否改成收进托盘 | 仍是已定行为 | `main.go` 窗口与托盘逻辑 |
 
 ## 5. 本轮复核改了什么（留痕，免得下次以为原稿就对）

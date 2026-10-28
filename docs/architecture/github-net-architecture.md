@@ -1,6 +1,7 @@
 # github-net 整体架构（现状态）
 
 生成日期：2026-10-28　依据：当前 main 工作树代码（已提交到远端的 `4475f5b`，加上还没提交的阶段三起手 `internal/accelerator/strategies`、`internal/identity`、`cmd/identity`）。
+**2026-10-29 增量**：`internal/hosts` 这一块补上渲染、恢复元数据与事务纯逻辑三件（都还没接线、都不写盘），第 3 节那一行与第 5 节 G6 已跟着改，台账追加三条证据；三份 `.dot` 与 `.svg` 本轮没重画，原因写在 G6 后面那段。其余章节仍是 2026-10-28 的事实，本轮没复核。
 
 - **干什么用**：想知道这个工具由哪几块拼成、谁调谁、跑起来是几个进程、怎么编出来装上机器，就看这一份。
 - **给谁看**：以后要改这块的人（包括下一次的我）。
@@ -27,7 +28,7 @@
 - **一个进程**：`go build` 出一个二进制 `/usr/local/bin/github-net`。窗口的壳、托盘、后端逻辑、事件发射都在这一个进程里（`main.go:29-160`）。它靠 CGO 链 GTK4 和 WebKitGTK 6.0，所以编译环境必须装了这两个 dev 包。
 - **两层界面**：Go 侧只有 `internal/app.Service` 一个对外门面，前端只有 `src/api` 一个调用出口。两边中间那张 `frontend/bindings/` 是 Wails 生成的，不许手改——它是前后端形状的唯一对齐点。
 - **三类本机文件**：内嵌进二进制的目录数据（`catalog.json`，只读）、用户配置（`config.json`，读写）、系统 Hosts（`/etc/hosts`，**当前只读**）。
-- **零远端依赖**：没有服务端、没有数据库、没有更新检查、没有任何第三方网络调用。唯一的出网点是 DNS 查询，而那条路现在还没接进运行时。
+- **零远端依赖**：没有服务端、没有数据库、没有更新检查、没有任何第三方网络调用。唯一的出网点是 DNS 查询；这条路 2026-10-29 已把方法注册进装配层，但还没有任何执行路径真的调用它取候选（检测那一屏没做），所以运行期依然一次 DNS 查询也不会发。
   - 这条本轮实跑过：`main.go` 与 `internal/` 里 `http.Get`、`http.Client`、`net.Dial`、`net.Listen`、`websocket` 全部零命中；设置里的 `ConfirmUpdateDownloadOnMetered` 只是一个开关字段，没有任何代码去检查或下载更新。
   - 「运行期不监听端口」**不在已证实之列**：它靠框架常识加上面的零命中，仓库本身不体现 Wails 用自定义 scheme 还是本地回环。已列进第 6 节待实测。
 
@@ -38,7 +39,7 @@
 | 包 | 它独占的事实 | 越界就是错 |
 | --- | --- | --- |
 | `internal/catalog` | 产品目录（11 分类 / 54 项目 / 65 个去重主机名 / 11 个 scopeID） | 前端不许再自己存一份列表；运行时不许解析原型 HTML |
-| `internal/hosts` | 系统 Hosts 管理区段的读法与判读 | 只读；写入、备份、还原属后面的特权服务阶段 |
+| `internal/hosts` | 系统 Hosts 管理区段的读法、判读，以及「要写成什么样」与「怎么退回去」的纯逻辑 | 一个字节都不写盘；写入、落盘备份与还原属后面的特权服务阶段，且现在没有任何调用点 |
 | `internal/config` | 设置的读盘、校验、字段级 patch 保存 | 校验必须拿目录的 scopeID 当集合，不许放宽 |
 | `internal/app` | 对外契约（DTO 形状 + 7 个稳定错误码）与 Hosts 路径/写权限探测 | 内部 cause 不进 JSON，前端不解析中文文案 |
 | `internal/event` | 运行状态事件的独占序号与事件名 | 不注册成服务，前端推不动序号 |
@@ -77,24 +78,26 @@ main ──> app.Service ──┬──> catalog（启动 Load 一次）
 
 ## 5. 缺口清单（图上画成断线/紫虚线的地方）
 
-这几条不是我猜的风险，是代码里现在就是这样：
+这几条不是我猜的风险，是代码里现在就是这样（G1 已于 2026-10-29 闭环，那一行保留是为了记下还剩哪半截；其余各行仍是当时的事实，未复核）。
 
 | # | 缺口 | 证据 | 现在会怎么错 |
 | --- | --- | --- | --- |
-| G1 | 策略注册表没进装配层：没有任何包 import `strategies`，`config.NewStore` 的 strategies 参数硬传 `nil` | `grep accelerator/strategies` 零命中；`app.go:67` | 任何「默认方法」的选择都会被拒；注册错误 `Errors()` 没人取，静默失败 |
+| G1 | 策略注册表**已接进装配层（2026-10-29）**：`internal/app/app.go` 固定导入该包，`newSettingsStore` 的第三个参数从硬传 `nil` 换成 `strategies.IDs()` | 改前 `grep -rn "accelerator/strategies" --include=*.go .` 零命中，改后 2 命中（import + `strategies.IDs()`）；`internal/app/registry_assembly_test.go` 钉形状 | 已消失的错：任何「默认方法」选择都被拒。仍剩的半截：注册错误 `Errors()` 只由测试取，运行时没有把它显示到界面的落点，等有落点了再接 |
 | G2 | `main.go` 仍写死 `appName`、`appVersion`、`appID` 三个字面量，没引用 `internal/identity` | `main.go:23-26` | 改身份要扫多处，正是 identity 包想消灭的那类债 |
 | G3 | `nfpm.yaml`、`build/config.yml`、Taskfile 里的包名/图标名/桌面项路径仍是抄写 | `Taskfile.yml:4`（`APP_NAME: "github-net"`）、`build/linux/Taskfile.yml:177`（`DESKTOP_ID: 'io.github.xiaokentrl.githubnet'`）、`build/linux/nfpm/nfpm.yaml:6,9,21-25` | 同上；且 DesktopID 与 AppID 的一致性只有 `internal/identity` 的测试在守 |
 | G4 | 五套主题在后端设置里能存，界面只移植了 `light` | `App.tsx:24-35` | 已用「显示 light + 一句说明」兜住，不假装切换成功；但仍是待补 |
 | G5 | 检测/DNS 能力没接：`GetAppStatus` 里 `DNSDetectionReady` 恒为 `false` | `app.go:117-118` | 状态栏如实报「没接」，不会显示成已检测 |
-| G6 | Hosts 写入、备份、还原整段没实现；`partial`/`applied` 两档目前不会由后端产出 | `dto.go:44-64` 注释 + `privilege.go:10-21` | 只读态安全；等写入接上要重新核对判档 |
+| G6 | Hosts 写入、备份、还原**落盘那半边仍未实现**；判定与还原的纯逻辑已落但零调用点（2026-10-29：`renderer.go`、`backup.go`、`transaction.go`） | `dto.go:44-64` 注释 + `privilege.go:10-21`；调用点核验 `grep -rn "hosts\\.Render\\|hosts\\.Apply\\|RestoreItem\\|RestoreAll" main.go internal/app` → 0 命中 | 只读态安全；`partial`/`applied` 仍不会由后端产出。接线时要翻转 `dto.go:130-172` 那条「拿不到可比对写入摘要就判 conflict」的兜底，并重新核对判档 |
 | G7 | arm64、Windows、macOS、真机（非容器）未进门禁 | `ci.yml` 全文 4 条作业（前端构建、后端检查、linux-x64 出包过门、debian:13 复核），后两条跑在 `ubuntu:26.04` / `debian:13` 容器里，没有任何实机或其它架构作业 | CI 绿不等于在这些环境能跑 |
 | G8 | 出包不在 CI 里：`ci.yml` 没有任何打包步骤，deb 只有本地推送链产出 | `ci.yml` 全文；`build/linux/Taskfile.yml:153-166`（`wails3 tool package`）+ `pre-push-reinstall.sh:80` | 想发版时没有「CI 一键出包」这条路，产物只在开发者机器上生成 |
 | G9 | 打包元数据仍是 Wails 模板残留：`homepage: https://wails.io`、桌面项 `Keywords=wails`、`Categories=Development;` | `nfpm.yaml:15` `build/linux/io.github.xiaokentrl.githubnet.desktop:6,8` `build/linux/Taskfile.yml` 的 `CATEGORIES: 'Development;'` | 用户在使用手册页/应用菜单里看到的归类与主页是错的；`generate:dotdesktop` 每次重新生成都会把这些字面量写回入库文件 |
 
+**这一轮（2026-10-29 备份与事务纯逻辑）故意没动的地方**：`dependencies.dot`、`dependencies.svg`、`runtime-topology.*` 里 `internal/hosts` 那颗节点仍写「区段只读解析」。原因是这三张图画的是**跑着的路径**，而新落的 `Render`/`Apply`/`RestoreItem`/`RestoreAll`/`Check`/`Digest` 在 `main.go` 与 `internal/app` 里 0 命中（上面 G6 就是这条命令的产物）——把它们画成已接的运行节点会让图说谎。等接线那轮再一起改标签并重新出图。
+
 ## 6. 我还不知道的（需要人确认或实测）
 
-- **108 还是 130**：`MaxCandidateProbesLimit = 108` 是代码里的硬上限，你那边还没落句（`config.go:31-33`）。
-- **托盘两个开关、工具栏 A/B 方案、cleanup-actions 是否删历史、五个未引用资源**：都还等落句，图上没画成结论。
+- **108 还是 130**：**已落句（2026-10-29）**——默认 130、可填上限 1040，按目录去重后 65 个 hostname × 档位候选上限 2／16 现算，不再是 `config.go` 里那份抄自原型的 108。取值推导与两道 parity 门见 `TECHNICAL_PLAN.md` 5.1。
+- **托盘两个开关、工具栏 A/B 方案、cleanup-actions 是否删历史、五个未引用资源**：**同一轮全部落句**（分别为不加、B 案、`keep` 1→10、五个删掉），图上不再是未定案；细则见 `TECHNICAL_PLAN.md` 阶段二末尾「七项待落句一次落定」。仍等一句的是 `frontend/Inter Font License.txt`（字体许可文本，资源删了它成了孤儿，但不在点名的五个里）和「关窗口＝退出」要不要改成收进托盘。
 - **WebKitGTK 是否真的另起渲染进程**、**前端资源走自定义 scheme 还是本地回环**：两条都是按框架常识的推断（confidence: medium），本仓库代码不体现。要确认只能实机看进程树与监听套接字。
 - **Wayland 下托盘与单例锁的实际行为**：代码接上了，但「匹配条件成立」不等于已验收，实机无人眼走查。
 - **「其余 14 个仍是契约」这个 14**：直接引自 `client.ts:2` 的注释口径，本轮没有在代码里逐个数过 18 这个总数，属规划文档的说法。
@@ -104,6 +107,7 @@ main ──> app.Service ──┬──> catalog（启动 Load 一次）
 1. 改了代码就重跑这几条取证，再逐份对照更新（**别只改图**）。下面每条都在 2026-10-28 原样实跑过，右侧是当轮结果：
    ```bash
    # 注册表有没有进运行时（0 命中 = G1 仍未接线）
+   # 2026-10-29 重跑：2 命中（internal/app/app.go 的 import 与 strategies.IDs()），G1 已闭环
    grep -rn "accelerator/strategies" --include=*.go .
 
    # main.go 有没有引用身份常量（0 命中 = G2 仍在写死字面量）

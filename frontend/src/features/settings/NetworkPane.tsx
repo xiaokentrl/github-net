@@ -7,10 +7,12 @@ import { PROFILE_IDS, profileLabel, profileLimitText, profileNote, profileSpec }
 import type { SaveState } from '../../hooks/useSettingsSave'
 import styles from './SettingsDialog.module.css'
 
-// 和后端 internal/config 的 MinCandidateProbes / MaxCandidateProbesLimit 一致；
-// 后端也会再校验一次，这里只负责在发送前把明显越界的输入挡住并说清原因。
+// 和后端 internal/config 的 MinCandidateProbes / MaxCandidateProbesLimit 一致，
+// 由 internal/app/budget_parity_test.go 钉成相等；后端也会再校验一次，
+// 这里只负责在发送前把明显越界的输入挡住并说清原因。
+// 1040 = 目录去重后 65 个主机名 × 完整档每项 16 个候选，是完整档跑满一轮全量所需的次数。
 const CANDIDATE_MIN = 1
-const CANDIDATE_MAX = 108
+const CANDIDATE_MAX = 1040
 
 // 网络与流量：档位三选一 + 每轮候选 IP 上限。每个控件改完立刻保存，
 // 所以没有「保存」按钮；改动只落到配置里，不会在这里发起任何检测。

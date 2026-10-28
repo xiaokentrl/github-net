@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/xiaokentrl/github-net/internal/accelerator/strategies"
 	"github.com/xiaokentrl/github-net/internal/catalog"
 	"github.com/xiaokentrl/github-net/internal/config"
 	"github.com/xiaokentrl/github-net/internal/hosts"
@@ -61,14 +62,15 @@ func NewService(appName, version string, sequence func() int64) *Service {
 	return s
 }
 
-// newSettingsStore 用目录里的 scopeID 作为校验集合；方法注册表还没实现，
-// 所以已注册方法集合是空的——任何默认方法选择都会被拒，不会静默接受。
+// newSettingsStore 用目录里的 scopeID 和方法注册表里的已注册方法作为校验集合。
+// 注册表靠各策略文件的 init 登记，所以这里必须真的引用它一次，那张表才是填好的。
+// 校验集合为空时任何「某范围默认用某方法」的保存都会被拒——不静默接受一个点不到的方法。
 func newSettingsStore(c *catalog.Catalog) (*config.Store, error) {
 	path, err := config.Path()
 	if err != nil {
 		return nil, err
 	}
-	return config.NewStore(path, c.ScopeIDs(), nil), nil
+	return config.NewStore(path, c.ScopeIDs(), strategies.IDs()), nil
 }
 
 // RuntimeInfo 返回当前进程的真实运行环境，供前端显示与绑定链路自检。

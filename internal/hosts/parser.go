@@ -1,5 +1,5 @@
-// Package hosts 只读解析系统 Hosts 文件里属于本工具的管理区段。
-// 只读不写：写入、备份、事务和还原属后面的特权服务阶段。
+// Package hosts 判读并渲染系统 Hosts 文件里属于本工具的管理区段。
+// 本包一个字节都不写盘：写盘、备份、事务和还原属后面的特权服务阶段。
 package hosts
 
 import (
@@ -55,6 +55,11 @@ type Block struct {
 	Reason  string
 	Version int
 	Records []Record
+
+	// beginAt / endAt 是两枚标记行在 splitLines 结果里的下标，渲染阶段靠它们原地替换区段，
+	// 免得第二处再扫一遍标记、两边判读口径漂开。只有 Parse 的成功路径会填。
+	beginAt int
+	endAt   int
 }
 
 // Usable 表示区段结构没问题、Records 可信。没有区段也算可用，那时就是零条记录。
@@ -82,6 +87,15 @@ func (b Block) HasRecord(hostname string) bool {
 func NormalizeHostname(hostname string) string {
 	host := strings.ToLower(strings.TrimSpace(hostname))
 	return strings.TrimSuffix(host, ".")
+}
+
+// validHostname 是主机名的唯一判定：规范化后非空、不含路径/端口这类字符、本身不是 IP。
+// 读区段和渲染区段共用这一条，两边不会出现「读得进但写不出」的口径差。
+func validHostname(host string) bool {
+	if host == "" || strings.ContainsAny(host, "/@:*") {
+		return false
+	}
+	return net.ParseIP(host) == nil
 }
 
 // Parse 从 Hosts 全文里找出本工具的管理区段并读出的记录。
@@ -125,7 +139,7 @@ func Parse(content string) Block {
 	}
 
 	records, anomaly, reason := readRecords(lines[begin.index+1:end.index], begin.index+2)
-	block := Block{Present: true, Version: ManagedVersion, Records: records}
+	block := Block{Present: true, Version: ManagedVersion, Records: records, beginAt: begin.index, endAt: end.index}
 	if anomaly != AnomalyNone {
 		block.Anomaly = anomaly
 		block.Reason = reason
@@ -159,7 +173,7 @@ func readRecords(lines []string, firstLine int) ([]Record, Anomaly, string) {
 		hostnames := make([]string, 0, len(fields)-1)
 		for _, field := range fields[1:] {
 			host := NormalizeHostname(field)
-			if host == "" || strings.ContainsAny(host, "/@:*") || net.ParseIP(host) != nil {
+			if !validHostname(host) {
 				return nil, AnomalyBadRecord, badLineText(lineNumber)
 			}
 			hostnames = append(hostnames, host)
