@@ -30,7 +30,6 @@ const (
 
 func main() {
 	emitter := &event.StatusEmitter{}
-	service := appsvc.NewService(appName, appVersion, emitter.Sequence)
 	ctx, cancel := context.WithCancel(context.Background())
 	windowFocusRequests := make(chan struct{}, 1)
 	windowReady := make(chan struct{})
@@ -62,9 +61,6 @@ func main() {
 		Linux: application.LinuxOptions{
 			ApplicationID: appID,
 		},
-		Services: []application.Service{
-			application.NewService(service),
-		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
@@ -74,6 +70,12 @@ func main() {
 			}
 		},
 	})
+
+	// 服务在应用建好之后才装配：任务队列的进度事件要投递到已经存在的事件总线上。
+	// RegisterService 只在 Run 之前有效，这里仍在 Run 之前，注册顺序与原来写在 Options 里一致。
+	emitProgress := func(name string, payload any) { platformApp.Event.Emit(name, payload) }
+	service := appsvc.NewService(appName, appVersion, emitter.Sequence, emitProgress)
+	platformApp.RegisterService(application.NewService(service))
 
 	unsubscribeDockReopen = platformApp.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) {
 		requestWindowFocus()
@@ -133,6 +135,7 @@ func main() {
 	})
 	cleanup = func() {
 		cancel()
+		appsvc.ShutdownTaskQueue(service)
 		unsubscribeStatus()
 		unsubscribeDockReopen()
 		unsubscribeStartup()

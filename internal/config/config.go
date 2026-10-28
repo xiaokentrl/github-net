@@ -240,6 +240,22 @@ func ProfileCandidateLimit(profile string) (int, bool) {
 	return 0, false
 }
 
+// ProfileConcurrency 返回档位决定的「同一时刻最多几个网络请求」。
+// 完整档不给超过 8：8 是规划定的安全硬上限，提高并发只会加大瞬时带宽与同时连接压力，
+// 换不来更多候选覆盖（候选数由上一那个函数管）。
+// 检测执行编排按这个数字开工作协程，前端那份说明文字必须和它相等。
+func ProfileConcurrency(profile string) (int, bool) {
+	switch profile {
+	case ProfileLow:
+		return 2, true
+	case ProfileStandard:
+		return 8, true
+	case ProfileFull:
+		return 8, true
+	}
+	return 0, false
+}
+
 // readState 区分四种读取结果，决定是走默认值、拒绝改写还是备份重置。
 type readState int
 

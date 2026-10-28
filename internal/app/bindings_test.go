@@ -6,7 +6,7 @@ import (
 )
 
 func TestRuntimeInfoReturnsRealEnvironment(t *testing.T) {
-	svc := NewService("GitHub Net", "0.1.0", func() int64 { return 7 })
+	svc := NewService("GitHub Net", "0.1.0", func() int64 { return 7 }, nil)
 
 	info, err := svc.RuntimeInfo()
 	if err != nil {
@@ -24,7 +24,7 @@ func TestRuntimeInfoReturnsRealEnvironment(t *testing.T) {
 }
 
 func TestRuntimeInfoWithoutSequenceProvider(t *testing.T) {
-	svc := NewService("GitHub Net", "0.1.0", nil)
+	svc := NewService("GitHub Net", "0.1.0", nil, nil)
 
 	info, err := svc.RuntimeInfo()
 	if err != nil || info.StatusSequence != 0 {
@@ -33,7 +33,7 @@ func TestRuntimeInfoWithoutSequenceProvider(t *testing.T) {
 }
 
 func TestPingRejectsEmptyToken(t *testing.T) {
-	svc := NewService("GitHub Net", "0.1.0", nil)
+	svc := NewService("GitHub Net", "0.1.0", nil, nil)
 
 	if _, err := svc.Ping("   "); err == nil {
 		t.Fatal("空令牌应当返回错误")

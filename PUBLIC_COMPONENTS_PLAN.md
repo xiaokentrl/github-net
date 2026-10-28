@@ -76,7 +76,7 @@
 
 | 文件 | 方法或内容 | 责任与边界 |
 |---|---|---|
-| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`getTasks`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则。现状（2026-10-27，正式页面迁移第一屏）：这一层已建，包了后端已接的 4 个命令（`getAppStatus`、`getItems`、`getSettings`、`saveSettings`），纵向样例面板连同它对绑定的直接 `import` 一起删掉了，工程里只剩这一处调用入口；本表其余 14 个命令在后端仍是契约，所以没有为它们写空壳封装。现状（2026-10-28，设置中心第二屏）：`saveSettings` 的入参从「只有档位」扩成 `SettingsPatch` 四个可缺省字段（`networkProfile`、`maxCandidateProbesPerRun`、`sidebarWidth`、`queueHeight`），没给的字段在后端 `Patch` 里是 `null`＝这次不改，所以改宽度不会清零网络设置；仍然只传 `expectedRevision` 和 `mutationID`，写入链路没变。现状（2026-10-28，Hosts 只读接入）：这一层四个命令的签名和调用方式都没动，只有 `getItems` 返回值里的 `hosts` 从占位 `unknown` 换成后端现读出来的真状态（`status`/`revision`/`readAt`/可选 `message`） |
+| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`getTasks`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则。现状（2026-10-27，正式页面迁移第一屏）：这一层已建，包了后端已接的 4 个命令（`getAppStatus`、`getItems`、`getSettings`、`saveSettings`），纵向样例面板连同它对绑定的直接 `import` 一起删掉了，工程里只剩这一处调用入口；本表其余 14 个命令在后端仍是契约，所以没有为它们写空壳封装。现状（2026-10-28，设置中心第二屏）：`saveSettings` 的入参从「只有档位」扩成 `SettingsPatch` 四个可缺省字段（`networkProfile`、`maxCandidateProbesPerRun`、`sidebarWidth`、`queueHeight`），没给的字段在后端 `Patch` 里是 `null`＝这次不改，所以改宽度不会清零网络设置；仍然只传 `expectedRevision` 和 `mutationID`，写入链路没变。现状（2026-10-28，Hosts 只读接入）：这一层四个命令的签名和调用方式都没动，只有 `getItems` 返回值里的 `hosts` 从占位 `unknown` 换成后端现读出来的真状态（`status`/`revision`/`readAt`/可选 `message`）。现状（2026-10-29，队列命令层）：这一层一个导入、一个函数都没动，只改了一句注释——「只登记后端已接好的 4 个命令，其余 14 个仍是契约」在后端涨到 11 条之后就成了错话，改成「后端 11 条／这一层仍只登记界面用得上的 4 条／队列那 7 条还没生成前端绑定」。本表 18 个名字里前端此刻真能调到的仍是 4 个：绑定 TS 要跑 `wails3 generate bindings -ts` 才会出现新条目，本轮没跑，也没手写空壳 |
 | `frontend/src/api/errors.ts` | `toAppError`、`getErrorMessage` | 把调用异常整理成稳定错误码和可展示文案；保留原错误供日志，不能改成成功或空数据。现状（2026-10-27）：已建，按后端线格式 `code: message[: 原因]` 拆码，认得全部 7 个稳定错误码，认不出的归 `unknown` 并保留原文；组件只拿到码和可展示文案 |
 | `frontend/src/api/events.ts` | `subscribeTaskProgress` | 订阅带单调递增 `sequence` 的 `TaskProgress` 事件（不是命令接口）并返回取消订阅函数；组件或 hook 销毁时必须调用。现状（2026-10-27）：文件已建，但里面是运行状态事件 `subscribeRuntimeStatus`（事件名 `app:runtime-status` 只在这一处出现，组件不再直接 `import` `@wailsio/runtime`）；`subscribeTaskProgress` 等任务队列接通后端再加，不提前放空壳 |
 | `frontend/src/utils/format.ts` | `formatLatency`、`formatBytes`、`formatDuration`、`formatTimestamp` | 统一数值和时间格式，单位明确，日期数字走 `Intl`；不显示没有下载实测依据的“下载速度” |
@@ -92,7 +92,7 @@
 | `frontend/src/features/tasks/taskEvents.ts` | 任务事件到 task store 的映射 | `api/events.ts` 负责底层订阅和取消；任务事件映射留在任务功能内，不额外建立通用 `useTaskEvents` hook |
 | `frontend/src/stores/settingsStore.ts` | 持久配置快照、draft、保存状态和更新 action | 所有需跨重启保留的设置（包括独立的 `detectFocusFollow`、`applyFocusFollow`）通过后端 `GetSettings`、`SaveSettings` 保存；前端不得以 `localStorage` 建立副本。现状（2026-10-28，设置中心第二屏）：文件还没建，也不打算为空表放空壳——配置快照目前只有 `app/App.tsx` 一个持有者（`useState`），保存状态与冲突处理抽进了 `hooks/useSettingsSave.ts`；等出现第二个需要跨功能共享同一份配置快照的调用方（任务队列、检测区）再落成 store，届时这一份快照仍只有一个来源 |
 | `frontend/src/features/tasks/taskStore.ts` | `replaceTaskSnapshot`、`upsertTask`、`removeTask`、`markTaskCancelled`、`removeFinishedTasks`、`tasksForItem` | 任务状态唯一来源；终态集合为成功、跳过、失败、回滚、取消、已恢复。快照和事件按 sequence 合并；“查看日志”只筛选当前内存队列中该项目的记录，不承诺跨清理或重启保留 |
-| `internal/detector/probe.go` | `ProbeTCP`、`ProbeHTTPS` | 单候选探测接收 `context` 截止时间；HTTPS 保留 SNI/主机名和证书校验。多个候选由策略层提交给共享有界 worker pool，不在每个策略中另造并发框架 |
+| `internal/detector/probe.go` | `ProbeTCP`、`ProbeHTTPS` | 单候选探测接收 `context` 截止时间；HTTPS 保留 SNI/主机名和证书校验。多个候选由策略层提交给共享有界 worker pool，不在每个策略中另造并发框架。**已落（2026-10-29，只被检测编排调用、无生产入口）**：两步共用一份 2 秒期限，九档失败分类，只握手不发请求。**并发闸现已落（2026-10-29，`internal/accelerator`）**：每轮按档位的并发数开工作协程，硬上限 8 在后端校验，候选队列顺序稳定，所以「谁没排上」有唯一答案 |
 | `frontend/src/features/*/*Selectors.ts` | 功能内纯查询方法 | 仅放同一功能里被多个组件复用的筛选、排序和派生状态，不建跨功能万能 selector |
 | `frontend/src/styles/tokens.css` | 颜色、间距、尺寸、圆角、层级和焦点令牌 | 唯一全站视觉令牌来源；组件引用变量，不复制样式常量 |
 
@@ -133,8 +133,8 @@
 | `config` | 读取、校验、迁移和保存用户配置 | 配置写入失败要返回错误 |
 | `task` | 管理任务 ID、状态、进度、取消和清理 | 不包含 DNS 或文件操作细节 |
 | `event` | 把任务进度和状态变化发给前端 | 事件字段稳定、数据最少、进度有限频 |
-| `accelerator` | 自动收集、选择和路由独立加速方法 | 策略同包自注册；新增一种方法不修改中心清单或其他功能代码 |
-| `detector` | 域名解析、连通性探测和候选排序 | 不写 Hosts，不吞掉失败原因 |
+| `accelerator` | 自动收集、选择和路由独立加速方法 | 策略同包自注册；新增一种方法不修改中心清单或其他功能代码。现状（2026-10-29）：根包落了检测执行编排（`budget.go` 一轮预算、`detect.go` 串取候选与探测），注册表已进应用装配层；新增一种方法仍只加一个 `strategies/*.go` 文件，不用改本包任何中心清单。下面那两行规划的 `model.go`/`service.go` 还没建，也不会在只有编排这一条流程时先建一层空壳——方法选择由设置服务存、由调用方把选中的方法递进编排。整包仍零生产调用点 |
+| `detector` | 域名解析、连通性探测和候选排序 | 不写 Hosts，不吞掉失败原因。现状（2026-10-29）：连通性探测已落（`probe.go`，被检测编排调用、仍无生产入口）；解析仍在策略包内、公共排序未建 |
 | `hosts` | 解析、备份、合并、写入、验证和还原 Hosts | 只改带本工具标记的记录 |
 | `platform` | 提供平台信息、Hosts 路径、权限查询、辅助服务生命周期、打开文件和 DNS 刷新 | 各系统实现分开；不定义 IPC 协议，也不执行任意命令 |
 | `privilege` | 持有固定 IPC 协议、校验请求并调用受限特权辅助服务 | 只提供白名单 Hosts 操作，不接受任意路径或命令 |
@@ -172,19 +172,22 @@
 
 | 文件 | 规划方法 | 复用范围 |
 |---|---|---|
-| `internal/app/bindings.go` | `GetAppStatus`、`GetItems`、`GetStrategies`、`DetectItems`、`SelectStrategy`、`ApplyItems`、`RestoreItems`、`OpenHosts`、`GetSettings`、`SaveSettings`、`CancelTask`、`GetTasks`、`PauseQueue`、`ResumeQueue`、`RetryFailedTasks`、`ClearFinishedTasks`、`ClearQueue`、`CheckForUpdates` | 与技术规划中的 18 个命令接口逐项对应；检查请求并转给业务服务 |
+| `internal/app/app.go` | `GetAppStatus`、`GetItems`、`GetSettings`、`SaveSettings`（已接）；`GetStrategies`、`DetectItems`、`SelectStrategy`、`ApplyItems`、`RestoreItems`、`OpenHosts`、`CheckForUpdates`（仍是契约） | 与技术规划里 18 个命令逐项对应；检查请求并转给业务服务。现状（2026-10-29）：这一层没有叫 `bindings.go` 的文件，命令按主题分文件放在同一个包里，不为一个空壳新建文件 |
+| `internal/app/queue.go` | `GetTasks`、`PauseQueue`、`ResumeQueue`、`CancelTask`、`RetryFailedTasks`、`ClearFinishedTasks`、`ClearQueue` | 队列的调用面（**2026-10-29 已接**）：只转发给 `internal/task` 那把锁并翻译错误码，自己不计账。返回形状按失败面分三档——`GetTasks`/`PauseQueue`/`ResumeQueue`/`ClearFinishedTasks` 只回快照 `{tasks, sequence, paused}` 不带错误，`CancelTask`/`ClearQueue` 回 `(快照, 错误)`，`RetryFailedTasks` 回逐项结果数组。空 ID 报 `invalid_task_id`、队列里没有报 `task_not_found`、已终态要取消报 `task_finished`、有任务在跑要清空报 `queue_running`；另外两个哨兵只有 `Enqueue` 会抛，排任务的入口还没接，本轮不提前建翻译。停队列走包级 `ShutdownTaskQueue` 而不是 `Service` 的方法——Wails 会把每个导出方法都绑成前端能调的命令，`internal/app/queue_test.go` 那道反射门就是拦这个的。排任务的入口还没实现，所以队列现在填不上；构造时注入的执行器只把任务判成「还没接上执行动作」的失败，接上真执行器那一步换掉它 |
 | `internal/app/errors.go` | `ToPublicError` | 把内部错误转换成稳定、可展示的错误码和消息；保留底层原因用于日志 |
 | `internal/catalog/catalog.go` | `Services`、`ItemsForService`、`FindItem`、`ValidateIDs` | 服务、项目、域名和 ID 的唯一来源 |
 | `internal/config/store.go` | `Load`、`Save` | 配置读写、原子保存及明确报错 |
 | `internal/config/defaults.go` | `DefaultConfig` | 唯一默认值来源；新安装默认省流、自动检测关闭 |
 | `internal/config/validate.go` | `Validate` | 校验配置范围、服务 ID 和已注册的方法 ID |
 | `internal/config/migrate.go` | `Migrate` | 把旧配置逐版本迁移到当前结构 |
-| `internal/task/manager.go` | `Start`、`Get`、`List`、`Pause`、`Resume`、`Cancel`、`RetryFailed`、`ClearFinished`、`ClearAll` | 暂停只阻止领取新等待任务，不中断执行中任务；重试创建关联原任务的新 ID；`ClearFinished` 只移除终态，可与其他任务并行；`ClearAll` 清除包括排队任务在内的全部记录，但有执行中任务时拒绝 |
-| `internal/task/transition.go` | `CanTransition`、`Transition` | 集中检查合法状态变化，不重复散落条件判断 |
-| `internal/event/publisher.go` | `Publish`、`PublishTaskProgress` | 统一事件结构和限频；任务状态仍由 task 管理 |
-| `internal/detector/resolver.go` | `Resolve` | 可取消、有超时的系统 DNS 解析；首期不自动向第三方解析器发送查询 |
-| `internal/detector/probe.go` | `ProbeTCP`、`ProbeHTTPS` | 共享候选连通性检测；HTTPS 保留主机名和证书验证 |
-| `internal/detector/ranking.go` | `RankCandidates` | 统一排序候选，不把不同方法的评分硬合并 |
+| `internal/task/manager.go` | `Start`、`Get`、`List`、`Pause`、`Resume`、`Cancel`、`RetryFailed`、`ClearFinished`、`ClearAll` | 暂停只阻止领取新等待任务，不中断执行中任务；重试创建关联原任务的新 ID；`ClearFinished` 只移除终态，可与其他任务并行；`ClearAll` 清除包括排队任务在内的全部记录，但有执行中任务时拒绝。现状（2026-10-29）：这套要求落在 `internal/task/queue.go`＋`task.go`，没有叫 `manager.go` 的文件；对得上的名字是 `Pause`/`Resume`/`Cancel`/`RetryFailed`/`ClearFinished`/`ClearQueue`，`Start`/`Get`/`List` 三个由 `Enqueue` 与 `Snapshot` 承担——快照一次给全部记录，没有单条查询入口，界面上「查看日志」就是在这份快照里按项目筛 |
+| `internal/task/transition.go` | `CanTransition`、`Transition` | 集中检查合法状态变化，不重复散落条件判断。现状（2026-10-29）：文件未建。合法状态变化现在由 `queue.go` 里那三处判断承担——`IsTerminal`（终态不回退）、`IsActive`（在途占位）、`runStatus`（按任务类型定执行中显示哪一档），全库只有这一份定义，没散落第二处；等出现第四处要判状态转换时再抽这个文件 |
+| `internal/event/publisher.go` | `Publish`、`PublishTaskProgress` | 统一事件结构和限频；任务状态仍由 task 管理。现状（2026-10-29）：没有 `publisher.go`，任务事件这一路是 `internal/event/task.go` 的 `TaskEmitter.PublishProgress`，事件名 `task:progress` 只写在那一个常量里；限频没做，也不该做——队列事件是状态转换和终态，一条都不能丢 |
+| `internal/detector/resolver.go` | `Resolve` | 可取消、有超时的系统 DNS 解析；首期不自动向第三方解析器发送查询。现状（2026-10-29）：文件未建，这几条要求现在由 `internal/accelerator/strategies/hosts_dns_lookup.go` 满足（`Resolver` 接缝接 `net.DefaultResolver`、2 秒预算、失败分类不记录查询域名）；等第二个加速方法出现再决定要不要抽成公共模块 |
+| `internal/detector/probe.go` | `ProbeTCP`、`ProbeHTTPS` | 共享候选连通性检测；HTTPS 保留主机名和证书验证。**已落（2026-10-29）**：`Target{IP, Hostname, Port}` → `Result{OK, LatencyMS, TLSMS, Verified, Kind, Detail}`；只接 IP 字面量（不是 IP 就当场拒，一次都不拨号）、TCP 与 TLS 共用一份 2 秒期限、只握手不发请求、九档失败各配一句不含主机名与地址的文案。**已由检测执行编排逐候选调用（2026-10-29，`internal/accelerator/detect.go`）**：每条候选都带着自己的 hostname 交给 `ProbeHTTPS`，不注入探测接缝时默认就是它；编排本身还没有生产入口，所以真探测一次都没跑过 |
+| `internal/detector/ranking.go` | `RankCandidates` | 统一排序候选，不把不同方法的评分硬合并。现状（2026-10-29）：文件未建；现在只有策略内部那一步排序——把一次解析的结果去重、IPv4 排前、同族按字节升序、IPv6 去掉 zone，不是跨方法的评分合并 |
+| `internal/accelerator/budget.go` | `MaxConcurrency`、`ItemDeadline`、`BudgetFor`、`Budget` | 一轮检测的预算从哪来：`BudgetFor(设置, 本轮唯一主机名数)` 算出每主机名候选上限、并发数、`Needed`（理论需要）、`MaxProbes = min(Needed, 用户总上限)` 和 `Short`（盖不住就标出来，弹窗确认那一步属界面）；`validate()` 是开跑前的最后一道门——并发 1 到 8、每主机名候选不越过完整档那个数、预算不许大于理论需要，硬上限在后端不在前端。现状（2026-10-29）：**已落但零生产调用点**；单项 5 秒是常量而不是配置项，测试换它用的是一个不导出的内部旋钮，生产代码从配置或接口都调不到 |
+| `internal/accelerator/detect.go` | `NewRunner`、`Runner.Run`、`CandidateStatus`、`Progress`、`Observer`、`Input`、`Result` | 把「取候选」和「验候选」串成一轮：加速方法的 `Lookup` 与探测接缝都由调用方注入（探测不注入就用 `detector.ProbeHTTPS`），先并发解析、全部解析结束后再按稳定顺序并发探测；预算只在实际启动探测那一刻扣减，解析次数另算；八档逐候选状态（排队中、检测中、可用、不可用、超时、已取消、因总时限未开始、未检测）每次转换立刻发一条带序号事件，三条收口路径（预算用完、期限到点、用户取消）也逐条发；取消只看上层 context、期限到点只看本轮期限，两个字段分开报；一个域名解析失败只影响它那几行；所有往界面上去的句子都不含被查主机名和地址。现状（2026-10-29）：**已落但零生产调用点**，一行不写 Hosts、不改系统任何状态；接进队列和那 7 个命令要等真实网络放行那一句 |
 | `internal/hosts/parser.go`、`renderer.go` | `Parse`、`Render` | 统一解析和生成版本化管理区段；标记异常或用户改动冲突时拒绝覆盖，区段外用户记录原样保留。现状（2026-10-29）：`parser.go` 已建并只读接入——`Parse(content)` 返回 `Block{Present, Anomaly, Reason, Version, Records}`，加 `HasRecord(hostname)`、`NormalizeHostname(hostname)`；标记固定为 v1 那一对，缺一端/重复/嵌套/顺序错/版本未知/区段内非法行全部归进 `Anomaly` 并带行号，解析本身不报错。`renderer.go` **已落但没接线**——`Render(content, desired)` 只算字符串：区段外逐行原样保留、无标记时只追加、判读不了就回 `ErrConflict`、待写记录规范化＋去重＋稳定排序；本包现在仍然不写盘，`main.go`/`internal/app` 没有一处引用它 |
 | `internal/hosts/manager.go` | `Read` | 现状（2026-10-28）：已建。只读打开指定路径并把内容、读取时刻交给 `Parse`，失败（路径为空、文件不存在、无读权限、指向目录）归进 `Snapshot.ReadErr` 一句话，不 panic；选系统路径不是它的活（由 `internal/app` 的 `HostsPath()` 决定） |
 | `internal/hosts/backup.go` | `Recovery`、`Digest`、`Check`、`Marshal`、`UnmarshalMetadata` | `backups/hosts/` 里那唯一一份恢复元数据的形状与判定：`Recovery{SchemaVersion, Original, Digest, Entries, Projects}`；`Digest` 比规范化后的映射集合而不是字节；`Check` 给 clean/matched/conflict 三档加一句可直接显示的原因；`Marshal`/`UnmarshalMetadata` 两端各把一次形状门（版本不认识、未知字段、排序或规范化不对、认领项目与快照对不上账都整体拒）。现状（2026-10-29）：**已落但没接线**——本包不读写这个目录，落盘、原子替换与删除前重新校验都还没做 |

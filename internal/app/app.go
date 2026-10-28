@@ -10,6 +10,7 @@ import (
 	"github.com/xiaokentrl/github-net/internal/catalog"
 	"github.com/xiaokentrl/github-net/internal/config"
 	"github.com/xiaokentrl/github-net/internal/hosts"
+	"github.com/xiaokentrl/github-net/internal/task"
 )
 
 // Service 是暴露给前端的唯一门面；这里只放前端确实需要的读操作。
@@ -34,11 +35,17 @@ type Service struct {
 	hostsPath  string
 	hostsReads atomic.Int64
 
+	// tasks 是内存任务队列。它在进程生命周期里只建一次，重启即清空——
+	// 队列不落地，没有历史文件可读可写。
+	tasks *task.Queue
+
 	// stamp 是这份构建自带的 VCS 标记，进程活着就不会变，所以构造时读一次。
 	stamp buildStamp
 }
 
-func NewService(appName, version string, sequence func() int64) *Service {
+// NewService 建暴露给前端的门面。taskEmit 是队列进度事件的投递出口，
+// 装配层传 Wails 事件总线的 Emit；测试和还没接总线的阶段传 nil，表示不发事件。
+func NewService(appName, version string, sequence func() int64, taskEmit func(name string, payload any)) *Service {
 	if sequence == nil {
 		sequence = func() int64 { return 0 }
 	}
@@ -52,6 +59,7 @@ func NewService(appName, version string, sequence func() int64) *Service {
 		// 加载失败时 c 是 nil，先把错误留下，读接口再负责翻译成人能看懂的错误码。
 		productCatalogErr: err,
 		hostsPath:         HostsPath(),
+		tasks:             newTaskQueue(taskEmit),
 		stamp:             currentBuildStamp(),
 	}
 	if err == nil {

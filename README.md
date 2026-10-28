@@ -109,17 +109,17 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 │   └── identity/            # 取值小命令：给脚本和构建项读产品身份（--key / --shell）
 ├── internal/
 │   ├── app/                 # 暴露给前端的接口、DTO 和错误转换
-│   ├── accelerator/         # 【部分建】加速流程协调与按服务的方法路由（根包还没写，目前只有 strategies/）
-│   │   └── strategies/      # 加速方法单文件自注册：契约、注册表与 dns-hosts（注册表已进应用装配层，检测执行路径还没上）
+│   ├── accelerator/         # 【部分建】检测执行编排已落（budget.go 算一轮预算、detect.go 串起取候选与验候选，管并发/时限/逐候选状态与事件）；没接队列与界面，根包零生产调用点
+│   │   └── strategies/      # 加速方法单文件自注册：契约、注册表与 dns-hosts（注册表已进应用装配层；编排层已落，但整条检测路径还没有生产入口）
 │   ├── catalog/             # 服务、项目、域名等产品数据（catalog.json）
 │   ├── config/              # 用户配置：校验、revision、原子保存
-│   ├── detector/            # 【未建】DNS 解析、候选探测与排序
+│   ├── detector/            # 【部分建】候选连通性与证书校验（probe.go，已被检测编排调用，仍无生产入口）；DNS 解析仍在策略包内、候选排序未建
 │   ├── event/               # 给前端推事件的统一出口
 │   ├── hosts/               # Hosts 管理区段判读、渲染、恢复元数据与事务逻辑（都已落但没接线，本包不写盘）
 │   ├── identity/            # 产品名字的唯一手写源：户口层常量、派生路径与钉死它们的金标准测试
 │   ├── platform/            # 【未建】Windows/macOS/Linux 系统差异适配
 │   ├── privilege/           # 【未建】受限特权辅助服务的 IPC 客户端与协议
-│   ├── task/                # 【未建】任务生命周期、取消与进度
+│   ├── task/                # 【已落但没接线】内存任务队列：串行执行、九档状态、取消/暂停/重试/两项清理，事件序号与快照水位同源；做事的动作交给注入的执行器，现在还没人注入
 │   └── updater/             # 【未建】稳定版检查与更新包校验
 ├── frontend/
 │   ├── bindings/            # Wails 生成的绑定（不手改）
@@ -268,17 +268,17 @@ Entries marked [not built] exist only in the plan — those directories are not 
 │   └── identity/            # Small value command: lets scripts and build steps read the product identity (--key / --shell)
 ├── internal/
 │   ├── app/                 # Frontend-facing API, DTOs and error mapping
-│   ├── accelerator/         # [partly built] Acceleration flow and per-service method routing (only strategies/ exists)
-│   │   └── strategies/      # Acceleration methods, one file each: contract, registry and dns-hosts (registry is now wired into the app assembly; no execution path calls it yet)
+│   ├── accelerator/         # [partly built] detection orchestration landed: budget.go works out one round's budget, detect.go chains candidate lookup with probing and owns concurrency, the 5-second item deadline, per-candidate statuses and sequenced events; not wired to the queue or the UI, no production callers yet
+│   │   └── strategies/      # Acceleration methods, one file each: contract, registry and dns-hosts (the registry is wired into the app assembly; the orchestration layer exists, but the detection path still has no production entry point)
 │   ├── catalog/             # Product data: services, items, domains (catalog.json)
 │   ├── config/              # User config: validation, revision, atomic saves
-│   ├── detector/            # [not built] DNS resolution, candidate probing and ranking
+│   ├── detector/            # [partly built] candidate reachability and certificate checks (probe.go, now called by the detection orchestration; still no production entry point); DNS still lives in the strategy package, ranking not built
 │   ├── event/               # Single outlet for events pushed to the frontend
 │   ├── hosts/               # Hosts managed-block parsing, rendering, recovery metadata and transaction logic (built, not wired; this package writes nothing)
 │   ├── identity/            # The only handwritten source of product names: identity constants, derived paths and the golden test that pins them
 │   ├── platform/            # [not built] Windows/macOS/Linux system adapters
 │   ├── privilege/           # [not built] Restricted privileged helper IPC client and protocol
-│   ├── task/                # [not built] Task lifecycle, cancellation and progress
+│   ├── task/                # [built, not wired] in-memory queue: serial execution, nine statuses, cancel/pause/retry/two cleanups, event sequence shared with the snapshot watermark; work happens through an injected executor and nothing injects one yet
 │   └── updater/             # [not built] Stable-release checks and update verification
 ├── frontend/
 │   ├── bindings/            # Wails-generated bindings (do not edit by hand)

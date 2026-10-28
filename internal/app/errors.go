@@ -6,6 +6,7 @@ import (
 
 	"github.com/xiaokentrl/github-net/internal/catalog"
 	"github.com/xiaokentrl/github-net/internal/config"
+	"github.com/xiaokentrl/github-net/internal/task"
 )
 
 // 稳定的对外错误码；前端按码判断失败原因，不解析中文文案。
@@ -17,6 +18,14 @@ const (
 	CodeRevisionConflict   = "revision_conflict"
 	CodeSettingsSaveFailed = "settings_save_failed"
 	CodeConfigSchemaNewer  = "config_schema_newer"
+
+	// 队列这一组的码：前端按码分支，不解析中文。
+	// 这里只翻现在真能抛出来的那三个哨兵；队列的 ErrQueueStopped 和 ErrInvalidRequest 只有
+	// Enqueue 会抛，而排任务的入口还没接，提前给它们建翻译等于写一条没人走到的分支。
+	CodeInvalidTaskID = "invalid_task_id"
+	CodeTaskNotFound  = "task_not_found"
+	CodeTaskFinished  = "task_finished"
+	CodeQueueRunning  = "queue_running"
 )
 
 // Error 带稳定错误码。cause 是不导出的字段：它只给日志和 errors.Is 用，
@@ -72,6 +81,19 @@ func ToPublicError(err error) *Error {
 	if errors.Is(err, config.ErrInvalid) {
 		return NewError(CodeInvalidSettings, settingDetail(err), err)
 	}
+	if errors.Is(err, task.ErrTaskNotFound) {
+		// 队列层那句原话带任务 ID，界面只给一句不重复 ID 的话：ID 是调用方自己传进来的，
+		// 再回显一遍没有信息量，还会让「哪一步没对上」这件事更难看清。
+		return NewError(CodeTaskNotFound, "队列里已经没有这条任务记录，可能已经被清理了", err)
+	}
+	if errors.Is(err, task.ErrTaskFinished) {
+		return NewError(CodeTaskFinished, "这条任务已经到了终态，不能再取消", err)
+	}
+	if errors.Is(err, task.ErrQueueRunning) {
+		return NewError(CodeQueueRunning, "有任务正在执行，这时候清空队列会让它从界面上消失", err)
+	}
+	// 队列另外两个哨兵 ErrQueueStopped 和 ErrInvalidRequest 只有 Enqueue 会抛，
+	// 而排任务的入口（DetectItems/ApplyItems/RestoreItems）还没接，这里不提前给它们建翻译。
 	return NewError(CodeInternal, "操作失败，请稍后重试", err)
 }
 

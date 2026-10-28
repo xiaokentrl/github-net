@@ -314,7 +314,7 @@ func TestToPublicErrorBranches(t *testing.T) {
 }
 
 func TestGetItemsServesCatalogWithHonestStatus(t *testing.T) {
-	s := NewService("github-net", "test", nil)
+	s := NewService("github-net", "test", nil, nil)
 	// 指向临时文件，测试不读真实的 /etc/hosts：这台机器上的 Hosts 会变，断言不能跟着变。
 	path := filepath.Join(t.TempDir(), "hosts")
 	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n127.0.1.1 kentrl\n"), 0o600); err != nil {
@@ -378,7 +378,7 @@ func TestGetItemsServesCatalogWithHonestStatus(t *testing.T) {
 
 // revision 是「第几次读」的计数：前端靠它丢掉旧快照，所以每次读都必须比上一次大。
 func TestGetItemsRevisionIncreasesPerRead(t *testing.T) {
-	s := NewService("github-net", "test", nil)
+	s := NewService("github-net", "test", nil, nil)
 	path := filepath.Join(t.TempDir(), "hosts")
 	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0o600); err != nil {
 		t.Fatalf("写临时 Hosts 失败：%v", err)
@@ -402,7 +402,7 @@ func TestGetItemsRevisionIncreasesPerRead(t *testing.T) {
 }
 
 func TestGetItemsFailsWithStableCodeWhenCatalogIsBroken(t *testing.T) {
-	s := NewService("github-net", "test", nil)
+	s := NewService("github-net", "test", nil, nil)
 	s.productCatalog = nil
 	s.productCatalogErr = fmt.Errorf("%w: 缺字段", catalog.ErrInvalid)
 
@@ -424,7 +424,7 @@ func TestGetItemsFailsWithStableCodeWhenCatalogIsBroken(t *testing.T) {
 
 // 前端已按这条文本断言，改错误格式时这里必须先红：错误码常量的值不许漂移。
 func TestEmptyTokenWireTextAndCode(t *testing.T) {
-	s := NewService("github-net", "test", nil)
+	s := NewService("github-net", "test", nil, nil)
 	_, err := s.Ping("   ")
 	if err == nil {
 		t.Fatal("空令牌应被拒绝")

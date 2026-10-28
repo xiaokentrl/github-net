@@ -260,7 +260,7 @@ func TestServiceWithoutSettingsStoreAlwaysReturnsError(t *testing.T) {
 // 用真实装配路径（NewService，配置写到临时目录）验：dns-hosts 存得进去，没注册的方法和不在目录里的范围照样被拒。
 func TestStrategyChoicesUseTheRealRegistryAfterAssembly(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	s := NewService("github-net", "test", nil)
+	s := NewService("github-net", "test", nil, nil)
 	if s.settingsErr != nil {
 		t.Fatalf("装配失败：%v", s.settingsErr)
 	}
@@ -283,7 +283,7 @@ func TestStrategyChoicesUseTheRealRegistryAfterAssembly(t *testing.T) {
 	if saved.Accelerator.DefaultStrategyByScope["github"] != "dns-hosts" {
 		t.Errorf("保存结果没带上选择：%+v", saved.Accelerator)
 	}
-	reopened := NewService("github-net", "test", nil)
+	reopened := NewService("github-net", "test", nil, nil)
 	again, err := reopened.GetSettings()
 	if err != nil {
 		t.Fatal(err)

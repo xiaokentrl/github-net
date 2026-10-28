@@ -1,6 +1,7 @@
 package config
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -40,7 +41,9 @@ func TestFrontendCandidateBoundsEqualBackendRange(t *testing.T) {
 }
 
 // 档位数字漂开的后果不是报错，是界面那句「一轮全量需要 N 次、还差 M 次」算错，
-// 用户照着错话去调预算。所以三档的每主机名候选上限也要两边相等。
+// 用户照着错话去调预算。所以三档的每主机名候选上限和并发数也要两边相等：
+// 候选上限管「一共试多少个」，并发数管「同一时刻试几个」，检测执行编排真的按后者开工作协程，
+// 前端只写一个更大的数就是「界面说有 8 路、实际只有 2 路」。
 func TestFrontendProfileCandidateLimitsEqualBackend(t *testing.T) {
 	root := repoRoot(t)
 	src := readSource(t, root, profileOptionsFile)
@@ -50,22 +53,42 @@ func TestFrontendProfileCandidateLimitsEqualBackend(t *testing.T) {
 		t.Fatalf("档位清单应当只声明一次，实际 %d 次", len(idsLine))
 	}
 	ids := strings.Split(strings.ReplaceAll(idsLine[0], "'", ""), ",")
-	limits := matchLines(t, src, `^\s*(?:low|standard|full): \{ candidates: (\d+), concurrency: \d+ \},$`, "前端档位每主机名候选上限")
-	if len(limits) != len(ids) {
-		t.Fatalf("前端档位数字条目 %d 条，档位清单 %d 条，对不上", len(limits), len(ids))
+	bodies := matchLines(t, src, `^\s*(?:low|standard|full): \{ ([^}]+) \},$`, "前端档位数字条目")
+	if len(bodies) != len(ids) {
+		t.Fatalf("前端档位数字条目 %d 条，档位清单 %d 条，对不上", len(bodies), len(ids))
 	}
 	for i, id := range ids {
 		id = strings.TrimSpace(id)
-		want, ok := ProfileCandidateLimit(id)
+		wantCandidates, ok := ProfileCandidateLimit(id)
 		if !ok {
 			t.Fatalf("前端档位 %q 后端不认", id)
 		}
-		got, err := strconv.Atoi(limits[i])
-		if err != nil {
-			t.Fatalf("前端档位 %q 的候选上限不是整数：%q", id, limits[i])
+		wantConcurrency, ok := ProfileConcurrency(id)
+		if !ok {
+			t.Fatalf("前端档位 %q 后端不认（并发数）", id)
 		}
-		if got != want {
-			t.Errorf("档位 %s 的每主机名候选上限：前端 %d、后端 %d", id, got, want)
+		gotCandidates := frontendSpec(t, bodies[i], `candidates: (\d+)`, id, "候选上限")
+		gotConcurrency := frontendSpec(t, bodies[i], `concurrency: (\d+)`, id, "并发数")
+		if gotCandidates != wantCandidates {
+			t.Errorf("档位 %s 的每主机名候选上限：前端 %d、后端 %d", id, gotCandidates, wantCandidates)
+		}
+		if gotConcurrency != wantConcurrency {
+			t.Errorf("档位 %s 的并发数：前端 %d、后端 %d", id, gotConcurrency, wantConcurrency)
 		}
 	}
+}
+
+// frontendSpec 从一档的条目正文里取一个数字。取不到或取到多个都算红——
+// 少一个数字＝这一档的这条约束等于没在门里。
+func frontendSpec(t *testing.T, body, expr, profileID, what string) int {
+	t.Helper()
+	m := regexp.MustCompile(expr).FindAllStringSubmatch(body, -1)
+	if len(m) != 1 {
+		t.Fatalf("档位 %s 的%s应当出现一次，实际 %d 次（条目：%q）", profileID, what, len(m), body)
+	}
+	value, err := strconv.Atoi(m[0][1])
+	if err != nil {
+		t.Fatalf("档位 %s 的%s不是整数：%q", profileID, what, m[0][1])
+	}
+	return value
 }
