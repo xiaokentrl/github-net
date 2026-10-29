@@ -53,6 +53,26 @@ export interface CatalogItem {
 }
 
 /**
+ * DetectBudgetPreview 是「这批项目一起测要多少预算」的预估，给界面在启动前展示和确认。
+ */
+export interface DetectBudgetPreview {
+    /**
+     * Needed 是盖住全部项目理论上要的探测次数 = 本轮唯一域名数 × 档位每域名候选上限。
+     */
+    "needed": number;
+
+    /**
+     * Budget 是这一轮实际可用的预算 = min(Needed, 用户总上限)。
+     */
+    "budget": number;
+
+    /**
+     * Shortfall 大于 0 表示预算盖不全：会有这么多探测排不上，对应项目标「预算不足，未检测」。
+     */
+    "shortfall": number;
+}
+
+/**
  * DetectHostView 是一个主机名在这轮里的结果；候选行直接复用 accelerator.Candidate，
  * 它的字段和 JSON 名就是前端候选表的列，再抄一层只会两边各改各的。
  */

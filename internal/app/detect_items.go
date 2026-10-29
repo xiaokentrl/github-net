@@ -3,6 +3,9 @@ package app
 import (
 	"strings"
 
+	"github.com/xiaokentrl/github-net/internal/accelerator"
+	"github.com/xiaokentrl/github-net/internal/catalog"
+	"github.com/xiaokentrl/github-net/internal/config"
 	"github.com/xiaokentrl/github-net/internal/task"
 )
 
@@ -48,12 +51,7 @@ func (s *Service) DetectItems(itemIDs []string) ([]task.Task, error) {
 	if err != nil {
 		return nil, ToPublicError(err)
 	}
-	type pending struct {
-		id      string
-		name    string
-		scopeID string
-	}
-	batch := make([]pending, 0, len(ids))
+	batch := make([]detectCandidate, 0, len(ids))
 	for _, id := range ids {
 		item, scopeID, ok := s.findItem(id)
 		if !ok {
@@ -73,12 +71,18 @@ func (s *Service) DetectItems(itemIDs []string) ([]task.Task, error) {
 			return nil, NewError(CodeNoStrategySelected,
 				"选的方法不适用于这个项目所在的服务，换一个方法再检测", nil)
 		}
-		batch = append(batch, pending{id: id, name: item, scopeID: scopeID})
+		batch = append(batch, detectCandidate{id: id, name: item, scopeID: scopeID})
 	}
 
+	// 一次入口调用就是一轮：这一批项目共享一份候选探测预算。
+	// 预算 = min(本轮唯一域名数 × 档位每域名候选上限, 用户总上限)，账本建在轮上。
+	roundID := ""
+	if s.rounds != nil {
+		roundID = s.newDetectRound(cfg, batch)
+	}
 	tasks := make([]task.Task, 0, len(batch))
 	for _, p := range batch {
-		t, err := s.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: p.id, Name: p.name, ScopeID: p.scopeID})
+		t, err := s.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: p.id, Name: p.name, ScopeID: p.scopeID, RoundID: roundID})
 		if err != nil {
 			// 排到一半失败只剩「应用正在退出」这一种：队列关了。前面已排进去的是有效任务，
 			// 会随队列关闭被取消，不静默装作整批成功。
@@ -102,18 +106,107 @@ func (s *Service) GetDetectResult(itemID string) (DetectResultView, error) {
 	return detectResultEmptyView(id), nil
 }
 
-// findItem 按项目 ID 取显示名和所属加速范围。目录是唯一来源，这里不做第二份索引：
-// 目录规模是几十个条目，线性找足够快，先不建索引制造第二份要同步的东西。
-func (s *Service) findItem(itemID string) (name string, scopeID string, ok bool) {
+// lookupItem 按项目 ID 取显示名、所属加速范围和完整条目。
+// 目录是唯一来源，这里不做第二份索引：目录规模是几十个条目，线性找足够快，
+// 先不建索引制造第二份要同步的东西。
+func (s *Service) lookupItem(itemID string) (name string, scopeID string, item catalog.Item, ok bool) {
 	if s.productCatalog == nil {
-		return "", "", false
+		return "", "", catalog.Item{}, false
 	}
 	for _, category := range s.productCatalog.Categories {
-		for _, item := range category.Items {
-			if item.ID == itemID {
-				return item.Name, category.ScopeID, true
+		for _, it := range category.Items {
+			if it.ID == itemID {
+				return it.Name, category.ScopeID, it, true
 			}
 		}
 	}
-	return "", "", false
+	return "", "", catalog.Item{}, false
+}
+
+// findItem 只要名字和范围的旧形状，给不需要域名清单的调用方。
+func (s *Service) findItem(itemID string) (name string, scopeID string, ok bool) {
+	name, scopeID, _, ok = s.lookupItem(itemID)
+	return name, scopeID, ok
+}
+
+// detectCandidate 是入口校验后待排队的项目。
+type detectCandidate struct {
+	id      string
+	name    string
+	scopeID string
+}
+
+// newDetectRound 按本轮全部项目的唯一域名数建共享预算，返回轮 ID。
+// 预算公式来自技术规划：min(本轮唯一目标域名数 × 档位每域名候选上限, 用户总上限)。
+func (s *Service) newDetectRound(cfg config.Config, batch []detectCandidate) string {
+	hostnames := make(map[string]bool)
+	for _, p := range batch {
+		_, _, item, ok := s.lookupItem(p.id)
+		if !ok {
+			continue
+		}
+		for _, h := range uniqueHostnames(item.Hostnames) {
+			hostnames[h] = true
+		}
+	}
+	count := len(hostnames)
+	if count == 0 {
+		return s.rounds.newRound(0)
+	}
+	b, err := accelerator.BudgetFor(cfg, count)
+	if err != nil {
+		// 预算算不出来就给最保守的一份：只够一个域名按档位走，别放开闸。
+		return s.rounds.newRound(1)
+	}
+	return s.rounds.newRound(b.MaxProbes)
+}
+
+// DetectBudgetPreview 是「这批项目一起测要多少预算」的预估，给界面在启动前展示和确认。
+type DetectBudgetPreview struct {
+	// Needed 是盖住全部项目理论上要的探测次数 = 本轮唯一域名数 × 档位每域名候选上限。
+	Needed int `json:"needed"`
+	// Budget 是这一轮实际可用的预算 = min(Needed, 用户总上限)。
+	Budget int `json:"budget"`
+	// Shortfall 大于 0 表示预算盖不全：会有这么多探测排不上，对应项目标「预算不足，未检测」。
+	Shortfall int `json:"shortfall"`
+}
+
+// DetectBudget 预估一批项目的共享预算，不排队、不发起检测。
+// 界面在 Shortfall > 0 时先请用户确认，再调 DetectItems。
+func (s *Service) DetectBudget(itemIDs []string) (DetectBudgetPreview, error) {
+	if s.productCatalogErr != nil {
+		return DetectBudgetPreview{}, ToPublicError(s.productCatalogErr)
+	}
+	if s.settings == nil {
+		return DetectBudgetPreview{}, s.settingsFailure()
+	}
+	cfg, err := s.settings.Snapshot()
+	if err != nil {
+		return DetectBudgetPreview{}, ToPublicError(err)
+	}
+	seen := make(map[string]bool)
+	hostnames := make(map[string]bool)
+	for _, raw := range itemIDs {
+		id := strings.TrimSpace(raw)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		_, _, item, ok := s.lookupItem(id)
+		if !ok {
+			return DetectBudgetPreview{}, NewError(CodeInvalidItemID, "产品目录里没有这个项目，刷新界面后再试", nil)
+		}
+		for _, h := range uniqueHostnames(item.Hostnames) {
+			hostnames[h] = true
+		}
+	}
+	count := len(hostnames)
+	if count == 0 {
+		return DetectBudgetPreview{}, nil
+	}
+	b, err := accelerator.BudgetFor(cfg, count)
+	if err != nil {
+		return DetectBudgetPreview{}, ToPublicError(err)
+	}
+	return DetectBudgetPreview{Needed: b.Needed, Budget: b.MaxProbes, Shortfall: b.Needed - b.MaxProbes}, nil
 }

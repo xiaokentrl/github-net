@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import { applyItems, detectItems, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile } from '../api/client'
+import { applyItems, detectBudget, detectItems, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile } from '../api/client'
 import { subscribeRuntimeStatus, subscribeUpdateStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
@@ -290,6 +290,28 @@ export function App() {
     })
   }, [])
 
+  // 批量检测：先问后端要预算预估；预算盖不全时按规划先请用户确认，取消就不发。
+  const startDetectAll = useCallback(
+    (items: CatalogItem[]) => {
+      const ids = items.filter((it) => !it.userSupplied && (it.hostnames?.length ?? 0) > 0).map((it) => it.id)
+      if (ids.length === 0) return
+      setDetectError('')
+      detectBudget(ids)
+        .then((budget) => {
+          if (budget.shortfall > 0 && !window.confirm(t('detect.budget.confirm', { needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall }))) {
+            return
+          }
+          return detectItems(ids).catch((err: unknown) => {
+            setDetectError(getErrorMessage(err))
+          })
+        })
+        .catch((err: unknown) => {
+          setDetectError(getErrorMessage(err))
+        })
+    },
+    [],
+  )
+
   const startApply = useCallback((itemId: string) => {
     setHostsError('')
     applyItems([itemId]).catch((err: unknown) => {
@@ -363,12 +385,13 @@ export function App() {
             detectError={detectError}
             hostsError={hostsError}
             onDetect={startDetect}
+            onDetectAll={startDetectAll}
             onApply={startApply}
             onRestore={startRestore}
             onOpenHosts={openHostsFile}
           />
         }
-        queue={<TaskPanel />}
+        queue={<TaskPanel height={settings?.layout.queueHeight ?? null} />}
         updateLatest={updateLatest}
         onOpenUpdate={() => openSettings('updates')}
         statusbar={

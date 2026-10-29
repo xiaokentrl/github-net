@@ -161,7 +161,7 @@ func detectStore(t *testing.T, defaults map[string]string) *config.Store {
 // 结果存储每个用例新给一份；事件发布器给 nil，测试不用总线。
 func newDetectExecutorForTest(t *testing.T, store *config.Store, probe accelerator.ProbeFunc) *detectExecutor {
 	t.Helper()
-	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil)
+	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil, nil, nil)
 }
 
 func detectCandidates() map[string][]strategies.Candidate {

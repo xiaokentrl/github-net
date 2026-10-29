@@ -140,15 +140,41 @@ type Runner struct {
 	probe  ProbeFunc
 	obs    Observer
 	now    func() time.Time
+	// gate 是跨任务共享的并发闸（nil = 不设闸）：每次真正的 DNS 查询和候选探测
+	// 都要先拿到闸里的一个位。多条检测任务并行时，全进程同时活动的网络请求
+	// 也不过闸的容量——「全任务最多 8 个活动请求」的硬上限在网络上收口，而不是在任务数上。
+	gate chan struct{}
+}
+
+// NewGate 建一个容量为 n 的共享并发闸。n 是进程级网络并发的硬上限。
+func NewGate(n int) chan struct{} {
+	if n < 1 {
+		n = 1
+	}
+	return make(chan struct{}, n)
+}
+
+// acquire 拿闸里的一个位，返回放回函数。gate 为 nil 时空操作。
+func (r *Runner) acquire() func() {
+	if r.gate == nil {
+		return func() {}
+	}
+	r.gate <- struct{}{}
+	return func() { <-r.gate }
 }
 
 // NewRunner 建一个执行器。lookup 必须给（取候选的方式由用户选的方法决定）；
 // probe 给 nil 就用探测层的 HTTPS 那条，这是规划里唯一的可用判据。
 func NewRunner(lookup LookupFunc, probe ProbeFunc, obs Observer) *Runner {
+	return NewRunnerGated(lookup, probe, obs, nil)
+}
+
+// NewRunnerGated 同 NewRunner，另接受一个跨任务共享的并发闸；测试和单任务场景传 nil。
+func NewRunnerGated(lookup LookupFunc, probe ProbeFunc, obs Observer, gate chan struct{}) *Runner {
 	if probe == nil {
 		probe = detector.ProbeHTTPS
 	}
-	return &Runner{lookup: lookup, probe: probe, obs: obs, now: time.Now}
+	return &Runner{lookup: lookup, probe: probe, obs: obs, now: time.Now, gate: gate}
 }
 
 // Run 跑一轮检测：一个项目、若干个主机名、按传入的预算执行。
@@ -254,7 +280,9 @@ func (d *detection) resolveOne(i int) {
 	d.emitLocked(ho, nil, PhaseResolving, "")
 	d.mu.Unlock()
 
+	release := d.runner.acquire()
 	out, err := d.runner.lookup(d.runCtx, strategies.Input{Hostname: hostname, Max: d.budget.PerHostname})
+	release()
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -309,7 +337,9 @@ func (d *detection) probeAll() {
 				if !ok {
 					return
 				}
+				release := d.runner.acquire()
 				res, err := d.runner.probe(d.runCtx, detector.Target{IP: row.IP, Hostname: row.Hostname})
+				release()
 				d.settle(row, hostIdx, res, err)
 			}
 		}()

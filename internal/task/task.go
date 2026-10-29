@@ -77,6 +77,9 @@ type Task struct {
 	Name       string `json:"name"`
 	ScopeID    string `json:"scopeId,omitempty"`
 	StrategyID string `json:"strategyId,omitempty"`
+	// RoundID 把同一轮批量检测的任务串在一起：它们共享一份候选探测预算，
+	// 由发起这次批量动作的入口创建。单项检测也有自己的轮次；空串只在旧记录里出现。
+	RoundID    string `json:"roundId,omitempty"`
 	Status     Status `json:"status"`
 	Phase      string `json:"phase,omitempty"`
 	PhaseText  string `json:"phaseText,omitempty"`
@@ -101,6 +104,7 @@ type NewRequest struct {
 	Name       string
 	ScopeID    string
 	StrategyID string
+	RoundID    string
 }
 
 // Outcome 是执行器交回的结果。

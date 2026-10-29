@@ -31,7 +31,12 @@ func (pendingExecutor) Execute(_ context.Context, _ task.Task, _ task.Report) ta
 // Wails 会把 Service 的每个导出方法都当成命令绑给前端，而「停掉队列」不该是前端能点的东西。
 // 所以停止走下面那个包级函数，由 main.go 在退出时调用。
 func newTaskQueue(exec task.Executor, emit func(name string, payload any)) *task.Queue {
-	return task.NewQueue(exec, event.NewTaskEmitter(emit))
+	return newTaskQueueLaned(exec, emit, 1)
+}
+
+// newTaskQueueLaned 同 newTaskQueue，另指定检测任务的并行上限（应用/恢复恒串行）。
+func newTaskQueueLaned(exec task.Executor, emit func(name string, payload any), detectLane int) *task.Queue {
+	return task.NewQueueLaned(exec, event.NewTaskEmitter(emit), detectLane)
 }
 
 // GetTasks 返回队列快照和 sequence 水位。它只读内存里的一把锁，没有失败面，所以不返回错误。

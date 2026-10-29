@@ -62,6 +62,7 @@ func TestDownloadUpdateVerifiesAndHandsOff(t *testing.T) {
 	defer srv.Close()
 
 	svc := newUpdateService(t, srv.URL+"/releases/latest", pub)
+	opened := withOpenSeam(t, svc)
 	info, err := svc.CheckForUpdates()
 	if err != nil {
 		t.Fatalf("检查: %v", err)
@@ -69,6 +70,10 @@ func TestDownloadUpdateVerifiesAndHandsOff(t *testing.T) {
 	result, err := svc.DownloadUpdate(info)
 	if err != nil {
 		t.Fatalf("下载并校验不该失败: %v", err)
+	}
+	// 校验通过后必须把安装包交给系统安装流程，且交给的就是落盘那颗。
+	if len(*opened) != 1 || (*opened)[0] != result.Path {
+		t.Fatalf("该把安装包交给系统安装流程一次: %v", *opened)
 	}
 	if result.Size != int64(len(deb)) {
 		t.Fatalf("回给界面的大小和资产声明对不上: %+v", result)
@@ -182,4 +187,16 @@ func newUpdateService(t *testing.T, baseURL string, pub ed25519.PublicKey) *Serv
 	c := updater.NewClient()
 	c.SetBaseURL(baseURL)
 	return &Service{updater: c, pubKey: pub}
+}
+
+// withOpenSeam 把「请系统打开文件」换成记录函数：CI 容器里没有 xdg-open，
+// 更不该在测试里真弹安装器；断言只看交接有没有发生、交给的是不是那个文件。
+func withOpenSeam(t *testing.T, svc *Service) *[]string {
+	t.Helper()
+	opened := []string{}
+	svc.openPath = func(path string) error {
+		opened = append(opened, path)
+		return nil
+	}
+	return &opened
 }

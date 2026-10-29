@@ -39,12 +39,16 @@ type detectExecutor struct {
 	results *detectResultStore
 	// pub 把候选级状态变化原样发给前端；nil 表示不发（测试和没接总线的场景）。
 	pub *event.DetectEmitter
+	// gate 是跨任务共享的网络并发闸：多条检测并行时，全进程活动网络请求仍不过闸容量。
+	gate chan struct{}
+	// rounds 是批量检测共享预算的账本；nil 等价于「每任务不受轮预算约束」（旧测试路径）。
+	rounds *roundBudgets
 }
 
 // newDetectExecutor 建检测执行器。调用方必须在产品目录和设置服务都准备好之后再来建：
 // 目录读不出来时任何检测都没有可查的项目，那种情况队列该继续用 pendingExecutor。
-func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter) *detectExecutor {
-	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub}
+func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter, gate chan struct{}, rounds *roundBudgets) *detectExecutor {
+	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub, gate: gate, rounds: rounds}
 }
 
 // detectItem 是一个项目在目录里跟这一轮有关的两件事：能检测的域名和它所属的加速范围。
@@ -87,15 +91,32 @@ func (e *detectExecutor) Execute(ctx context.Context, t task.Task, report task.R
 	if err != nil {
 		return detectFailure("这一轮的检测预算和当前设置对不上，这一轮没有开始")
 	}
+	// 从本轮批量动作的共享预算里取自己这份：规划说「单项、批量、服务范围共用预算执行路径」，
+	// 预算是每轮一份，不是每任务一份——54 项共享 108 次，不是各 108 次。
+	// 取到 0 说明预算被前面的项目用完了：明确标「预算不足，未检测」，不静默跳过。
+	grant := len(item.hostnames) * budget.PerHostname
+	if e.rounds != nil && t.RoundID != "" {
+		grant = e.rounds.take(t.RoundID, grant)
+		if grant == 0 {
+			return task.Outcome{Status: task.StatusSkipped, Message: "预算不足，未检测；调高每轮候选上限或缩小范围后重试"}
+		}
+		if grant < budget.MaxProbes {
+			budget.MaxProbes = grant
+		}
+	}
 
 	// 一轮一个 Runner：观察者的落点是这一条任务的进度回调，挂在队列那个唯一执行者给的 report 上；
 	// 候选级事件经 pub 原样转发给前端。两个出口都在检测那把锁内被调，顺序稳定。
-	runner := accelerator.NewRunner(strategy.Lookup, e.probe, &progressBridge{report: report, pub: e.pub})
+	runner := accelerator.NewRunnerGated(strategy.Lookup, e.probe, &progressBridge{report: report, pub: e.pub}, e.gate)
 	result, err := runner.Run(ctx, accelerator.Input{ItemID: t.ItemID, Hostnames: item.hostnames}, budget)
 	if err != nil {
 		// 一轮没跑起来的错误都是「调用方给错了东西」那几类（预算与范围对不上、方法没实现），
 		// 原始错误里没有用户能用来下一步的信息，也不保证不含域名，所以这里只给人话不给 err.Error()。
 		return detectFailure("这一轮检测没能跑起来，检查设置后重试")
+	}
+	// 没用完的预算还给轮：后面的项目能多测几个。取消/期限到点同样只还实际没用到的。
+	if e.rounds != nil && t.RoundID != "" {
+		e.rounds.release(t.RoundID, grant-result.ProbesUsed)
 	}
 	// 跑完的结论交给结果存储，详情页从那里取。取消的那轮也存：已完成的那部分候选
 	// 是真实测出来的东西，界面上该留着看。nil 结果（没跑起来）存储自己会拒收。

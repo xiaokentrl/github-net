@@ -118,3 +118,25 @@
 .error {
   color: var(--red);
 }
+
+.progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.progress::before {
+  content: '';
+  width: 0.6rem;
+  height: 0.6rem;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--primary);
+  border-radius: 999px;
+  animation: queue-spin 0.9s linear infinite;
+}
+
+@keyframes queue-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

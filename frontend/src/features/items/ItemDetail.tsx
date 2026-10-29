@@ -41,6 +41,7 @@ export function ItemDetail({
   detectError,
   hostsError,
   onDetect,
+  onDetectAll,
   onApply,
   onRestore,
   onOpenHosts,
@@ -52,6 +53,7 @@ export function ItemDetail({
   detectError: string
   hostsError: string
   onDetect: (itemId: string) => void
+  onDetectAll: (items: CatalogItem[]) => void
   onApply: (itemId: string) => void
   onRestore: (itemId: string) => void
   onOpenHosts: () => void
@@ -122,6 +124,16 @@ export function ItemDetail({
           >
             {detecting ? t('detect.running') : t('detect.start')}
           </button>
+          {category && (category.items ?? []).length > 1 ? (
+            <button
+              type="button"
+              disabled={detecting}
+              onClick={() => onDetectAll(category.items ?? [])}
+              title={t('detect.allHint', { count: (category.items ?? []).length })}
+            >
+              {t('detect.all', { count: (category.items ?? []).length })}
+            </button>
+          ) : null}
           {detecting && live ? (
             <span className={detectStyles.live}>
               {t('detect.live', { done: live.done, total: live.total, active: live.active })}

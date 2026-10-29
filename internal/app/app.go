@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/xiaokentrl/github-net/internal/accelerator"
 	"github.com/xiaokentrl/github-net/internal/accelerator/strategies"
 	"github.com/xiaokentrl/github-net/internal/catalog"
 	"github.com/xiaokentrl/github-net/internal/config"
@@ -48,6 +49,9 @@ type Service struct {
 	// detectResults 存每个项目最近一轮的检测结论，详情页的候选表从它取。
 	detectResults *detectResultStore
 
+	// rounds 是批量检测共享预算的账本（每轮一份，内存态）。
+	rounds *roundBudgets
+
 	// detectReady 表示检测执行器已经换装（目录和设置都就绪）。
 	// 它决定 GetAppStatus 的 DNSDetectionReady，前端据此放开检测入口。
 	detectReady bool
@@ -64,6 +68,10 @@ type Service struct {
 
 	// autostart 是开机自启动的平台实现；测试注入假实现。
 	autostart platform.Autostart
+
+	// openPath 是「请系统打开本地文件」的接缝：nil 即真实实现（xdg-open 等）。
+	// 测试注入记录函数，免得 CI 容器里真去弹系统安装器。
+	openPath func(path string) error
 
 	// strategyTable 是方法注册表的读取接缝，零值即生产行为（读包级全局表）。
 	// 声明在 Service 上而不是每个命令各自读包级函数，是为了让方法选择区的
@@ -82,6 +90,9 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	}
 	c, err := catalog.Load()
 	results := newDetectResultStore()
+	rounds := newRoundBudgets()
+	// 全进程网络并发闸：无论多少条检测任务并行，同时活动的 DNS/IP 请求不过 8 个。
+	probeGate := accelerator.NewGate(accelerator.MaxConcurrency)
 	s := &Service{
 		appName:        appName,
 		version:        version,
@@ -92,6 +103,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 		productCatalogErr: err,
 		hostsPath:         HostsPath(),
 		detectResults:     results,
+		rounds:            rounds,
 		stamp:             currentBuildStamp(),
 	}
 	// 队列的执行动作在目录和设置都就绪时才换上真实检测执行器；缺哪样都先走拒答，
@@ -100,7 +112,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	if err == nil {
 		s.settings, s.settingsErr = newSettingsStore(c)
 		if s.settings != nil {
-			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit))
+			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit), probeGate, rounds)
 			s.detectReady = true
 		}
 	}

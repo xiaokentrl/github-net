@@ -20,6 +20,9 @@ const (
 	CodeUpdateBadData   = "update_bad_data"
 	// update_verify_failed：下载完成但摘要或签名校验没过，包已作废；绝不退回「不验签就装」。
 	CodeUpdateVerifyFailed = "update_verify_failed"
+	// update_handoff_failed：包已下载并验签，但没能交给系统安装流程（多半是没有桌面会话）；
+	// 消息里带安装包路径，用户可以手动装。
+	CodeUpdateHandoffFailed = "update_handoff_failed"
 )
 
 // CheckForUpdates 查 GitHub 最新稳定版并与当前版本比较。
@@ -99,13 +102,19 @@ func (s *Service) DownloadUpdate(info updater.Info) (UpdateDownloadResult, error
 	}
 
 	if err := s.openWithSystem(installerPath); err != nil {
-		return UpdateDownloadResult{}, NewError(CodeHostsFailed, "没能交给系统安装流程："+err.Error(), err)
+		// 下载和校验都成功了，包是好的；只是这一步环境里没有桌面安装流程可交接。
+		// 把路径亮出来，用户可以手动安装——如实说两件事，不把整笔下载说成失败。
+		return UpdateDownloadResult{}, NewError(CodeUpdateHandoffFailed,
+			"安装包已下载并通过校验（"+installerPath+"），但没能交给系统安装流程："+err.Error(), err)
 	}
 	return UpdateDownloadResult{Path: installerPath, Size: installer.Size}, nil
 }
 
 // openWithSystem 请系统打开一个本地文件（安装包交给桌面安装器、Hosts 交给编辑器，同一动作）。
 func (s *Service) openWithSystem(path string) error {
+	if s.openPath != nil {
+		return s.openPath(path)
+	}
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":

@@ -15,6 +15,7 @@ export type {
     AppStatus,
     CatalogCategory,
     CatalogItem,
+    DetectBudgetPreview,
     DetectHostView,
     DetectResultView,
     HostsState,

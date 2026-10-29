@@ -28,9 +28,12 @@ type Queue struct {
 	paused   bool
 	// driving 表示已经有一个驱动协程在领取任务，避免入队时开出第二个执行者。
 	driving bool
-	// running 是当前正在执行的任务 ID，空串代表没有；cancel 用来取消它。
-	running string
-	cancel  context.CancelFunc
+	// 双车道：检测类任务可以并行（上限 detectLane），应用/恢复类严格串行——
+	// 并行写 Hosts 会互相踩。两个车道之间允许并行：检测走网络、应用走特权服务，互不碰同一份状态。
+	applyRunning  string
+	applyCancel   context.CancelFunc
+	detectRunning map[string]context.CancelFunc
+	detectLane    int
 	// stopped 之后不再领取新任务，也不再接受入队。
 	stopped bool
 	wg      sync.WaitGroup
@@ -43,14 +46,25 @@ type entry struct {
 
 // NewQueue 建一个空队列。pub 给 nil 就是不发事件，方便测试和未接线阶段使用。
 func NewQueue(exec Executor, pub Publisher) *Queue {
+	return NewQueueLaned(exec, pub, 1)
+}
+
+// NewQueueLaned 建一条带检测并行的队列：detectLane 是同时执行的检测任务上限
+// （应用的串行车道不受它影响）。lane 给 1 就是「一次只跑一条检测」的旧行为。
+func NewQueueLaned(exec Executor, pub Publisher, detectLane int) *Queue {
 	if pub == nil {
 		pub = nopPublisher{}
 	}
+	if detectLane < 1 {
+		detectLane = 1
+	}
 	return &Queue{
-		exec:    exec,
-		pub:     pub,
-		now:     time.Now,
-		entries: make(map[string]*entry),
+		exec:          exec,
+		pub:           pub,
+		now:           time.Now,
+		entries:       make(map[string]*entry),
+		detectRunning: make(map[string]context.CancelFunc),
+		detectLane:    detectLane,
 	}
 }
 
@@ -92,6 +106,7 @@ func (q *Queue) Enqueue(req NewRequest) (Task, error) {
 		Name:       req.Name,
 		ScopeID:    req.ScopeID,
 		StrategyID: req.StrategyID,
+		RoundID:    req.RoundID,
 		Status:     StatusWaiting,
 	})
 	return t.task, nil
@@ -140,8 +155,10 @@ func (q *Queue) Cancel(taskID string) (Task, error) {
 	e.task.Status = StatusCancelled
 	e.finish(q.now())
 	q.publishLocked(e)
-	if q.running == id && q.cancel != nil {
-		q.cancel()
+	if cancel, ok := q.detectRunning[id]; ok {
+		cancel()
+	} else if q.applyRunning == id && q.applyCancel != nil {
+		q.applyCancel()
 	}
 	return e.task, nil
 }
@@ -173,8 +190,15 @@ func (q *Queue) ClearFinished() int {
 func (q *Queue) ClearQueue() (int, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.running != "" {
-		return 0, fmt.Errorf("%w: %s", ErrQueueRunning, q.running)
+	if q.applyRunning != "" || len(q.detectRunning) > 0 {
+		busy := q.applyRunning
+		if busy == "" {
+			for id := range q.detectRunning {
+				busy = id
+				break
+			}
+		}
+		return 0, fmt.Errorf("%w: %s", ErrQueueRunning, busy)
 	}
 	removed := len(q.order)
 	q.order = nil
@@ -213,6 +237,7 @@ func (q *Queue) RetryFailed(taskIDs []string) []RetryResult {
 				Name:       source.Name,
 				ScopeID:    source.ScopeID,
 				StrategyID: source.StrategyID,
+				RoundID:    source.RoundID,
 				Status:     StatusWaiting,
 				RetryOf:    source.ID,
 			})
@@ -252,8 +277,11 @@ func (q *Queue) Sequence() int64 {
 func (q *Queue) Shutdown() {
 	q.mu.Lock()
 	q.stopped = true
-	if q.cancel != nil {
-		q.cancel()
+	if q.applyCancel != nil {
+		q.applyCancel()
+	}
+	for _, cancel := range q.detectRunning {
+		cancel()
 	}
 	q.mu.Unlock()
 	q.wg.Wait()
@@ -317,8 +345,9 @@ func (q *Queue) pumpLocked() {
 	}
 }
 
-// drive 是唯一的执行者：循环领取队首的等待任务，跑完再领下一条；
-// 没有可领的了（跑完、暂停、被停）就交出驱动身份退出。
+// drive 是唯一的领取者：循环把能领的任务领出来、交给自己的协程去跑，
+// 然后继续领（所以多条检测任务真正并行）。没有可领的了（跑完、暂停、被停、车道满）
+// 就交出驱动身份退出；某条任务跑完时 settle 会重新 pump。
 func (q *Queue) drive() {
 	defer q.wg.Done()
 	for {
@@ -326,25 +355,35 @@ func (q *Queue) drive() {
 		if !claimed {
 			return
 		}
-		outcome := q.exec.Execute(ctx, t, q.reporter(t.ID))
-		if keepGoing := q.settle(t.ID, outcome); !keepGoing {
-			return
-		}
+		q.wg.Add(1)
+		go func(t Task, ctx context.Context) {
+			defer q.wg.Done()
+			outcome := q.exec.Execute(ctx, t, q.reporter(t.ID))
+			q.settle(t.ID, outcome)
+		}(t, ctx)
 	}
 }
 
-// claim 领取队首的等待任务并标成执行中。
-// 暂停、已有任务在跑、队列已停或没有等待任务时返回 false，同时交出 driving 身份。
+// claim 领取「自己的车道还有空位」的第一条等待任务并标成执行中。
+// 应用/恢复车道满（有一条在跑）时不挡后面的检测任务——扫到能领的为止。
+// 暂停、队列已停或全部车道都满时返回 false，同时交出 driving 身份。
 func (q *Queue) claim() (Task, context.Context, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.paused || q.stopped || q.running != "" {
+	if q.paused || q.stopped {
 		q.driving = false
 		return Task{}, nil, false
 	}
 	for _, id := range q.order {
 		e, ok := q.entries[id]
 		if !ok || e.task.Status != StatusWaiting {
+			continue
+		}
+		if e.task.Kind == KindDetect {
+			if len(q.detectRunning) >= q.detectLane {
+				continue
+			}
+		} else if q.applyRunning != "" {
 			continue
 		}
 		e.task.Status = runStatus(e.task.Kind)
@@ -354,7 +393,11 @@ func (q *Queue) claim() (Task, context.Context, bool) {
 		e.task.Phase = ""
 		e.task.PhaseText = ""
 		ctx, cancel := context.WithCancel(context.Background())
-		q.running, q.cancel = id, cancel
+		if e.task.Kind == KindDetect {
+			q.detectRunning[id] = cancel
+		} else {
+			q.applyRunning, q.applyCancel = id, cancel
+		}
 		snapshot := e.task
 		q.publishLocked(e)
 		return snapshot, ctx, true
@@ -385,11 +428,16 @@ func (q *Queue) reporter(id string) Report {
 func (q *Queue) settle(id string, out Outcome) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.cancel != nil {
-		q.cancel()
-		q.cancel = nil
+	if cancel, ok := q.detectRunning[id]; ok {
+		cancel()
+		delete(q.detectRunning, id)
+	} else if q.applyRunning == id {
+		if q.applyCancel != nil {
+			q.applyCancel()
+			q.applyCancel = nil
+		}
+		q.applyRunning = ""
 	}
-	q.running = ""
 	if e, ok := q.entries[id]; ok && IsActive(e.task.Status) {
 		status, message := outcomeStatus(e.task.Kind, out)
 		e.task.Status = status
@@ -397,6 +445,8 @@ func (q *Queue) settle(id string, out Outcome) bool {
 		e.finish(q.now())
 		q.publishLocked(e)
 	}
+	// 车道空出来了：把驱动重新拉起来领下一条（驱动可能早就因为「没得领」退出了）。
+	q.pumpLocked()
 	if q.stopped {
 		q.driving = false
 		return false

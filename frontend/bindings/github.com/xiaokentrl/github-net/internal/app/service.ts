@@ -65,6 +65,14 @@ export function ClearQueue(): $CancellablePromise<task$0.Snapshot> {
 }
 
 /**
+ * DetectBudget 预估一批项目的共享预算，不排队、不发起检测。
+ * 界面在 Shortfall > 0 时先请用户确认，再调 DetectItems。
+ */
+export function DetectBudget(itemIDs: string[] | null): $CancellablePromise<$models.DetectBudgetPreview> {
+    return $Call.ByID(1406865640, itemIDs);
+}
+
+/**
  * DetectItems 把指定项目排进检测队列，返回它们的任务快照。
  * 同一个项目已有等待中/执行中的同任务时直接返回已在的那条（队列去重），
  * 所以连点两次「检测」不会出现两条一样的任务，也不会报错。

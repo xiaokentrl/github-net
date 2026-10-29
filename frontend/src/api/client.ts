@@ -5,6 +5,7 @@ import {
   ApplyItems,
   CancelTask,
   ClearFinishedTasks,
+  DetectBudget,
   ClearQueue,
   DetectItems,
   GetAppStatus,
@@ -17,14 +18,15 @@ import {
   OpenHosts,
   PauseQueue,
   RestoreAllHosts,
+  RetryFailedTasks,
   RestoreItems,
   ResumeQueue,
   SaveSettings,
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/service'
 import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
-import type { AppStatus, DetectResultView, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { AppStatus, DetectBudgetPreview, DetectResultView, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
-import type { Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
+import type { RetryResult, Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { Info as UpdateInfo } from '../../bindings/github.com/xiaokentrl/github-net/internal/updater/models'
 import type { UpdateDownloadResult } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 
@@ -115,6 +117,16 @@ export function clearFinishedTasks(): Promise<Snapshot> {
 
 export function clearQueue(): Promise<Snapshot> {
   return ClearQueue()
+}
+
+// 重试失败/已回滚的应用任务：后端建 retryOf 指回原任务的新任务，原记录保持终态。
+export function retryFailedTasks(taskIds: string[]): Promise<RetryResult[] | null> {
+  return RetryFailedTasks(taskIds)
+}
+
+// 批量检测前的预算预估：Needed 盖不全时界面先请用户确认再发起。
+export function detectBudget(itemIds: string[]): Promise<DetectBudgetPreview> {
+  return DetectBudget(itemIds)
 }
 
 // ===== 应用与还原 =====
