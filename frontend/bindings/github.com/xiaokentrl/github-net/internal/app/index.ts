@@ -21,5 +21,6 @@ export type {
     ItemsSnapshot,
     RuntimeInfo,
     StrategyOption,
-    StrategySnapshot
+    StrategySnapshot,
+    UpdateDownloadResult
 } from "./models.js";

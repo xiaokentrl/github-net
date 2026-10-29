@@ -77,6 +77,15 @@ export function DetectItems(itemIDs: string[] | null): $CancellablePromise<task$
 }
 
 /**
+ * DownloadUpdate 执行「下载并安装」的前半段：下载当前平台安装包 + 签名 + 校验清单，
+ * 双校验（SHA256 摘要 + Ed25519 验签）通过后交给系统桌面安装流程（Linux 上唤起软件安装器）。
+ * 签名校验用的公钥随包分发；应用里没有公钥就拒绝一切升级，绝不退回「不验签」。
+ */
+export function DownloadUpdate(info: updater$0.Info): $CancellablePromise<$models.UpdateDownloadResult> {
+    return $Call.ByID(252774987, info);
+}
+
+/**
  * GetAppStatus 返回平台、Hosts 写权限探测结果、DNS 解析选型和应用版本，
  * 外加这份构建的源码提交时间与哈希（「关于我们」用，来自二进制自带的 VCS 标记）。
  * Hosts 权限只是「能不能打开来写」的探测，本工具当前不写 Hosts；

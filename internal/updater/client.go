@@ -38,13 +38,23 @@ var (
 
 // Info 是一次检查的结论。LatestVersion 只要查到就填（「已是最新」时界面要能显示最新是多少）；
 // 「没查到」不走这里——那是 ErrNoStableRelease，界面上是另一种话。
+// Assets 是这次发布附的文件清单（名字、直链、字节大小），给「下载并安装」用：
+// 界面在下载前把来源和大小亮给用户（技术规划 §7 原话），数据从这里来。
 type Info struct {
-	CurrentVersion  string `json:"currentVersion"`
-	LatestVersion   string `json:"latestVersion,omitempty"`
-	UpdateAvailable bool   `json:"updateAvailable"`
-	ReleaseURL      string `json:"releaseUrl,omitempty"`
-	PublishedAt     string `json:"publishedAt,omitempty"`
-	CheckedAt       string `json:"checkedAt"`
+	CurrentVersion  string        `json:"currentVersion"`
+	LatestVersion   string        `json:"latestVersion,omitempty"`
+	UpdateAvailable bool          `json:"updateAvailable"`
+	ReleaseURL      string        `json:"releaseUrl,omitempty"`
+	PublishedAt     string        `json:"publishedAt,omitempty"`
+	CheckedAt       string        `json:"checkedAt"`
+	Assets          []UpdateAsset `json:"assets,omitempty"`
+}
+
+// UpdateAsset 是发布附的一个文件。
+type UpdateAsset struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+	Size int64  `json:"size"`
 }
 
 // Client 查 GitHub releases。baseURL 可注入（测试）；生产用 ReleasesAPI。
@@ -62,13 +72,23 @@ func NewClient() *Client {
 	}
 }
 
+// SetBaseURL 只给测试用：把查询地址指到假服务器；生产代码一律 NewClient 的默认值。
+func (c *Client) SetBaseURL(url string) { c.baseURL = url }
+
 // release 是 GitHub releases/latest 应答里本包关心的几个字段。
 type release struct {
-	TagName     string `json:"tag_name"`
-	HTMLURL     string `json:"html_url"`
-	PublishedAt string `json:"published_at"`
-	Draft       bool   `json:"draft"`
-	Prerelease  bool   `json:"prerelease"`
+	TagName     string         `json:"tag_name"`
+	HTMLURL     string         `json:"html_url"`
+	PublishedAt string         `json:"published_at"`
+	Draft       bool           `json:"draft"`
+	Prerelease  bool           `json:"prerelease"`
+	Assets      []releaseAsset `json:"assets"`
+}
+
+type releaseAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+	Size               int64  `json:"size"`
 }
 
 // Check 查最新稳定版并与 currentVersion 比较。currentVersion 形如 0.1.0（不带 v 也认）。
@@ -121,6 +141,9 @@ func (c *Client) Check(ctx context.Context, currentVersion string) (Info, error)
 		ReleaseURL:     rel.HTMLURL,
 		PublishedAt:    rel.PublishedAt,
 		CheckedAt:      c.now().UTC().Format(time.RFC3339),
+	}
+	for _, a := range rel.Assets {
+		info.Assets = append(info.Assets, UpdateAsset{Name: a.Name, URL: a.BrowserDownloadURL, Size: a.Size})
 	}
 	info.UpdateAvailable = compareVersion(latest, cur) > 0
 	return info, nil

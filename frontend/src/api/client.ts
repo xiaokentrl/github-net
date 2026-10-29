@@ -13,6 +13,7 @@ import {
   GetSettings,
   GetTasks,
   CheckForUpdates,
+  DownloadUpdate,
   OpenHosts,
   PauseQueue,
   RestoreAllHosts,
@@ -25,6 +26,7 @@ import type { AppStatus, DetectResultView, ItemsSnapshot } from '../../bindings/
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { Info as UpdateInfo } from '../../bindings/github.com/xiaokentrl/github-net/internal/updater/models'
+import type { UpdateDownloadResult } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 
 export type NetworkProfile = 'low' | 'standard' | 'full'
 
@@ -143,4 +145,10 @@ export function openHosts(): Promise<void> {
 
 export function checkForUpdates(): Promise<UpdateInfo> {
   return CheckForUpdates()
+}
+
+// 下载并校验当前平台的安装包，通过后交给系统桌面安装流程；包路径和大小回给界面展示。
+// 只做用户确认过的这一次下载；失败（摘要/签名不过）时安装包已作废，绝不交给系统。
+export function downloadUpdate(info: UpdateInfo): Promise<UpdateDownloadResult> {
+  return DownloadUpdate(info)
 }

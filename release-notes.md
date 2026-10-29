@@ -4,9 +4,9 @@
 
 **Added**
 
-1. Closing the window can now minimize to the tray: the app keeps running and the tray menu brings it back or quits it
-2. The app can start minimized straight to the tray; combined with launch-at-login it stays fully out of sight
-3. Launch at login is live and two new settings panes (tray and startup) complete the settings center
+1. Updates install in one click: the "download and install" action fetches the package, verifies digest and signature, then hands it to the system installer
+2. Verification is a hard gate: bad signature, tampered content, missing signature file or missing public key all refuse and void the package
+3. The release script produces Ed25519 signatures with the public key shipped in the app; nothing downloads or installs silently
 
 **Fixed**
 
@@ -22,9 +22,9 @@ None
 
 **新增**
 
-1. 关窗可以收进托盘：应用继续在后台跑，托盘菜单随时唤回或退出
-2. 启动后可最小化直入托盘，配合开机自启动实现完全无感常驻
-3. 开机自启动上线：登录系统时自动拉起应用；设置中心新增「托盘」「开机自启」两屏
+1. 更新可以一键装了：检测升级屏里「下载并安装」会下载安装包、校验摘要与签名，通过后交给系统安装器完成升级
+2. 校验是硬闸：签名不对、内容被改、没有签名文件或没有公钥一律拒绝，安装包当场作废
+3. 发布脚本出 Ed25519 签名，公钥随应用分发；应用内绝不自动下载或静默安装
 
 **修复**
 

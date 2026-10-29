@@ -221,3 +221,11 @@ export interface StrategySnapshot {
     "revision": number;
     "notices": string[] | null;
 }
+
+/**
+ * UpdateDownloadResult 是「下载并安装」一次成功的结果：落盘路径交给桌面安装器后回给界面展示。
+ */
+export interface UpdateDownloadResult {
+    "path": string;
+    "size": number;
+}

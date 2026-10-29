@@ -1,6 +1,7 @@
 package app
 
 import (
+	"crypto/ed25519"
 	"errors"
 	"runtime"
 	"strings"
@@ -57,6 +58,9 @@ type Service struct {
 
 	// updater 查 GitHub 最新稳定版；测试可注入假实现。
 	updater *updater.Client
+	// pubKey 是随包分发的验签公钥；测试注入自己的测试公钥。
+	// nil 意味着拒绝一切升级——没有公钥的客户端不做「不验签」的下载安装。
+	pubKey ed25519.PublicKey
 
 	// autostart 是开机自启动的平台实现；测试注入假实现。
 	autostart platform.Autostart
@@ -102,6 +106,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	}
 	s.priv = privilege.NewClient()
 	s.updater = updater.NewClient()
+	s.pubKey = updater.PublicKey()
 	s.autostart = platform.NewAutostart()
 	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results), taskEmit)
 	return s

@@ -4,6 +4,8 @@
 /**
  * Info 是一次检查的结论。LatestVersion 只要查到就填（「已是最新」时界面要能显示最新是多少）；
  * 「没查到」不走这里——那是 ErrNoStableRelease，界面上是另一种话。
+ * Assets 是这次发布附的文件清单（名字、直链、字节大小），给「下载并安装」用：
+ * 界面在下载前把来源和大小亮给用户（技术规划 §7 原话），数据从这里来。
  */
 export interface Info {
     "currentVersion": string;
@@ -12,4 +14,14 @@ export interface Info {
     "releaseUrl"?: string;
     "publishedAt"?: string;
     "checkedAt": string;
+    "assets"?: UpdateAsset[] | null;
+}
+
+/**
+ * UpdateAsset 是发布附的一个文件。
+ */
+export interface UpdateAsset {
+    "name": string;
+    "url": string;
+    "size": number;
 }
