@@ -252,6 +252,30 @@ export function App() {
     [settings, submit],
   )
 
+  const changeCloseToTray = useCallback(
+    (enabled: boolean) => {
+      if (!settings || settings.startup.closeToTray === enabled) return
+      submit({ closeToTray: enabled }, t('settings.subject.closeToTray'), 'closeToTray')
+    },
+    [settings, submit],
+  )
+
+  const changeStartMinimized = useCallback(
+    (enabled: boolean) => {
+      if (!settings || settings.startup.startMinimized === enabled) return
+      submit({ startMinimized: enabled }, t('settings.subject.startMinimized'), 'startMinimized')
+    },
+    [settings, submit],
+  )
+
+  const changeAutoStart = useCallback(
+    (enabled: boolean) => {
+      if (!settings || settings.startup.autoStart === enabled) return
+      submit({ autoStart: enabled }, t('settings.subject.autoStart'), 'autoStart')
+    },
+    [settings, submit],
+  )
+
   const openSettings = useCallback((pane: SettingsPaneID) => {
     setDialogPane(pane)
     setDialogOpen(true)
@@ -371,6 +395,9 @@ export function App() {
           onSidebarWidth={changeSidebarWidth}
           onZoom={changeZoom}
           onTheme={changeTheme}
+          onCloseToTray={changeCloseToTray}
+          onStartMinimized={changeStartMinimized}
+          onAutoStart={changeAutoStart}
         />
       )}
     </>

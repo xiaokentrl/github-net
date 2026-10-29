@@ -77,6 +77,13 @@ func main() {
 	service := appsvc.NewService(appName, appVersion, emitter.Sequence, emitProgress)
 	platformApp.RegisterService(application.NewService(service))
 
+	// 启动行为来自用户配置：启动后最小化 → 窗口直接以隐藏方式创建；关窗行为由下面的钩子现读配置。
+	// 配置读不到时按「不最小化」走，和应用其他地方「读不到就用默认值并说明」的口径一致。
+	startMinimized := false
+	if cfg, err := service.GetSettings(); err == nil {
+		startMinimized = cfg.Startup.StartMinimized
+	}
+
 	unsubscribeDockReopen = platformApp.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) {
 		requestWindowFocus()
 	})
@@ -90,6 +97,20 @@ func main() {
 		Height:           800,
 		BackgroundColour: application.NewRGB(247, 248, 250),
 		URL:              "/",
+		// 启动后最小化：窗口直接以隐藏方式创建，托盘里照样能唤回。
+		Hidden: startMinimized,
+	})
+
+	// 关窗到托盘：Linux 上 GTK 的 delete-event 先到这个钩子，Cancel 掉默认销毁、改把窗口藏起来，
+	// 应用继续跑（托盘还在）。开关只信配置现读——运行中改设置立即生效，不维护第二份状态。
+	// 读不到配置按「不拦」处理：关窗是用户明说的动作，别因为读不出偏好把它卡住。
+	window.RegisterHook(events.Linux.WindowDeleteEvent, func(e *application.WindowEvent) {
+		cfg, err := service.GetSettings()
+		if err != nil || !cfg.Startup.CloseToTray {
+			return
+		}
+		e.Cancel()
+		window.Hide()
 	})
 
 	go func() {

@@ -194,6 +194,10 @@ export function RuntimeInfo(): $CancellablePromise<$models.RuntimeInfo> {
 /**
  * SaveSettings 按字段 patch 保存：先比 revision，再校验完整配置，最后原子替换并递增 revision。
  * 失败一律明确返回，前端不能把没落盘的东西显示成已保存。
+ * 
+ * 配置落盘之后还有一类「跟着设置走」的系统副作用：开机自启动的桌面入口。
+ * 它跟在配置后面做，失败了如实报「设置已保存、但这一项没改成」——
+ * 配置是权威，副作用下一轮保存或重启应用还会再对齐。
  */
 export function SaveSettings(patch: config$0.Patch, expectedRevision: number, mutationID: string): $CancellablePromise<config$0.Config> {
     return $Call.ByID(2645721314, patch, expectedRevision, mutationID);

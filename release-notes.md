@@ -4,8 +4,9 @@
 
 **Added**
 
-1. Update check is live: the app checks GitHub for the latest stable release on startup and shows a top-bar badge when one exists; a new "check for updates" settings pane lets you re-check anytime
-2. Failures are spelled out: no release yet, rate limited, network trouble or unexpected data each get their own message — never a fake "already up to date"
+1. Closing the window can now minimize to the tray: the app keeps running and the tray menu brings it back or quits it
+2. The app can start minimized straight to the tray; combined with launch-at-login it stays fully out of sight
+3. Launch at login is live and two new settings panes (tray and startup) complete the settings center
 
 **Fixed**
 
@@ -21,8 +22,9 @@ None
 
 **新增**
 
-1. 更新检查上线：启动时自动查一次 GitHub 最新稳定版，有新版本顶栏出徽标；设置中心新增「检测升级」屏可随时手动查
-2. 检查失败说得清楚：还没有稳定版、被限流、网络不通、数据异常各有各的提示，绝不把失败装成「已是最新」
+1. 关窗可以收进托盘：应用继续在后台跑，托盘菜单随时唤回或退出
+2. 启动后可最小化直入托盘，配合开机自启动实现完全无感常驻
+3. 开机自启动上线：登录系统时自动拉起应用；设置中心新增「托盘」「开机自启」两屏
 
 **修复**
 

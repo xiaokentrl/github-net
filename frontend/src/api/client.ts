@@ -37,6 +37,9 @@ export type SettingsPatch = {
   queueHeight?: number
   zoom?: number
   theme?: string
+  closeToTray?: boolean
+  startMinimized?: boolean
+  autoStart?: boolean
 }
 
 export function getAppStatus(): Promise<AppStatus> {
@@ -64,10 +67,11 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     zoom: patch.zoom ?? null,
     sidebarWidth: patch.sidebarWidth ?? null,
     queueHeight: patch.queueHeight ?? null,
+    closeToTray: patch.closeToTray ?? null,
+    startMinimized: patch.startMinimized ?? null,
+    autoStart: patch.autoStart ?? null,
     detectFocusFollow: null,
     applyFocusFollow: null,
-    autoStart: null,
-    startMinimized: null,
     autoDetectOnStartup: null,
     autoApplyOnStartup: null,
   }

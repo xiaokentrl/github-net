@@ -94,9 +94,11 @@ type TreeBehaviorConfig struct {
 }
 
 // StartupConfig 是启动相关开关；自动应用依赖自动检测。
+// CloseToTray 是关窗行为：true 时点关闭是把窗口收进托盘（应用继续跑），false 时直接退出。
 type StartupConfig struct {
 	AutoStart           bool `json:"autoStart"`
 	StartMinimized      bool `json:"startMinimized"`
+	CloseToTray         bool `json:"closeToTray"`
 	AutoDetectOnStartup bool `json:"autoDetectOnStartup"`
 	AutoApplyOnStartup  bool `json:"autoApplyOnStartup"`
 }
@@ -129,6 +131,7 @@ type Patch struct {
 	ApplyFocusFollow               *bool              `json:"applyFocusFollow"`
 	AutoStart                      *bool              `json:"autoStart"`
 	StartMinimized                 *bool              `json:"startMinimized"`
+	CloseToTray                    *bool              `json:"closeToTray"`
 	AutoDetectOnStartup            *bool              `json:"autoDetectOnStartup"`
 	AutoApplyOnStartup             *bool              `json:"autoApplyOnStartup"`
 }
@@ -464,6 +467,9 @@ func applyPatch(c *Config, p Patch) {
 	}
 	if p.AutoStart != nil {
 		c.Startup.AutoStart = *p.AutoStart
+	}
+	if p.CloseToTray != nil {
+		c.Startup.CloseToTray = *p.CloseToTray
 	}
 	if p.StartMinimized != nil {
 		c.Startup.StartMinimized = *p.StartMinimized

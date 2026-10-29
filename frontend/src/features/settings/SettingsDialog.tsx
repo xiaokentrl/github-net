@@ -9,18 +9,21 @@ import { AppearancePane } from './AppearancePane'
 import { LayoutPane } from './LayoutPane'
 import { NetworkPane } from './NetworkPane'
 import { UpdatesPane } from './UpdatesPane'
+import { StartupPane } from './StartupPane'
+import { TrayPane } from './TrayPane'
 import { ZoomPane } from './ZoomPane'
 import styles from './SettingsDialog.module.css'
 
-export type SettingsPaneID = 'layout' | 'zoom' | 'appearance' | 'network' | 'updates' | 'about'
+export type SettingsPaneID = 'layout' | 'zoom' | 'appearance' | 'network' | 'tray' | 'startup' | 'updates' | 'about'
 
-// 真正做出界面来的屏才进导航：布局、界面缩放、外观、网络与流量、检测升级、关于我们。
-// 托盘和开机自启两屏还没迁（它们的行为属托盘/自启动那一步），这里不放点了没反应的入口。
+// 全部八屏进导航：布局、界面缩放、外观、网络与流量、托盘、开机自启、检测升级、关于我们。
 const PANES: { id: SettingsPaneID; group: string; label: string; ico: string }[] = [
   { id: 'layout', group: 'settings.nav.groupPref', label: 'settings.nav.layout', ico: '▦' },
   { id: 'zoom', group: 'settings.nav.groupPref', label: 'settings.nav.zoom', ico: '⤢' },
   { id: 'appearance', group: 'settings.nav.groupPref', label: 'settings.nav.appearance', ico: '◐' },
   { id: 'network', group: 'settings.nav.groupNetwork', label: 'settings.nav.network', ico: '⌁' },
+  { id: 'tray', group: 'settings.nav.groupPref', label: 'settings.nav.tray', ico: '⊜' },
+  { id: 'startup', group: 'settings.nav.groupPref', label: 'settings.nav.startup', ico: '⏻' },
   { id: 'updates', group: 'settings.nav.groupInfo', label: 'settings.nav.updates', ico: '⇪' },
   { id: 'about', group: 'settings.nav.groupInfo', label: 'settings.nav.about', ico: 'ⓘ' },
 ]
@@ -30,6 +33,8 @@ const PANE_SUB: Record<SettingsPaneID, string> = {
   zoom: 'settings.zoom.sub',
   appearance: 'settings.appearance.sub',
   network: 'settings.network.sub',
+  tray: 'settings.tray.sub',
+  startup: 'settings.startup.sub',
   updates: 'settings.updates.sub',
   about: 'settings.about.sub',
 }
@@ -47,6 +52,9 @@ export function SettingsDialog({
   onSidebarWidth,
   onZoom,
   onTheme,
+  onCloseToTray,
+  onStartMinimized,
+  onAutoStart,
 }: {
   pane: SettingsPaneID
   settings: Config
@@ -60,6 +68,9 @@ export function SettingsDialog({
   onSidebarWidth: (width: number) => void
   onZoom: (factor: number) => void
   onTheme: (id: string) => void
+  onCloseToTray: (enabled: boolean) => void
+  onStartMinimized: (enabled: boolean) => void
+  onAutoStart: (enabled: boolean) => void
 }) {
   const closeRef = useRef<HTMLButtonElement>(null)
 
@@ -121,6 +132,8 @@ export function SettingsDialog({
             {pane === 'layout' && <LayoutPane settings={settings} save={save} onSidebarWidth={onSidebarWidth} />}
             {pane === 'zoom' && <ZoomPane settings={settings} save={save} onZoom={onZoom} />}
             {pane === 'appearance' && <AppearancePane settings={settings} save={save} onTheme={onTheme} />}
+            {pane === 'tray' && <TrayPane settings={settings} save={save} onCloseToTray={onCloseToTray} onStartMinimized={onStartMinimized} />}
+            {pane === 'startup' && <StartupPane settings={settings} save={save} onAutoStart={onAutoStart} />}
             {pane === 'updates' && <UpdatesPane status={status} />}
             {pane === 'about' && <AboutPane status={status} />}
           </div>

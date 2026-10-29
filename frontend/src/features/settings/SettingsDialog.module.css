@@ -487,3 +487,15 @@
     min-height: 0;
   }
 }
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.checkRow input {
+  accent-color: var(--primary);
+}

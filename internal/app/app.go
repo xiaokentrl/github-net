@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -11,6 +12,7 @@ import (
 	"github.com/xiaokentrl/github-net/internal/config"
 	"github.com/xiaokentrl/github-net/internal/event"
 	"github.com/xiaokentrl/github-net/internal/hosts"
+	"github.com/xiaokentrl/github-net/internal/platform"
 	"github.com/xiaokentrl/github-net/internal/privilege"
 	"github.com/xiaokentrl/github-net/internal/task"
 	"github.com/xiaokentrl/github-net/internal/updater"
@@ -56,6 +58,9 @@ type Service struct {
 	// updater 查 GitHub 最新稳定版；测试可注入假实现。
 	updater *updater.Client
 
+	// autostart 是开机自启动的平台实现；测试注入假实现。
+	autostart platform.Autostart
+
 	// strategyTable 是方法注册表的读取接缝，零值即生产行为（读包级全局表）。
 	// 声明在 Service 上而不是每个命令各自读包级函数，是为了让方法选择区的
 	// 「真表走不到的分支」有测试落点，见 strategies.go。
@@ -97,6 +102,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	}
 	s.priv = privilege.NewClient()
 	s.updater = updater.NewClient()
+	s.autostart = platform.NewAutostart()
 	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results), taskEmit)
 	return s
 }
@@ -199,6 +205,10 @@ func (s *Service) GetSettings() (config.Config, error) {
 
 // SaveSettings 按字段 patch 保存：先比 revision，再校验完整配置，最后原子替换并递增 revision。
 // 失败一律明确返回，前端不能把没落盘的东西显示成已保存。
+//
+// 配置落盘之后还有一类「跟着设置走」的系统副作用：开机自启动的桌面入口。
+// 它跟在配置后面做，失败了如实报「设置已保存、但这一项没改成」——
+// 配置是权威，副作用下一轮保存或重启应用还会再对齐。
 func (s *Service) SaveSettings(patch config.Patch, expectedRevision int64, mutationID string) (config.Config, error) {
 	if s.settings == nil {
 		return config.Config{}, s.settingsFailure()
@@ -207,5 +217,27 @@ func (s *Service) SaveSettings(patch config.Patch, expectedRevision int64, mutat
 	if err != nil {
 		return config.Config{}, ToPublicError(err)
 	}
+	if patch.AutoStart != nil {
+		if err := s.applyAutostart(*patch.AutoStart); err != nil {
+			return cfg, err
+		}
+	}
 	return cfg, nil
+}
+
+// applyAutostart 把开机自启动改到和配置一致；不支持的平台给实话，不假装成功。
+func (s *Service) applyAutostart(enabled bool) error {
+	var err error
+	if enabled {
+		err = s.autostart.Enable()
+	} else {
+		err = s.autostart.Disable()
+	}
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, platform.ErrUnsupported) {
+		return NewError(CodePlatformUnsupported, "当前平台还不支持开机自启动", err)
+	}
+	return NewError(CodeAutostartFailed, "设置已保存，但开机自启动没能改成："+err.Error(), err)
 }

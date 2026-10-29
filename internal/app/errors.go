@@ -46,6 +46,12 @@ const (
 	CodeNoDetectResult    = "no_detect_result"
 	CodeHelperUnavailable = "helper_unavailable"
 	CodeHostsFailed       = "hosts_failed"
+
+	// 启动与平台这一组的码：前端按码分支，不解析中文。
+	// autostart_failed：配置已保存但自启动入口没改成，消息里说清这个区别。
+	// platform_unsupported：当前平台没有这个能力，不假装成功。
+	CodeAutostartFailed     = "autostart_failed"
+	CodePlatformUnsupported = "platform_unsupported"
 )
 
 // Error 带稳定错误码。cause 是不导出的字段：它只给日志和 errors.Is 用，

@@ -66,16 +66,19 @@ export interface Patch {
     "applyFocusFollow": boolean | null;
     "autoStart": boolean | null;
     "startMinimized": boolean | null;
+    "closeToTray": boolean | null;
     "autoDetectOnStartup": boolean | null;
     "autoApplyOnStartup": boolean | null;
 }
 
 /**
  * StartupConfig 是启动相关开关；自动应用依赖自动检测。
+ * CloseToTray 是关窗行为：true 时点关闭是把窗口收进托盘（应用继续跑），false 时直接退出。
  */
 export interface StartupConfig {
     "autoStart": boolean;
     "startMinimized": boolean;
+    "closeToTray": boolean;
     "autoDetectOnStartup": boolean;
     "autoApplyOnStartup": boolean;
 }
