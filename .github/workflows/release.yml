@@ -1,0 +1,176 @@
+name: Release
+
+# 打 v* 标签一键出包 + 签名 + 发布（对应 TECHNICAL_PLAN 阶段五「签名、安装包、版本说明」）。
+#
+# 流程：build（Ubuntu 26.04 容器，门禁命令与 ci.yml 同一口径）→ sign（守卫确认私钥
+# 与嵌入公钥配对后才签名，出 .sig 与 checksums.txt）→ 挂到 GitHub Release，
+# 正文取仓库根的 release-notes.md（scripts/gen-release-notes.sh 生成，随版本一起提交）。
+#
+# 仓库 secrets：
+#   NET_SIGNING_KEY          Ed25519 私钥 PEM（scripts/sign-release.sh genkey 生成；
+#                            公钥已嵌入 internal/updater/signing/public.key，守卫比对两者）
+#
+# Windows/macOS 还没进发布矩阵：平台的特权辅助服务与安装交接没做，出包也是装不完整的，
+# 等平台能力补齐后各自加 matrix 项。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      guard_only:
+        description: "dry-run：只校验签名钥与嵌入公钥配对，不出包不发布"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  GLIBC_LIMIT: "2.41"
+  RUNTIME_LIBS: "libgtk-4.so.1 libwebkitgtk-6.0.so.4 libjavascriptcoregtk-6.0.so.1"
+  WAILS_VERSION: "v3.0.0"
+
+jobs:
+  verify-guard:
+    name: Verify signing guard
+    if: github.event_name == 'workflow_dispatch' && inputs.guard_only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 校验嵌入公钥与签名私钥配对
+        if: env.NET_SIGNING_KEY != ''
+        env:
+          NET_SIGNING_KEY: ${{ secrets.NET_SIGNING_KEY }}
+        run: |
+          printf '%s' "$NET_SIGNING_KEY" > /tmp/github-net-sign.pem
+          chmod 600 /tmp/github-net-sign.pem
+          bash scripts/verify-signing-guard.sh /tmp/github-net-sign.pem internal/updater/signing/public.key
+          rm -f /tmp/github-net-sign.pem
+      - name: 未配置签名钥
+        if: env.NET_SIGNING_KEY == ''
+        run: |
+          echo "::warning::未配置 NET_SIGNING_KEY，真实发布会因签不出 .sig 而失败"
+
+  build:
+    name: Build Linux x64（Ubuntu 26.04 容器）
+    if: ${{ !inputs.guard_only }}
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:26.04
+    steps:
+      - name: 装构建依赖
+        run: |
+          apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates curl git xz-utils gcc pkg-config binutils \
+            libgtk-4-dev libwebkitgtk-6.0-dev nodejs npm
+      - uses: actions/checkout@v4
+        with:
+          # 标签解析和 VCS 打标都要完整历史。
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: 校验标签与版本一致
+        run: |
+          # 版本单一来源是 main.go 的 appVersion；标签和它对不上，装出来的应用
+          # 自报版本和 Release 页对不齐，更新比较也会乱。
+          declared="$(bash scripts/version.sh)"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            echo "本次不是标签触发（$GITHUB_REF_TYPE），跳过版本核对"
+          elif [ "$declared" != "$tag" ]; then
+            echo "::error::标签 v$tag 与 main.go 的 appVersion $declared 不一致；先改版本再打标签"
+            exit 1
+          else
+            echo "版本核对通过：v$tag"
+          fi
+      - name: 放行工作目录属主并核对 git 上下文
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE" 2>/dev/null || true
+          git rev-parse HEAD > /dev/null || { echo "::error::git 读不了仓库"; exit 1; }
+      - name: 构建主程序与辅助服务
+        run: |
+          # wails3 task 会依次做：前端 npm 构建 → 图标 → desktop 文件 → 两颗二进制。
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
+          export PATH="$HOME/go/bin:$PATH"
+          wails3 task linux:build:native
+          test -f bin/github-net && test -f bin/github-net-helper || {
+            echo "::error::构建后缺产物"; ls -la bin/ || true; exit 1
+          }
+      - name: 门一 产物 glibc 符号不高于门槛
+        run: |
+          max=$(objdump -T bin/github-net | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1)
+          echo "产物最高 glibc 符号：$max，门槛：$GLIBC_LIMIT"
+          newest=$(printf '%s\n%s\n' "$max" "$GLIBC_LIMIT" | sort -V | tail -1)
+          test "$newest" = "$GLIBC_LIMIT" || { echo "::error::门一不过：$max 高于 $GLIBC_LIMIT"; exit 1; }
+      - name: 门二 在 Ubuntu 26.04 复核动态链接
+        run: |
+          ldd -r bin/github-net > ldd.txt 2>&1
+          cat ldd.txt
+          if grep -E 'not found|undefined symbol' ldd.txt; then echo "::error::门二不过：Ubuntu 26.04 有未解析依赖"; exit 1; fi
+          for so in $RUNTIME_LIBS; do grep -q "$so => /" ldd.txt || { echo "::error::门二不过：Ubuntu 26.04 缺 $so"; exit 1; }; done
+      - name: 打 deb 安装包
+        run: |
+          export PATH="$HOME/go/bin:$PATH"
+          # 生成 deb 时沿用 nfpm 配置（内容含主程序、helper 和 systemd 单元）。
+          GIT_COMMITTER_NAME="$(git log -1 --format=%cn)" \
+          GIT_COMMITTER_EMAIL="$(git log -1 --format=%ce)" \
+            wails3 tool package -name github-net -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
+          test -f bin/github-net.deb || { echo "::error::deb 没打出来"; exit 1; }
+          dpkg-deb -I bin/github-net.deb | grep -E 'Package|Version' || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: github-net-deb
+          path: |
+            bin/github-net.deb
+          if-no-files-found: error
+
+  sign-release:
+    name: Sign and Release
+    if: ${{ !inputs.guard_only }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: 取安装包
+        uses: actions/download-artifact@v4
+        with:
+          name: github-net-deb
+          path: bin
+      - name: 写私钥并过签名钥守卫
+        env:
+          NET_SIGNING_KEY: ${{ secrets.NET_SIGNING_KEY }}
+        run: |
+          [ -n "$NET_SIGNING_KEY" ] || { echo "::error::未配置 NET_SIGNING_KEY，无法签名"; exit 1; }
+          printf '%s' "$NET_SIGNING_KEY" > /tmp/github-net-sign.pem
+          chmod 600 /tmp/github-net-sign.pem
+          bash scripts/verify-signing-guard.sh /tmp/github-net-sign.pem internal/updater/signing/public.key
+      - name: 签名与校验清单
+        env:
+          NET_SIGNING_KEY: /tmp/github-net-sign.pem
+        run: |
+          bash scripts/sign-release.sh sign bin/github-net.deb
+          cd bin
+          sha256sum github-net.deb > checksums.txt
+          cat checksums.txt
+      - name: release-notes.md 必须在场（缺失即红）
+        run: |
+          # softprops 对不存在的 body_path 会静默回落默认正文，那等于发一份没有说明的 Release。
+          [ -s release-notes.md ] || { echo "::error::仓库根没有 release-notes.md（或它是空文件）"; exit 1; }
+      - name: 发布
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: |
+            bin/github-net.deb
+            bin/github-net.deb.sig
+            bin/checksums.txt
+          fail_on_unmatched_files: true
+      - name: 清理私钥
+        if: always()
+        run: rm -f /tmp/github-net-sign.pem
+        
