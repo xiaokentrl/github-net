@@ -12,6 +12,7 @@ import {
   GetItems,
   GetSettings,
   GetTasks,
+  CheckForUpdates,
   OpenHosts,
   PauseQueue,
   RestoreAllHosts,
@@ -23,6 +24,7 @@ import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/inte
 import type { AppStatus, DetectResultView, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
+import type { Info as UpdateInfo } from '../../bindings/github.com/xiaokentrl/github-net/internal/updater/models'
 
 export type NetworkProfile = 'low' | 'standard' | 'full'
 
@@ -130,4 +132,11 @@ export function restoreAllHosts(): Promise<number> {
 // 打开 Hosts：请系统默认编辑器打开，失败带原因。
 export function openHosts(): Promise<void> {
   return OpenHosts()
+}
+
+// ===== 更新检查 =====
+// 只比较和显示：下载、校验、安装属安全更新流程，这里一步都不做。
+
+export function checkForUpdates(): Promise<UpdateInfo> {
+  return CheckForUpdates()
 }

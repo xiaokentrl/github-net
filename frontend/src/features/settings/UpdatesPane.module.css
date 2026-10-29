@@ -1,0 +1,67 @@
+/* 检测升级屏：只管布局与状态文字，颜色间距引用令牌。 */
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.current {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.actions button {
+  font: inherit;
+  padding: 0.25rem 0.9rem;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--on-primary);
+  cursor: pointer;
+}
+
+.actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.checkedAt {
+  color: var(--text-2);
+  font-size: 0.78rem;
+}
+
+.available {
+  border: 1px solid var(--green);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.8rem;
+  background: var(--green-soft);
+}
+
+.headline {
+  margin: 0 0 0.3rem;
+  font-size: 0.9rem;
+}
+
+.link {
+  color: var(--primary);
+  font-size: 0.85rem;
+}
+
+.plain {
+  margin: 0.2rem 0 0;
+  color: var(--text-2);
+  font-size: 0.78rem;
+}
+
+.error {
+  margin: 0;
+  color: var(--red);
+  font-size: 0.85rem;
+}

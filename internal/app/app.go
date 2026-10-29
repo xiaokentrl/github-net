@@ -13,6 +13,7 @@ import (
 	"github.com/xiaokentrl/github-net/internal/hosts"
 	"github.com/xiaokentrl/github-net/internal/privilege"
 	"github.com/xiaokentrl/github-net/internal/task"
+	"github.com/xiaokentrl/github-net/internal/updater"
 )
 
 // Service 是暴露给前端的唯一门面；这里只放前端确实需要的读操作。
@@ -51,6 +52,9 @@ type Service struct {
 	// priv 是特权辅助服务客户端；应用/还原类命令经由它落到受限服务。
 	// 测试注入假实现；nil 表示这一层没接（应用/恢复任务在队列里以可见失败收场）。
 	priv privilege.Caller
+
+	// updater 查 GitHub 最新稳定版；测试可注入假实现。
+	updater *updater.Client
 
 	// strategyTable 是方法注册表的读取接缝，零值即生产行为（读包级全局表）。
 	// 声明在 Service 上而不是每个命令各自读包级函数，是为了让方法选择区的
@@ -92,6 +96,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 		}
 	}
 	s.priv = privilege.NewClient()
+	s.updater = updater.NewClient()
 	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results), taskEmit)
 	return s
 }

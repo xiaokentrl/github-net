@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { applyItems, detectItems, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile } from '../api/client'
-import { subscribeRuntimeStatus } from '../api/events'
+import { subscribeRuntimeStatus, subscribeUpdateStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
 import { SettingsEntry } from '../components/layout/SettingsEntry'
@@ -58,6 +58,8 @@ export function App() {
   // 检测/应用/还原入口被后端拒绝时的一句话，显示在详情页对应按钮旁边；下一次成功就清掉。
   const [detectError, setDetectError] = useState('')
   const [hostsError, setHostsError] = useState('')
+  // 启动自动检查发现的最新版本；空串表示没有已知更新（没查过、没新版本或检查失败）。
+  const [updateLatest, setUpdateLatest] = useState('')
 
   // 收到的最新序号存在 ref 里，订阅回调才不会读到旧值。
   const sequenceRef = useRef(0)
@@ -149,6 +151,13 @@ export function App() {
       if (settled.kind === 'apply' || settled.kind === 'restore') loadCatalog()
     })
 
+    // 启动自动检查的结果落到顶栏徽标；详情看设置中心的检测升级屏。
+    const unsubscribeUpdate = subscribeUpdateStatus((payload) => {
+      if (payload.info?.updateAvailable && payload.info.latestVersion) {
+        setUpdateLatest(payload.info.latestVersion)
+      }
+    })
+
     return () => {
       // 让仍在路上的响应作废，并退订事件；退订必须调用，否则回调会一直堆积。
       statusRequestRef.current += 1
@@ -156,6 +165,7 @@ export function App() {
       catalogRequestRef.current += 1
       unsubscribe()
       unsubscribeTasks()
+      unsubscribeUpdate()
     }
   }, [loadStatus, loadSettings, loadCatalog])
 
@@ -335,6 +345,8 @@ export function App() {
           />
         }
         queue={<TaskPanel />}
+        updateLatest={updateLatest}
+        onOpenUpdate={() => openSettings('updates')}
         statusbar={
           <StatusBar
             status={status}

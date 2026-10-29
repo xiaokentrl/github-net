@@ -6,6 +6,7 @@ import type { CandidateStatus } from '../../bindings/github.com/xiaokentrl/githu
 const STATUS_EVENT = 'app:runtime-status'
 const TASK_EVENT = 'task:progress'
 const DETECT_EVENT = 'detect:progress'
+const UPDATE_EVENT = 'update:status'
 
 export type RuntimeStatusPayload = {
   sequence: number
@@ -61,6 +62,27 @@ export function subscribeTaskProgress(onPayload: (payload: TaskProgressPayload) 
   return Events.On(TASK_EVENT, (event: Events.WailsEvent) => {
     const payload = event.data as TaskProgressPayload | undefined
     if (!payload || typeof payload.sequence !== 'number' || !payload.task) return
+    onPayload(payload)
+  })
+}
+
+export type UpdateNoticePayload = {
+  info?: {
+    currentVersion: string
+    latestVersion?: string
+    updateAvailable: boolean
+    releaseUrl?: string
+    publishedAt?: string
+    checkedAt: string
+  }
+  error?: string
+}
+
+// 启动自动检查的结果走事件；设置页手动检查走命令返回值，两条路最终都落到同一块显示。
+export function subscribeUpdateStatus(onPayload: (payload: UpdateNoticePayload) => void): () => void {
+  return Events.On(UPDATE_EVENT, (event: Events.WailsEvent) => {
+    const payload = event.data as UpdateNoticePayload | undefined
+    if (!payload) return
     onPayload(payload)
   })
 }

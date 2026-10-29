@@ -36,6 +36,8 @@ export function AppShell({
   detail,
   queue,
   statusbar,
+  updateLatest,
+  onOpenUpdate,
 }: {
   appName: string
   status: AppStatus | null
@@ -50,6 +52,8 @@ export function AppShell({
   detail: ReactNode
   queue: ReactNode
   statusbar: ReactNode
+  updateLatest: string
+  onOpenUpdate: () => void
 }) {
   const resize = useSidebarResize(sidebarWidth, onSidebarResize)
   // 拖动期间用本地预览值，松手提交后由配置快照接管。
@@ -88,6 +92,11 @@ export function AppShell({
             <i className={styles.dot} aria-hidden="true" />
             {t('topbar.perm.prefix', { access: t(PERM_KEY[status.hostsAccess]) })}
           </span>
+        )}
+        {updateLatest !== '' && (
+          <button type="button" className={styles.updateBadge} title={t('topbar.update.hint')} onClick={onOpenUpdate}>
+            {t('topbar.update.badge', { version: updateLatest })}
+          </button>
         )}
       </header>
 

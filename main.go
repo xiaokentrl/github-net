@@ -129,6 +129,28 @@ func main() {
 		requestWindowFocus()
 	})
 
+	// 启动后自动检查一次更新（技术规划 §7）：只比较和提示，不下载、不安装。
+	// 结论经 update:status 事件推给界面；失败也说清楚原因，不把失败装成「已是最新」。
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-windowReady:
+		}
+		info, err := service.CheckForUpdates()
+		notice := event.UpdateNotice{}
+		if err != nil {
+			if appErr, ok := err.(*appsvc.Error); ok {
+				notice.Error = appErr.Message
+			} else {
+				notice.Error = "更新检查失败"
+			}
+		} else {
+			notice.Info = &info
+		}
+		platformApp.Event.Emit(event.UpdateStatusName, notice)
+	}()
+
 	// Go 侧也订阅一次并保存取消函数，用来证明订阅不会随窗口关闭或重启泄漏。
 	unsubscribeStatus := platformApp.Event.On(event.RuntimeStatusName, func(e *application.CustomEvent) {
 		platformApp.Logger.Info("已收到运行时状态事件", "name", e.Name)

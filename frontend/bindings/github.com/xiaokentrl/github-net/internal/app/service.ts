@@ -16,6 +16,9 @@ import * as config$0 from "../config/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as task$0 from "../task/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as updater$0 from "../updater/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -35,6 +38,14 @@ export function ApplyItems(itemIDs: string[] | null): $CancellablePromise<task$0
  */
 export function CancelTask(taskID: string): $CancellablePromise<task$0.Snapshot> {
     return $Call.ByID(1106487909, taskID);
+}
+
+/**
+ * CheckForUpdates 查 GitHub 最新稳定版并与当前版本比较。
+ * 只比较和显示；下载、校验、安装属安全更新流程，这里一步都不做。
+ */
+export function CheckForUpdates(): $CancellablePromise<updater$0.Info> {
+    return $Call.ByID(996650649);
 }
 
 /**

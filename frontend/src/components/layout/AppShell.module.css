@@ -258,3 +258,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.updateBadge {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--green);
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  cursor: pointer;
+}
