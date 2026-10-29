@@ -13,10 +13,6 @@ import (
 	"github.com/xiaokentrl/github-net/internal/task"
 )
 
-// pendingExecutorMessage 是「还没接执行器」那句拒绝。写在这里而不是散落各处：
-// 这句话进了界面就是失败原因，改了要同时改这条断言。
-const pendingExecutorMessage = "这一类任务还没有接上执行动作，这条任务没有开始"
-
 // gatedExecutor 只用来造出测试需要的状态：项目 ID 是 "hold" 的任务卡在放行信号上，
 // 其余项目按预设结果立刻收口（预设留空就是零值，队列按「该类任务成功」处理）。
 type gatedExecutor struct {
@@ -385,21 +381,19 @@ func TestQueueCommandsPublishProgressEvents(t *testing.T) {
 }
 
 func TestPendingExecutorFailsQueuedTaskInsteadOfCrashing(t *testing.T) {
-	svc := NewService("github-net", "test", nil, nil)
-
-	// 检测执行器已换装，这条保护网改用还没接执行器的「应用」类：
-	// 万一以后有人先接了应用入队、忘了阶段四的写盘执行器，任务会以「失败」被界面看见，
-	// 而不是让驱动协程撞上 nil 把整个应用带崩。这里直接从队列侧塞一条模拟。
-	if _, err := svc.tasks.Enqueue(task.NewRequest{Kind: task.KindApply, ItemID: "github.com"}); err != nil {
-		t.Fatalf("排队失败: %v", err)
+	// 队列入队会拦下未知类型，nil 执行器的风险只剩一种：某个 Kind 的执行器没接。
+	// 这里直接打分发执行器的 nil 分支：万一以后有人在分发台挂了个没接活的类型，
+	// 任务会以「失败」被界面看见，而不是让驱动协程撞上 nil 把整个应用带崩。
+	dispatch := newDispatchExecutor(nil, nil, newDetectResultStore())
+	out := dispatch.Execute(context.Background(), task.Task{ID: "t1", Kind: task.KindDetect},
+		func(string, string, int) {})
+	if out.Status != task.StatusFailed || out.Message != pendingExecutorMessage {
+		t.Fatalf("没接执行器的类型该当场判失败并给出原因，实际 %+v", out)
 	}
-	waitFor(t, "这条任务被执行器拒掉", func() bool {
-		item, ok := findTask(svc.GetTasks(), "t1")
-		return ok && task.IsTerminal(item.Status)
-	})
-	item, _ := findTask(svc.GetTasks(), "t1")
-	if item.Status != task.StatusFailed || item.ErrorMsg != pendingExecutorMessage {
-		t.Errorf("没接执行器的任务该当场判失败并给出原因，实际 %+v", item)
+	out = dispatch.Execute(context.Background(), task.Task{ID: "t2", Kind: task.KindApply},
+		func(string, string, int) {})
+	if out.Status != task.StatusFailed || out.Message != pendingExecutorMessage {
+		t.Fatalf("没接特权客户端的应用任务该当场判失败，实际 %+v", out)
 	}
 }
 

@@ -38,6 +38,14 @@ const (
 	//   具体原因（没选、方法已不在注册表、不适用本范围）只写进可展示消息。
 	CodeInvalidItemID      = "invalid_item_id"
 	CodeNoStrategySelected = "no_strategy_selected"
+
+	// 应用与还原这一组的码：前端按码分支，不解析中文。
+	// no_detect_result：这个项目还没有检测结果或最近一轮没有可用候选，应用被入口挡下。
+	// helper_unavailable：特权辅助服务连不上（直接命令场景；队列任务里同类失败进任务文案）。
+	// hosts_failed：服务拒绝或写失败，可展示原因在消息里。
+	CodeNoDetectResult    = "no_detect_result"
+	CodeHelperUnavailable = "helper_unavailable"
+	CodeHostsFailed       = "hosts_failed"
 )
 
 // Error 带稳定错误码。cause 是不导出的字段：它只给日志和 errors.Is 用，

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import { detectItems, getAppStatus, getItems, getSettings, type NetworkProfile } from '../api/client'
+import { applyItems, detectItems, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile } from '../api/client'
 import { subscribeRuntimeStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
@@ -55,8 +55,9 @@ export function App() {
   const [sequence, setSequence] = useState(0)
   const [dropped, setDropped] = useState(0)
 
-  // 检测入口被后端拒绝时的一句话，显示在详情页的检测按钮旁边；下一次检测成功就清掉。
+  // 检测/应用/还原入口被后端拒绝时的一句话，显示在详情页对应按钮旁边；下一次成功就清掉。
   const [detectError, setDetectError] = useState('')
+  const [hostsError, setHostsError] = useState('')
 
   // 收到的最新序号存在 ref 里，订阅回调才不会读到旧值。
   const sequenceRef = useRef(0)
@@ -143,8 +144,10 @@ export function App() {
     })
 
     // 任务与候选进度：应用级只挂一份订阅，先订阅再拉快照（taskEvents.ts）。
-    // 订阅退掉重挂后，队列面板的载入态由 taskStore 自行恢复，这里不用管。
-    const unsubscribeTasks = subscribeTaskEvents()
+    // 应用/还原类任务落定后重读目录，详情页的 Hosts 状态才会跟着变；检测类不用（结果存储自己追）。
+    const unsubscribeTasks = subscribeTaskEvents((settled) => {
+      if (settled.kind === 'apply' || settled.kind === 'restore') loadCatalog()
+    })
 
     return () => {
       // 让仍在路上的响应作废，并退订事件；退订必须调用，否则回调会一直堆积。
@@ -253,6 +256,27 @@ export function App() {
     })
   }, [])
 
+  const startApply = useCallback((itemId: string) => {
+    setHostsError('')
+    applyItems([itemId]).catch((err: unknown) => {
+      setHostsError(getErrorMessage(err))
+    })
+  }, [])
+
+  const startRestore = useCallback((itemId: string) => {
+    setHostsError('')
+    restoreItems([itemId]).catch((err: unknown) => {
+      setHostsError(getErrorMessage(err))
+    })
+  }, [])
+
+  const openHostsFile = useCallback(() => {
+    setHostsError('')
+    openHosts().catch((err: unknown) => {
+      setHostsError(getErrorMessage(err))
+    })
+  }, [])
+
   const debouncedQuery = useDebouncedValue(query, 150)
 
   const sidebar = (
@@ -303,7 +327,11 @@ export function App() {
             hosts={hostsOf.get(selectedId)}
             detectReady={status?.dnsDetectionReady ?? false}
             detectError={detectError}
+            hostsError={hostsError}
             onDetect={startDetect}
+            onApply={startApply}
+            onRestore={startRestore}
+            onOpenHosts={openHostsFile}
           />
         }
         queue={<TaskPanel />}

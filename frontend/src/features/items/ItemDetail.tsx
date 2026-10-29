@@ -39,14 +39,22 @@ export function ItemDetail({
   hosts,
   detectReady,
   detectError,
+  hostsError,
   onDetect,
+  onApply,
+  onRestore,
+  onOpenHosts,
 }: {
   item: CatalogItem | null
   category: CatalogCategory | null
   hosts: HostsState | undefined
   detectReady: boolean
   detectError: string
+  hostsError: string
   onDetect: (itemId: string) => void
+  onApply: (itemId: string) => void
+  onRestore: (itemId: string) => void
+  onOpenHosts: () => void
 }) {
   const state = useTaskQueue()
   if (!item || !category) return <EmptyState message={t('detail.empty')} />
@@ -123,6 +131,32 @@ export function ItemDetail({
       ) : (
         <p className={detectStyles.note}>{t('detect.notReady')}</p>
       )}
+
+      {hostnames.length > 0 && !item.userSupplied ? (
+        <div className={detectStyles.actions}>
+          <button
+            type="button"
+            className={detectStyles.apply}
+            disabled={detecting || !result || !(result.hosts ?? []).some((h) => (h.candidates ?? []).some((c) => c.status === 'available'))}
+            onClick={() => onApply(item.id)}
+          >
+            {t('hosts.apply')}
+          </button>
+          {(hosts?.status === HostsStatus.HostsApplied || hosts?.status === HostsStatus.HostsPartial) && (
+            <button type="button" disabled={detecting} onClick={() => onRestore(item.id)}>
+              {t('hosts.restore')}
+            </button>
+          )}
+          <button type="button" onClick={onOpenHosts}>
+            {t('hosts.open')}
+          </button>
+        </div>
+      ) : null}
+      {hostsError ? (
+        <p className={detectStyles.detectError} role="alert">
+          {t('hosts.error', { reason: hostsError })}
+        </p>
+      ) : null}
       {detectError ? (
         <p className={detectStyles.detectError} role="alert">
           {t('detect.error', { reason: detectError })}

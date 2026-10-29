@@ -4,9 +4,9 @@
 
 **Added**
 
-1. Real detection is live: hit "detect" on a detail page and it probes real DNS candidates with your chosen method, showing each IP's status, latency and reason line by line
-2. Task queue panel: pause/resume, per-task cancel, clear finished and clear all; progress survives page switches
-3. Batch validation at the detect entry: unknown items or services without a chosen method are rejected up front with a clear reason
+1. Hosts apply and restore are live: write available candidates into the system hosts file in one click, restore per item or all at any time; backup before write, verify after
+2. A restricted privileged helper (systemd) is enabled once at install time; hosts writes never ask for admin again and the UI stays unprivileged
+3. Detail page gains "apply to hosts", "restore this item" and "open hosts" actions with status badges updating right after
 
 **Fixed**
 
@@ -22,9 +22,9 @@ None
 
 **新增**
 
-1. 真实检测上线：详情页点「检测」即按所选加速方法查真实 DNS 候选并逐行显示每个 IP 的状态、延迟和原因
-2. 任务队列面板：暂停/继续、逐条取消、清空已完成和清空队列；切页面不丢进度
-3. 检测入口整批校验：项目不存在或所在服务还没选加速方法时，在排队前就明确拒绝并说明原因
+1. Hosts 应用与还原上线：检测出的可用候选可一键写入系统 Hosts，随时单项或全部还原，写入前自动备份、写入后自动校验
+2. 安装时一次性启用受限特权辅助服务（systemd），之后写 Hosts 不再要管理员密码；主界面始终普通权限
+3. 详情页新增「应用到 Hosts」「还原此项」「打开 Hosts」按钮，操作结果即时反映到状态徽章
 
 **修复**
 

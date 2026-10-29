@@ -1,0 +1,20 @@
+[Unit]
+Description=GitHub Net 特权辅助服务（唯一被允许写系统 Hosts 的那一个）
+Documentation=https://github.com/xiaokentrl/github-net
+# 界面（github-net）随时来连，不依赖网络就绪；还原和应用只动本地文件。
+# After 只表达顺序参考，socket 不依赖网络。
+
+[Service]
+Type=simple
+# 恢复元数据与备份钉在 root 的数据目录：系统服务没有 HOME/XDG 变量，不钉则备份写不进固定位置。
+# 固定路径见 internal/privilege/hosts_applier.go 的注释。
+ExecStart=/usr/local/lib/github-net/github-net-helper
+# root 常驻〔沿用 github-hlep 2026-10-25 拍板的权限模型〕——写 /etc/hosts 本来就要这一档；
+# 端点固定在 /run/github-net，socket 0666，只开白名单操作。
+Restart=on-failure
+RestartSec=2
+# 服务自己退出时会删 socket；systemd 再兜一层，停完把运行时目录也扫掉。
+ExecStopPost=-/usr/bin/rm -rf /run/github-net
+
+[Install]
+WantedBy=multi-user.target

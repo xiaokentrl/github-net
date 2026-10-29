@@ -84,3 +84,8 @@
   font-size: 0.8rem;
   color: var(--red);
 }
+
+.apply {
+  border-color: var(--green);
+  background: var(--green);
+}

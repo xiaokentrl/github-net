@@ -11,6 +11,7 @@ import (
 	"github.com/xiaokentrl/github-net/internal/config"
 	"github.com/xiaokentrl/github-net/internal/event"
 	"github.com/xiaokentrl/github-net/internal/hosts"
+	"github.com/xiaokentrl/github-net/internal/privilege"
 	"github.com/xiaokentrl/github-net/internal/task"
 )
 
@@ -47,6 +48,10 @@ type Service struct {
 	// 它决定 GetAppStatus 的 DNSDetectionReady，前端据此放开检测入口。
 	detectReady bool
 
+	// priv 是特权辅助服务客户端；应用/还原类命令经由它落到受限服务。
+	// 测试注入假实现；nil 表示这一层没接（应用/恢复任务在队列里以可见失败收场）。
+	priv privilege.Caller
+
 	// strategyTable 是方法注册表的读取接缝，零值即生产行为（读包级全局表）。
 	// 声明在 Service 上而不是每个命令各自读包级函数，是为了让方法选择区的
 	// 「真表走不到的分支」有测试落点，见 strategies.go。
@@ -78,15 +83,16 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	}
 	// 队列的执行动作在目录和设置都就绪时才换上真实检测执行器；缺哪样都先走拒答，
 	// 不降级硬跑。换装和排任务的入口 DetectItems 是同一步放行的，见 TECHNICAL_PLAN 阶段三。
-	var exec task.Executor = pendingExecutor{}
+	var detectExec task.Executor = pendingExecutor{}
 	if err == nil {
 		s.settings, s.settingsErr = newSettingsStore(c)
 		if s.settings != nil {
-			exec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit))
+			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit))
 			s.detectReady = true
 		}
 	}
-	s.tasks = newTaskQueue(exec, taskEmit)
+	s.priv = privilege.NewClient()
+	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results), taskEmit)
 	return s
 }
 

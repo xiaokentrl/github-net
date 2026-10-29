@@ -177,6 +177,11 @@
   "error.boundary.action": "重新加载界面",
   "error.unknown": "未知错误",
 
+  "hosts.apply": "应用到 Hosts",
+  "hosts.restore": "还原此项",
+  "hosts.open": "打开 Hosts",
+  "hosts.error": "Hosts 操作没能完成：{reason}",
+
   "detect.section": "检测",
   "detect.start": "检测",
   "detect.running": "检测中…",

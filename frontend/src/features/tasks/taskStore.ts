@@ -88,7 +88,7 @@ export function applyTaskEvent(payload: TaskProgressPayload) {
     next.results = results
     next.live = live
   }
-  if (isTerminal(payload.task.status) && payload.task.kind === 'detect') {
+  if (isTerminalTask(payload.task.status) && payload.task.kind === 'detect') {
     // 终态后后端已经把整轮结论存好，这里拉权威快照替换事件补画的临时行。
     void refreshResult(payload.task.itemId)
     const live = { ...state.live }
@@ -137,7 +137,8 @@ function emptyResult(itemId: string): DetectResultView {
   return { itemId, scopeId: '', strategyId: '', available: 0, probesUsed: 0, dnsQueries: 0, truncated: false, deadlineHit: false, cancelled: false, hosts: [] }
 }
 
-function isTerminal(status: Task['status']): boolean {
+// isTerminalTask 判断任务是否已到终态；taskEvents 用它触发「任务落定」回调。
+export function isTerminalTask(status: Task['status']): boolean {
   return status === 'done' || status === 'failed' || status === 'cancelled' || status === 'skipped' || status === 'rolledback' || status === 'restored'
 }
 

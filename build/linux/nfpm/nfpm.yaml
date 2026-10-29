@@ -19,6 +19,11 @@ release: "1"
 contents:
   - src: "./bin/github-net"
     dst: "/usr/local/bin/github-net"
+  # 特权辅助服务：放私有目录不进 PATH——它是给主程序连的，不该让用户直接敲。
+  - src: "./bin/github-net-helper"
+    dst: "/usr/local/lib/github-net/github-net-helper"
+  - src: "./build/linux/systemd/github-net-helper.service"
+    dst: "/usr/lib/systemd/system/github-net-helper.service"
   - src: "./build/appicon.png"
     dst: "/usr/share/icons/hicolor/128x128/apps/github-net.png"
   - src: "./build/linux/io.github.xiaokentrl.githubnet.desktop"

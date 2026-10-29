@@ -8,6 +8,10 @@ import (
 	"github.com/xiaokentrl/github-net/internal/task"
 )
 
+// pendingExecutorMessage 是「还没接执行器」那句拒绝。写在这里而不是散落各处：
+// 分发执行器对没接上的类型也说同一句话，界面文案保持一致。
+const pendingExecutorMessage = "这一类任务还没有接上执行动作，这条任务没有开始"
+
 // pendingExecutor 是「执行动作还没接上」这件事的可见答案。
 //
 // 检测执行器（detectExecutor）在目录和设置就绪时由装配层换进队列；应用和恢复

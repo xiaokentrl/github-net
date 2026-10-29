@@ -22,6 +22,14 @@ import * as task$0 from "../task/models.js";
 import * as $models from "./models.js";
 
 /**
+ * ApplyItems 把指定项目排进应用队列：把该项目最近一轮检测的可用候选写进系统 Hosts。
+ * 没检测过的项目在入口就被拒——「先检测、再应用」这条顺序不靠用户自觉。
+ */
+export function ApplyItems(itemIDs: string[] | null): $CancellablePromise<task$0.Task[] | null> {
+    return $Call.ByID(3426410998, itemIDs);
+}
+
+/**
  * CancelTask 取消一条排队中或执行中的任务，返回取消后的完整快照。
  * 空 ID 是调用方给错了东西，跟「队列里没有这条记录」分成两个错误码。
  */
@@ -110,6 +118,14 @@ export function GetTasks(): $CancellablePromise<task$0.Snapshot> {
 }
 
 /**
+ * OpenHosts 请系统用默认编辑器打开 Hosts 文件。打开动作由后端执行，
+ * 前端不碰进程；拿不到可展示失败，不静默。
+ */
+export function OpenHosts(): $CancellablePromise<void> {
+    return $Call.ByID(3701434949);
+}
+
+/**
  * PauseQueue 暂停领取新的等待任务，已经在跑的那条不受影响，返回暂停后的完整快照。
  * 重复调用幂等：界面上按快照里的 paused 显示，而不是数自己点了几次。
  */
@@ -122,6 +138,24 @@ export function PauseQueue(): $CancellablePromise<task$0.Snapshot> {
  */
 export function Ping(token: string): $CancellablePromise<string> {
     return $Call.ByID(2431489530, token);
+}
+
+/**
+ * RestoreAllHosts 把全部还由工具管理的项目一次退回应用前状态，返回实际还原的项目数。
+ * 这是服务侧一笔原子操作、没有进度可言，所以不进队列：单独一条命令直接完成，
+ * 失败原样上抛给界面（错误码区分「服务没在跑」和「服务拒了」）。
+ */
+export function RestoreAllHosts(): $CancellablePromise<number> {
+    return $Call.ByID(2325334514);
+}
+
+/**
+ * RestoreItems 把指定项目排进还原队列：退回它应用前的映射。
+ * 项目在不在目录里要验；它有没有被应用过不在这验——还原没应用过的项目在服务侧是无害的空操作，
+ * 让队列里那条以「还原完成」收场即可，不给用户造一个必须先理解的错误。
+ */
+export function RestoreItems(itemIDs: string[] | null): $CancellablePromise<task$0.Task[] | null> {
+    return $Call.ByID(19010572, itemIDs);
 }
 
 /**

@@ -6,6 +6,8 @@
 
 ## [未发布]
 
+- **Hosts 应用与还原接通（2026-10-30，Linux）**：新增受限特权辅助服务（root 常驻、固定 IPC 白名单、备份/原子替换/写后校验/失败回滚），`ApplyItems`/`RestoreItems`/`RestoreAllHosts`/`OpenHosts` 四条命令与队列分发执行器同轮落地；deb 内装 helper 与 systemd 单元，安装时启用一次、之后不再要权限。前端详情页新增「应用到 Hosts / 还原此项 / 打开 Hosts」，任务落定自动刷新 Hosts 状态。全链路测试走临时文件，Windows/macOS 的辅助服务机制仍是后续工作。
+
 - **真实检测放行（2026-10-30）**：装配层在目录与设置就绪时换装 `detectExecutor`，`DetectItems` 排任务入口同轮接通（整批校验：项目在目录、范围已选方法、方法可用，不合格整批拒绝）；候选结论存内存、`GetDetectResult` 取现状、`detect:progress` 事件逐候选推送；`GetAppStatus` 的 `DNSDetectionReady` 随换装翻真。前端接上详情页检测按钮、按主机名分组的候选逐行状态表和底部任务队列面板（暂停/继续、取消、清空）。真实网络冒烟通过：解析、TLS 探测、预算超时与路由不可达如实落档。检测仍不写 Hosts，应用与恢复属阶段四。
 
 - **工程骨架**：Wails v3 + React/TS/Vite 骨架、`Taskfile.yml`、Linux CI 门禁（前端构建、后端格式化/静态检查/测试、Linux x64 出包）。
