@@ -112,7 +112,6 @@
   @media(max-width:760px){.network-profile-grid{grid-template-columns:1fr}.network-profile-card{min-height:0}}
   .toolbar .spacer{flex:1}
 
-  /* 挂在工具栏里面，位置跟着工具栏下沿走，不再写死像素（写死会压到按钮上） */
   .global-progress{
     position:absolute;top:100%;left:0;right:0;height:3px;
     background:transparent;z-index:30;pointer-events:none;
@@ -270,15 +269,13 @@
   .error-box .ico{flex:none;font-weight:700}
   .error-box.warn{background:var(--amber-soft);border-top-color:#f0d8b0;color:#92400e}
 
-  table.cands{width:100%;border-collapse:collapse;table-layout:fixed}
-  table.cands th{text-align:left;font-size:11px;font-weight:500;color:var(--text-3);padding:9px 16px;background:#fafbfc;border-bottom:1px solid var(--border)}
-  table.cands td{padding:9px 16px;border-bottom:1px solid #f0f2f5;font-variant-numeric:tabular-nums}
+  /* 候选 IP 表：列宽自适应内容长度，剩余宽度均分 */
+  table.cands{width:100%;border-collapse:collapse;table-layout:auto}
+  table.cands th{text-align:left;font-size:11px;font-weight:500;color:var(--text-3);padding:9px 16px;background:#fafbfc;border-bottom:1px solid var(--border);white-space:nowrap}
+  table.cands td{padding:9px 16px;border-bottom:1px solid #f0f2f5;font-variant-numeric:tabular-nums;white-space:nowrap}
   table.cands tr:last-child td{border-bottom:none}
   table.cands tr:hover td{background:#fafbfc}
 
-  table.cands th:nth-child(1),table.cands td:nth-child(1){width:44px}
-  table.cands th:nth-child(3),table.cands td:nth-child(3){width:64px}
-  table.cands th:nth-child(4),table.cands td:nth-child(4){width:80px}
   table.cands th:nth-child(5),table.cands td:nth-child(5){width:100px}
   table.cands th:nth-child(6),table.cands td:nth-child(6){width:120px}
 
@@ -288,7 +285,10 @@
   table.cands tr.current:hover td{background:#dcf3e6}
 
   table.cands td.tags-cell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tag{display:inline-block;font-size:10px;background:var(--green);color:#fff;border-radius:3px;padding:1px 5px;vertical-align:middle}
+  .tag{display:inline-block;font-size:10px;background:var(--green);color:#fff;border-radius:3px;padding:1px 5px;vertical-align:middle;margin-right:4px}
+  .tag.probe-running{background:var(--primary)}
+  .tag.probe-ok{background:var(--green)}
+  .tag.probe-fail{background:var(--red)}
 
   .score-bar{display:inline-block;width:46px;height:5px;background:#eef1f6;border-radius:3px;overflow:hidden;vertical-align:middle;margin-right:7px}
   .score-bar i{display:block;height:100%;background:linear-gradient(90deg,#34d399,#16a34a);border-radius:3px}
@@ -299,6 +299,41 @@
   @media(max-width:760px){.candidate-actions{width:100%;margin-left:0}}
 
   .queue{height:252px;flex:none;background:var(--panel);border-top:1px solid var(--border);display:flex;flex-direction:column;min-height:120px;transition:height .18s ease}
+  .queue .qdrawer{display:flex;flex:1;min-height:0}
+  .queue .queue-pane{flex:0 0 auto;width:min-content;min-width:150px;max-width:45%;border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .queue .pane-head{padding:8px 14px;font-size:12px;font-weight:600;color:var(--text-2);flex:none}
+  .queue .queue-list{flex:1;overflow-y:auto;min-width:0}
+  .queue .detail-pane{flex:1 1 auto;min-width:0;overflow-y:auto;padding:0 0 8px;background:var(--bg)}
+  .queue .qrow{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:12.5px;border-bottom:1px solid #f4f5f7}
+  .queue .qrow:hover{background:var(--bg)}
+  .queue .qrow.sel{background:var(--primary-soft)}
+  .queue .qrow-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .queue .qd-page{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}
+  .queue .qd-arrow{width:24px;height:22px;padding:0;font-size:11px;color:var(--text-2);background:var(--panel);border:1px solid var(--border);border-radius:4px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+  .queue .qd-arrow:hover:not(:disabled){color:var(--primary);border-color:var(--primary)}
+  .queue .qd-arrow:disabled{opacity:.4;cursor:not-allowed}
+  /* 列宽自适应内容长度：自动布局按内容分配，均分时浏览器也会摊平 */
+  .queue .qtable2{width:100%;border-collapse:collapse;table-layout:auto}
+  .queue .qtable2 th{text-align:left;font-size:11px;font-weight:500;color:var(--text-3);padding:6px 12px;background:#fafbfc;border-bottom:1px solid var(--border);white-space:nowrap}
+  .queue .qtable2 td{padding:6px 12px;border-bottom:1px solid #f4f5f7;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .queue .qtable2 tr:last-child td{border-bottom:none}
+  .queue .qtable2 tr.focus td{background:var(--primary-soft)}
+  .queue .qtable2 tr.sel td{background:var(--green-soft)}
+  .queue .qtable2 tbody tr{cursor:pointer}
+  .queue .qd-ctl{white-space:nowrap;width:1%;text-align:right}
+  .queue .qd-page{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums;margin-right:6px}
+  .queue .qd-arrow{width:22px;height:20px;padding:0;font-size:11px;color:var(--text-2);background:var(--panel);border:1px solid var(--border);border-radius:4px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:4px}
+  .queue .qd-arrow:hover:not(:disabled){color:var(--primary);border-color:var(--primary)}
+  .queue .qd-arrow:disabled{opacity:.4;cursor:not-allowed}
+  .queue .ndot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:2px;flex:none;background:var(--text-3);opacity:.5}
+  .queue .ndot-running,.queue .ndot-restoring{background:var(--primary);opacity:1;animation:spin-dot 1.2s ease-in-out infinite}
+  .queue .ndot-done,.queue .ndot-restored{background:var(--green);opacity:1}
+  .queue .ndot-failed{background:var(--red);opacity:1}
+  .queue .ndot-rolledback{background:var(--amber);opacity:1}
+  .queue .ndot-skipped{background:var(--text-3)}
+  .queue .ndot-queued{background:transparent;box-shadow:inset 0 0 0 1.5px var(--border-strong)}
+  .queue .ndot-cancelled{background:transparent;box-shadow:inset 0 0 0 1.5px var(--text-3)}
+  @keyframes spin-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.82)}}
   .queue.collapsed{height:45px !important;min-height:45px !important}
   .queue.collapsed .queue-list{display:none}
 
@@ -324,14 +359,60 @@
   .queue-empty{height:100%;display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;color:var(--text-3);font-size:12px}
   .queue-empty .small{font-size:11.5px}
 
+  .queue-body{display:flex;flex:1;min-height:0}
+  .queue-left{flex:0 0 auto;width:min-content;min-width:150px;max-width:45%;border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .queue-detail{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;min-height:0;background:var(--bg)}
+  .qd-body{flex:1;min-height:0;overflow-y:auto}
+  .qd-empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:12px;text-align:center;padding:0 12px}
+  .queue .qrow{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:12.5px;border-bottom:1px solid #f4f5f7}
+  .queue .qrow:hover{background:var(--bg)}
+  .queue .qrow.sel{background:var(--primary-soft)}
+  .queue .qrow-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .queue .qd-arrow{width:22px;height:20px;padding:0;font-size:11px;color:var(--text-2);background:var(--panel);border:1px solid var(--border);border-radius:4px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:4px}
+  .queue .qd-arrow:hover:not(:disabled){color:var(--primary);border-color:var(--primary)}
+  .queue .qd-arrow:disabled{opacity:.4;cursor:not-allowed}
+  .queue .qd-page{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums;margin-right:6px}
+  .queue .qd-ctl{white-space:nowrap;width:1%;text-align:right}
+  .queue .qtable2{width:100%;border-collapse:collapse;table-layout:auto}
+  .queue .qtable2 th{text-align:left;font-size:11px;font-weight:500;color:var(--text-3);padding:6px 12px;background:#fafbfc;border-bottom:1px solid var(--border);white-space:nowrap}
+  .queue .qtable2 td{padding:6px 12px;border-bottom:1px solid #f4f5f7;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .queue .qtable2 tr:last-child td{border-bottom:none}
+  .queue .qtable2 tr.focus td{background:var(--primary-soft)}
+  .queue .qtable2 tr.sel td{background:var(--green-soft)}
+  .queue .qtable2 tbody tr{cursor:pointer}
+  .qd-arrow{width:24px;height:24px;padding:0;justify-content:center;font-size:12px;color:var(--text-2);background:var(--surface);border:1px solid var(--border);border-radius:6px;cursor:pointer}
+  .qd-arrow:hover:not(:disabled){color:var(--primary);border-color:var(--primary)}
+  .qd-arrow:disabled{opacity:.4;cursor:not-allowed}
+  .qd-page{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums;flex:none}
+  .qd-list{width:100%;border-collapse:collapse;table-layout:fixed}
+  .qd-list th{text-align:left;font-size:11px;font-weight:500;color:var(--text-3);padding:5px 8px;background:#fafbfc;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+  .qd-list td{padding:5px 8px;border-bottom:1px solid #f4f5f7;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qd-list tr:last-child td{border-bottom:none}
+  .qd-list tr.focus td{background:var(--primary-soft)}
+  .qd-list .qstatus{font-size:11px}
+  .qd-list th:nth-child(2),.qd-list td:nth-child(2){width:96px}
+  .qd-list th:nth-child(3),.qd-list td:nth-child(3){width:72px}
+  .qd-title{margin:0 0 10px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;min-width:0}
+  .qd-title .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qd-grid{display:grid;grid-template-columns:96px 1fr;gap:7px 10px;font-size:12px}
+  .qd-grid dt{color:var(--text-3);margin:0}
+  .qd-grid dd{margin:0;min-width:0;overflow-wrap:break-word}
+  .qd-err{margin-top:10px;padding:7px 10px;border-radius:6px;background:var(--red-soft);color:var(--red);font-size:12px;display:flex;gap:6px;align-items:flex-start}
+  .qd-section{margin-top:12px}
+  .qd-section h5{margin:0 0 6px;font-size:11px;font-weight:600;color:var(--text-3)}
+  .qd-steps{list-style:none;margin:0;padding:0;font-size:12px;display:flex;flex-direction:column;gap:4px}
+  .qd-steps li{display:flex;align-items:center;gap:7px;color:var(--text-2)}
+  .qd-steps .sdot{width:6px;height:6px;border-radius:50%;background:var(--text-3);opacity:.45;flex:none}
+  .qd-steps li.on .sdot{background:var(--primary);opacity:1}
+  .qd-steps li.done .sdot{background:var(--green);opacity:1}
+  .qd-steps li.dim{color:var(--text-3)}
+
   table.qtable{width:100%;border-collapse:collapse;table-layout:fixed}
   table.qtable th{text-align:left;font-size:11px;font-weight:500;color:var(--text-3);padding:8px 12px;background:#fafbfc;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
   table.qtable td{padding:8px 12px;border-bottom:1px solid #f4f5f7;font-size:12px}
   table.qtable tr:last-child td{border-bottom:none}
-  table.qtable th:nth-child(1),table.qtable td:nth-child(1){width:40px}
-  table.qtable th:nth-child(3),table.qtable td:nth-child(3){width:104px}
-  table.qtable th:nth-child(4),table.qtable td:nth-child(4){width:64px}
-  table.qtable th:nth-child(5),table.qtable td:nth-child(5){width:142px}
+  table.qtable tbody tr{cursor:pointer}
+  table.qtable tbody tr.active td{background:var(--primary-soft)}
 
   table.qtable .q-task{display:flex;flex-direction:column;gap:2px;min-width:0}
   table.qtable .q-task > span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -344,7 +425,6 @@
   .q-kind.restore{background:var(--amber-soft);color:var(--amber)}
 
   .q-col-op{text-align:right;white-space:nowrap;display:flex;align-items:center;justify-content:flex-end;gap:4px}
-  .q-col-op .lbl{color:var(--text-3);font-weight:500}
 
   .q-scroll{width:18px;height:18px;padding:0;border:1px solid var(--border-strong);border-radius:3px;background:#fff;color:var(--text-2);cursor:pointer;font-size:10px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
   .q-scroll:hover{background:#f0f2f5;color:var(--text)}
@@ -476,9 +556,6 @@
   .settings-foot{flex:none;display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border);background:#fbfcfd}
   .settings-foot .btn{height:32px;min-width:76px;justify-content:center}
 
-  /* 设置中心 → 外观 → 主题平铺网格（需求②）：
-     · 独立滚动（max-height + overflow-y:auto），不用打开弹窗；
-     · 每张卡片点一下即时换肤，无需「选择主题…」按钮。 */
   .settings-theme-grid{
     margin-top:12px;
     padding:8px;
@@ -521,11 +598,6 @@
   body.reduce-motion .dot.pending{background:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
   body.reduce-motion .q-current .spin{border-top-color:var(--primary)}
 
-  /* ===== 主题：6 套配色照 ~/phpo 那份原型搬过来（只新增这一整块，上面浅色的一个字符没动）。
-     做法：给 <html> 挂 data-theme，每套主题整块覆盖同一批颜色变量。
-     下面每条点名规则前面都带 html[data-theme]:not([data-theme="light"])，比原规则更具体，所以盖得住，原规则不用改。
-     晨光白（light）就是本文件原来的浅色，一个值都没改，所以它不参与任何覆盖。
-     托盘胶囊和主题弹窗是新组件，浅色也要用，所以先把它们要的变量按浅色的值垫在 html 上，其余五套再各自覆盖。 */
   html{--ctl:#fff;--hov:#f5f6f8;--hov2:#eef1f5;--band:#f0f2f5;--line-a:#c9d9f4;--line-w:#eddcb8;
        --line-d:#f2c6c6;--mask:rgba(15,23,42,.4);--toast:#2b3441;--pop:0 12px 32px rgba(16,24,40,.14)}
   html[data-theme="midnight"]{color-scheme:dark;--bg:#0a0c10; --panel:#11141b; --border:#222835; --border-strong:#3d4757;
@@ -736,7 +808,6 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
       <option value="proxy" disabled>系统代理（未启用）</option>
       <option value="pac" disabled>PAC（未启用）</option>
     </select>
-    <!-- 需求④：modeSelect 后新增「打开Hosts」按钮 -->
     <button class="btn" id="btnOpenHosts" title="打开系统 hosts 文件">打开Hosts</button>
     <div class="spacer"></div>
     <button class="btn" id="btnDetectAll">检测全部</button>
@@ -779,7 +850,10 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
           <button class="btn" id="btnRetryFailed" disabled>重试失败</button>
           <button class="btn toggle-btn" id="btnToggleQueue" title="收起/展开队列">▾</button>
         </div>
-        <div class="queue-list" id="queueList"></div>
+        <div class="queue-body">
+          <div class="queue-left"><div class="queue-list" id="queueList"></div></div>
+          <aside class="queue-detail"><div class="qd-body" id="queueDetail"></div></aside>
+        </div>
       </div>
     </div>
   </div>
@@ -974,7 +1048,6 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
             <div class="set-row">
               <span class="update-status" id="themeName">当前：晨光白</span>
             </div>
-            <!-- 需求②：去掉「选择主题…」按钮，改为平铺卡片（可向下滚动选择） -->
             <div class="theme-grid settings-theme-grid" id="settingsThemeGrid"></div>
           </div>
         </section>
@@ -1004,7 +1077,6 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
 
           <div class="set-card">
             <div class="set-card-title"><span class="ico">▶</span>登录时自动启动</div>
-            <!-- 需求①：默认关闭（移除了 checked）；同时补 Mac 支持说明 -->
             <p class="set-card-desc">在用户登录后通过计划任务（Windows）、LaunchAgent（macOS）或 systemd（Linux）自动启动后台服务。</p>
             <div class="set-row">
               <label class="switch"><input type="checkbox" id="chkAutoStart"><span class="slider"></span></label>
@@ -1027,7 +1099,6 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
               检测过程中的焦点跟随由「检测时焦点跟随」开关决定。
             </p>
             <div class="set-row">
-              <!-- 需求①：默认关闭（移除了 checked） -->
               <label class="switch">
                 <input type="checkbox" id="chkAutoDetectOnStartup">
                 <span class="slider"></span>
@@ -1043,7 +1114,6 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
               检测失败或没有可用 IP 的项会自动跳过。
             </p>
             <div class="set-row">
-              <!-- 需求①：默认关闭（移除了 checked，且默认 disabled 由 JS 联动） -->
               <label class="switch">
                 <input type="checkbox" id="chkAutoApplyOnStartup" disabled>
                 <span class="slider"></span>
@@ -1139,6 +1209,14 @@ const CATEGORY_DEFS = [
     { id:'gh-gist', name:'Gist', domains:['gist.githubusercontent.com'], init:'unset' },
     { id:'gh-act', name:'Actions', domains:['pipelines.actions.githubusercontent.com'], init:'unset' }
   ]},
+  { id:'steam', name:'Steam', items:[
+    { id:'st-store', name:'商店', domains:['store.steampowered.com'], init:'applied' },
+    { id:'st-comm', name:'社区', domains:['steamcommunity.com'], init:'error' },
+    { id:'st-cdn', name:'CDN', domains:['cdn.steampowered.com'], init:'applied' },
+    { id:'st-dl', name:'下载节点', domains:['ext1-hkg1.steamserver.net'], init:'stale' },
+    { id:'st-img', name:'图片与头像', domains:['avatars.steamstatic.com'], init:'unset' }
+  ]},
+
   { id:'jetbrains', name:'JetBrains', items:[
     { id:'jb-plug', name:'插件市场', domains:['plugins.jetbrains.com','downloads.marketplace.jetbrains.com'], init:'unset' },
     { id:'jb-ide', name:'IDE 下载', domains:['download.jetbrains.com','download-cdn.jetbrains.com'], init:'unset' },
@@ -1154,13 +1232,6 @@ const CATEGORY_DEFS = [
     { id:'ai-trae', name:'Trae', domains:['trae.ai','trae-api.com'], init:'unset' },
     { id:'ai-gemini', name:'Gemini', domains:['daily-cloudcode-pa.googleapis.com'], init:'unset' },
     { id:'ai-claude', name:'Claude / MCP', domains:['api.anthropic.com'], init:'unset' }
-  ]},
-  { id:'steam', name:'Steam', items:[
-    { id:'st-store', name:'商店', domains:['store.steampowered.com'], init:'applied' },
-    { id:'st-comm', name:'社区', domains:['steamcommunity.com'], init:'error' },
-    { id:'st-cdn', name:'CDN', domains:['cdn.steampowered.com'], init:'applied' },
-    { id:'st-dl', name:'下载节点', domains:['ext1-hkg1.steamserver.net'], init:'stale' },
-    { id:'st-img', name:'图片与头像', domains:['avatars.steamstatic.com'], init:'unset' }
   ]},
   { id:'gameplat', name:'游戏平台', items:[
     { id:'gp-epic', name:'Epic Games', domains:['download.epicgames.com'], init:'unset' },
@@ -1252,6 +1323,8 @@ const state = {
   filter: '',
   collapsed: new Set(),
   queue: [],
+  focusManual: false,
+  queueFocusManual: false,
   paused: false,
   queueRunning: false,
   batchDetecting: false,
@@ -1277,7 +1350,6 @@ const state = {
     theme: 'light',
     trayMinimize: true,
     showTrayIcon: true,
-    /* 需求①：登录时自动启动默认关闭 */
     autoStart: false,
     startMinimized: false,
     detectFocusFollow: false,
@@ -1285,7 +1357,6 @@ const state = {
     primaryStrategyByService: {},
     networkProfile: 'low',
     maxCandidatesPerRun: 108,
-    /* 需求①：自动检测 / 自动应用默认关闭 */
     autoDetectOnStartup: false,
     autoApplyOnStartup: false
   },
@@ -1320,8 +1391,6 @@ function buildData() {
 function createItem(def) {
   const item = {
     id: def.id, name: def.name, domains: def.domains.slice(),
-    /* 需求⑥：菜单全部默认未选中。
-       def.init 仅用于演示「初始状态 / 已有 IP」，不参与勾选默认值。 */
     checked: false,
     status: def.init,
     appliedIp: null, bestIp: null,
@@ -1396,12 +1465,6 @@ function canApply(item) { return !!item.bestIp; }
 function canRestoreHosts(item) { return item && item.prevAppliedIp !== undefined; }
 function hasRestorableInCategory(cat) { return cat.items.some(it => canRestoreHosts(it)); }
 
-/**
- * 需求⑤配套：判断给定 item 是否就是当前详情面板正在展示的那一项。
- *   · 有选中项 → 看选中项
- *   · 无选中项 → 看兜底项 allItems()[0]
- * 用于决定异步任务推进时，是否要立即刷新详情面板（避免兜底项显示不更新）。
- */
 function isCurrentlyDisplayed(itemId) {
   if (state.selectedId) return state.selectedId === itemId;
   const fallback = allItems()[0];
@@ -1578,7 +1641,17 @@ function persistSelection() {
 function loadSelection() {
   try {
     const raw = localStorage.getItem(SELECTION_KEY);
-    if (!raw) return;
+    if (!raw) {
+      // 没有勾选存档时的默认值：GitHub 和 Steam 两个一级菜单（含子菜单）默认勾选。
+      const defaultIds = new Set(
+        state.categories
+          .filter(cat => ['github', 'steam'].includes(cat.id))
+          .flatMap(cat => cat.items.map(item => item.id))
+      );
+      allItems().forEach(item => { item.checked = defaultIds.has(item.id); });
+      persistSelection();
+      return;
+    }
     const ids = JSON.parse(raw);
     if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string')) {
       throw new Error('勾选项存档格式无效');
@@ -1897,7 +1970,6 @@ function openSettings(paneName) {
   document.getElementById('chkAutoApplyOnStartup').checked = state.settings.autoApplyOnStartup;
   syncAutoApplyAvailability();
   syncUpdatePane();
-  /* 需求②：打开设置就刷新一次主题平铺网格，保证选中态与 state 一致 */
   renderSettingsThemeGrid();
   switchPane(paneName || 'layout');
   settingsMask.classList.add('show');
@@ -2279,8 +2351,6 @@ function patchTreeItem(item) {
   }
 }
 
-/* 详情面板这几行的名字只在这里写一遍。
-   空闲时和检测/应用中必须列同一批行，否则一进入检测状态面板就会多一行或少一行，跟着抖一下。 */
 const DETAIL_METRICS = [
   { label: '当前写入 IP', cls: it => it.appliedIp ? 'mono' : 'dim', text: it => it.appliedIp || '—' },
   { label: '检测最优 IP', cls: it => it.bestIp ? 'mono' : 'dim', text: it => it.bestIp || '—' },
@@ -2290,9 +2360,6 @@ const DETAIL_METRICS = [
   { label: '上次检测', cls: () => 'dim', text: it => it.lastCheck || '尚未检测', style: 'font-size:12px' }
 ];
 
-/* 需求⑤：详情面板无真实数据时的完整空模板。
-   它不在 state.categories 里，只用于「树还没选中 + 数据还没加载」这一瞬间的兜底显示。
-   一旦 state.categories 有真实数据，renderDetail() 会立刻切换成真实的第一条。 */
 const EMPTY_DETAIL_ITEM = {
   id: '', name: '—', domains: [], checked: false, status: 'unset',
   appliedIp: null, bestIp: null, prevAppliedIp: undefined,
@@ -2300,23 +2367,6 @@ const EMPTY_DETAIL_ITEM = {
   candidates: [], errorMsg: ''
 };
 
-/* ============================================================================
- * 详情面板显示策略（重要：修改此函数前请先读懂下面几条约定，方便后续 AI / 维护者接手）
- * ----------------------------------------------------------------------------
- * ① 详情面板始终渲染完整的卡片结构（标题 / 状态徽章 / 指标网格 / 域名行 / 候选 IP 表格 /
- *    操作按钮），不再因为「未选中」而提前 return 空提示页。
- * ② 未选中任何项（state.selectedId 为 null）时，默认渲染 allItems()[0]。
- *    这里只是「展示兜底」，不会写回 state.selectedId —— 所以左侧树不会出现选中高亮，
- *    与需求「菜单全部默认未选中」保持一致。
- * ③ 如果连 allItems()[0] 都没有（数据尚未加载 / 数据为空），使用 EMPTY_DETAIL_ITEM
- *    渲染完整空详情：所有区块保留，值显示为「—」，表格显示「暂无数据」。
- * ④ 一旦 state.categories 有真实数据，renderDetail() 会立即拿到第一条真实项；
- *    用户点击左侧项后，state.selectedId 有值，则优先渲染选中项（不再走兜底）。
- * ⑤ 兜底项（isRealItem === false）上的「单独检测 / 仅应用此项 / 查看日志」按钮全部禁用，
- *    避免对不存在的 item 执行检测/应用逻辑。
- * ⑥ 配合 isCurrentlyDisplayed(itemId) 使用：异步任务推进到兜底项时也会实时刷新详情面板，
- *    不会出现「树里显示检测中、详情还停在未替换」的错位。
- * ========================================================================== */
 function renderDetail() {
   const fallbackItem = allItems()[0] || EMPTY_DETAIL_ITEM;
   const selectedItem = state.selectedId ? findItem(state.selectedId) : null;
@@ -2336,12 +2386,18 @@ function renderDetail() {
     const isCurrent = item.appliedIp === c.ip;
     const isBest = item.bestIp === c.ip;
     const tagHtml = isBest ? '<span class="tag">最优</span>' : '';
+    // 探测进行中逐个点亮：检测中（蓝）/ 可用（绿）/ 失败（红）；落定后保留结果徽章。
+    let probeHtml = '';
+    if (c._probe === '检测中') probeHtml = '<span class="tag probe-running">检测中</span>';
+    else if (c._probe === '可用') probeHtml = '<span class="tag probe-ok">可用</span>';
+    else if (c._probe === '失败') probeHtml = '<span class="tag probe-fail">失败</span>';
+    const latencyText = c._probe === '检测中' ? '…' : `${c.latency} ms`;
     return `
       <tr class="${isCurrent?'current':(i===0?'best':'')}">
         <td>${i+1}</td>
         <td class="mono">${c.ip}</td>
-        <td class="tags-cell">${tagHtml}</td>
-        <td>${c.latency} ms</td>
+        <td class="tags-cell">${tagHtml}${probeHtml}</td>
+        <td>${latencyText}</td>
         <td><span class="score-bar"><i style="width:${c.score}%"></i></span>${c.score}</td>
       </tr>`;
   }).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:24px 0">${
@@ -2456,6 +2512,406 @@ function renderDetail() {
   if (logBtn) logBtn.onclick = () => { if (isRealItem) showTaskHistory(item); };
 }
 
+
+/* ============================================================================
+ * 任务队列（扁平节点 + 派生树，demo_html 契约）
+ * batch(一级菜单任务) → item(子菜单) → step(阶段)/attempt(候选请求)
+ * ============================================================================ */
+const NODE_STATUS = {
+  queued:      { text: '排队中', cls: 'queued' },
+  running:     { text: '执行中', cls: 'running' },
+  done:        { text: '完成',   cls: 'done' },
+  failed:      { text: '失败',   cls: 'failed' },
+  skipped:     { text: '跳过',   cls: 'skipped' },
+  cancelled:   { text: '已取消', cls: 'cancelled' },
+  rolledback:  { text: '已回滚', cls: 'rolledback' },
+  restoring:   { text: '恢复中', cls: 'restoring' },
+  restored:    { text: '已恢复', cls: 'restored' }
+};
+const NODE_TERMINAL = new Set(['done', 'failed', 'skipped', 'cancelled', 'rolledback', 'restored']);
+const NODE_KIND = { detect: '检测', apply: '应用', restore: '恢复' };
+
+const nodeStore = { nodes: new Map(), roots: [], seq: 0 };
+let selectedNodeId = null;
+let qdPage = 0;
+let qdPerPage = 6;
+let qdManual = false;
+let qdLastFocusPage = -1;
+
+function createNode(props) {
+  const node = {
+    id: 'n' + (++nodeStore.seq),
+    rootId: null, parentId: null, type: 'detect', scope: 'item',
+    name: '', target: null, status: 'queued', stage: null,
+    progress: null, concurrency: null, error: null, result: null,
+    childrenIds: [],
+    timing: { queuedAt: performance.now(), startedAt: 0, finishedAt: 0, durationMs: 0 }
+  };
+  Object.assign(node, props);
+  nodeStore.nodes.set(node.id, node);
+  if (node.parentId) {
+    const parent = nodeStore.nodes.get(node.parentId);
+    node.rootId = parent.rootId || parent.id;
+    parent.childrenIds.push(node.id);
+  } else {
+    node.rootId = node.id;
+    nodeStore.roots.push(node.id);
+  }
+  return node;
+}
+const nodeById = id => nodeStore.nodes.get(id);
+const childrenOf = (node, scope) => (node.childrenIds || []).map(nodeById).filter(k => k && (!scope || k.scope === scope));
+
+function recompute(root) {
+  const kids = childrenOf(root, 'item');
+  if (!root.progress) root.progress = {};
+  root.progress.total = kids.length;
+  root.progress.done = kids.filter(k => NODE_TERMINAL.has(k.status)).length;
+}
+
+function finishRoot(root) {
+  const kids = childrenOf(root, 'item');
+  root.progress.total = kids.length;
+  root.progress.done = kids.filter(k => NODE_TERMINAL.has(k.status)).length;
+  root.progress.current = '';
+  root.stage = null;
+  root.timing.finishedAt = performance.now();
+  root.timing.durationMs = root.timing.finishedAt - root.timing.startedAt;
+  if (root.status === 'cancelled') return;
+  if (!kids.length) { root.status = 'done'; return; }
+  if (kids.every(k => k.status === 'skipped' || k.status === 'cancelled')) { root.status = 'skipped'; return; }
+  if (root.type === 'restore' && kids.every(k => k.status === 'restored')) { root.status = 'restored'; return; }
+  const bad = kids.filter(k => k.status === 'failed' || k.status === 'rolledback').length;
+  root.status = bad === kids.length ? 'failed' : 'done';
+}
+
+// 焦点跟随：检测/应用/恢复的当前子项开跑时，菜单（展开+滚动+选中）、队列（自动选中根）、
+// 候选 IP（主详情跟随显示该子项）三面一起跟。用户点击任何地方 = 手动浏览，焦点再变时重新跟随。
+function followItem(item) {
+  state.focusManual = false;
+  if (item) {
+    state.selectedId = item.id;
+  }
+  const cat = findCategoryOfItem(item.id);
+  if (cat) state.collapsed.delete(cat.id);
+  patchTreeItem(item);
+  renderTree();
+  scrollTreeToItem(item.id);
+  if (isCurrentlyDisplayed(item.id)) renderDetail();
+}
+
+function anyNodeRunning() {
+  for (const n of nodeStore.nodes.values()) if (n.status === 'running' || n.status === 'restoring') return true;
+  return false;
+}
+function queuedItemNodeIds() {
+  const set = new Set();
+  for (const n of nodeStore.nodes.values()) {
+    if (n.scope === 'item' && (n.status === 'queued' || n.status === 'running') && n.target) set.add(n.target.id);
+  }
+  return set;
+}
+function clearFinishedRoots() {
+  nodeStore.roots = nodeStore.roots.filter(rid => {
+    const r = nodeById(rid);
+    return !(r && NODE_TERMINAL.has(r.status));
+  });
+  const reachable = new Set();
+  const walk = id => { if (reachable.has(id)) return; reachable.add(id); const n = nodeStore.nodes.get(id); (n.childrenIds || []).forEach(walk); };
+  nodeStore.roots.forEach(walk);
+  for (const id of [...nodeStore.nodes.keys()]) if (!reachable.has(id)) nodeStore.nodes.delete(id);
+  if (selectedNodeId && !nodeStore.nodes.has(selectedNodeId)) selectedNodeId = null;
+}
+function clearAllNodes() {
+  nodeStore.roots = [];
+  nodeStore.nodes.clear();
+  selectedNodeId = null;
+}
+
+/* 检测：worker 池 + 预算取/还 + step/attempt 子节点 */
+async function runDetectRoot(rootId) {
+  const root = nodeById(rootId);
+  root.status = 'running';
+  root.timing.startedAt = performance.now();
+  state.queueFocusManual = false;
+  selectedNodeId = rootId;
+  renderQueue();
+
+  const kids = childrenOf(root, 'item');
+  const c = root.concurrency;
+  let cursor = 0;
+  let budget = root.progress.budgetLimit;
+
+  const worker = async (lane) => {
+    while (true) {
+      if (state.paused) return;
+      const i = cursor++;
+      if (i >= kids.length) return;
+      const child = kids[i];
+      if (budget <= 0) {
+        child.status = 'skipped';
+        child.error = { message: '本轮候选 IP 预算已用尽，未执行检测' };
+        child.timing.finishedAt = performance.now();
+        recompute(root);
+        renderQueue();
+        continue;
+      }
+      const alloc = Math.min(c.candidatesPerItem, budget);
+      budget -= alloc;
+      root.progress.budgetUsed += alloc;
+      const used = await runDetectItemChild(root, child, alloc, lane);
+      budget += alloc - used;
+      root.progress.budgetUsed -= (alloc - used);
+      recompute(root);
+      renderQueue();
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(c.limit, kids.length) }, (_, i) => worker(i)));
+  finishRoot(root);
+  renderQueue();
+}
+
+async function runDetectItemChild(root, node, candidateLimit, lane) {
+  const item = node.target;
+  node.status = 'running';
+  node.timing.startedAt = performance.now();
+  node.concurrency = { lane };
+  root.progress.current = node.name;
+  renderQueue();
+
+  const snap = {
+    status: item.status, bestIp: item.bestIp, latency: item.latency,
+    score: item.score, source: item.source, lastCheck: item.lastCheck,
+    errorMsg: item.errorMsg, candidates: item.candidates
+  };
+  item.status = 'detecting';
+  item.errorMsg = '';
+  followItem(item);
+
+  node.stage = { key: 'dns', label: 'DNS 查询', index: 1, total: 2 };
+  const dns = createNode({ parentId: node.id, type: 'detect', scope: 'step', name: 'DNS 查询', status: 'running' });
+  dns.timing.startedAt = performance.now();
+  renderQueue();
+  await sleep(180 + Math.random() * 180);
+  dns.timing.durationMs = performance.now() - dns.timing.startedAt;
+
+  let failed = null;
+  if (Math.random() < 0.06) {
+    dns.status = 'failed';
+    dns.error = { message: 'DNS 查询超时，未获取到候选 IP' };
+    failed = dns.error;
+  } else {
+    dns.status = 'done';
+  }
+
+  let used = 0;
+  if (!failed) {
+    generateCandidates(item, candidateLimit);
+    if (item.candidates.length === 0) failed = { message: 'DNS 查询超时，未获取到候选 IP' };
+  }
+  if (!failed) {
+    node.stage = { key: 'probe', label: '候选探测', index: 2, total: 2 };
+    const cands = item.candidates;
+    node.progress.total = cands.length;
+    const alive = [];
+    for (const cand of cands) {
+      used++;
+      node.progress.attempted = used;
+      node.progress.done = used - 1;
+      const at = createNode({ parentId: node.id, type: 'detect', scope: 'attempt', name: cand.ip, status: 'running' });
+      at.result = { ip: cand.ip, latency: cand.latency, score: cand.score };
+      at.timing.startedAt = performance.now();
+      cand._probe = '检测中';
+      renderQueue();
+      if (isCurrentlyDisplayed(item.id)) renderDetail();
+      await sleep(50 + Math.random() * 110);
+      at.timing.durationMs = performance.now() - at.timing.startedAt;
+      if (Math.random() < 0.15) {
+        at.status = 'failed';
+        at.error = { message: 'TCP 连接超时' };
+        cand._probe = '失败';
+      } else {
+        at.status = 'done';
+        cand._probe = '可用';
+        alive.push(cand);
+      }
+      node.progress.done = used;
+      renderQueue();
+      if (isCurrentlyDisplayed(item.id)) renderDetail();
+    }
+    if (!alive.length) {
+      failed = { message: '所有候选 IP 探测失败' };
+    } else {
+      const best = alive[0];
+      item.bestIp = best.ip;
+      item.latency = best.latency;
+      item.score = best.score;
+      item.source = strategyName(root.strategyId);
+      item.lastCheck = nowStr();
+      if (!item.appliedIp) item.status = 'detected';
+      else if (item.bestIp === item.appliedIp) item.status = 'applied';
+      else item.status = 'stale';
+      item.errorMsg = '';
+      node.result = { bestIp: best.ip, latency: best.latency, aliveCount: alive.length, candidateCount: cands.length };
+    }
+  }
+
+  if (failed) {
+    item.status = snap.status;
+    item.bestIp = snap.bestIp;
+    item.latency = snap.latency;
+    item.score = snap.score;
+    item.source = snap.source;
+    item.lastCheck = snap.lastCheck;
+    item.candidates = snap.candidates;
+    if (snap.bestIp) item.errorMsg = `本次检测失败：${failed.message}（已保留上次结果）`;
+    else { item.status = 'error'; item.errorMsg = failed.message; }
+    node.status = 'failed';
+    node.error = failed;
+  } else {
+    node.status = 'done';
+  }
+  node.stage = null;
+  node.timing.finishedAt = performance.now();
+  node.timing.durationMs = node.timing.finishedAt - node.timing.startedAt;
+  patchTreeItem(item);
+  if (isCurrentlyDisplayed(item.id)) renderDetail();
+  renderQueue();
+  return used;
+}
+
+/* 应用/恢复：promise 链串行 + 阶段 step 节点 */
+let applyChain = Promise.resolve();
+
+function runPhaseRoot(rootId, stages, opts) {
+  applyChain = applyChain.then(() => runPhaseRootInner(rootId, stages, opts)).catch(err => {
+    console.error('[phaseRoot] 异常:', err);
+    const root = nodeById(rootId);
+    if (root && !NODE_TERMINAL.has(root.status)) { root.status = 'failed'; root.error = { message: String(err && err.message || err) }; finishRoot(root); }
+    renderQueue();
+  });
+  return applyChain;
+}
+
+async function runPhaseRootInner(rootId, stages, opts) {
+  const root = nodeById(rootId);
+  root.status = root.type === 'restore' ? 'restoring' : 'running';
+  root.timing.startedAt = performance.now();
+  state.queueFocusManual = false;
+  selectedNodeId = rootId;
+  renderQueue();
+
+  const kids = childrenOf(root, 'item');
+  for (const child of kids) {
+    if (state.paused || child.status === 'cancelled') continue;
+    root.progress.current = child.name;
+    await runPhaseItemChild(root, child, stages, opts);
+    recompute(root);
+    renderQueue();
+  }
+  finishRoot(root);
+  renderQueue();
+}
+
+async function runPhaseItemChild(root, node, stages, opts) {
+  const item = node.target;
+  node.status = root.type === 'restore' ? 'restoring' : 'running';
+  node.timing.startedAt = performance.now();
+  followItem(item);
+  renderQueue();
+
+  for (let i = 0; i < stages.length; i++) {
+    if (state.paused) {
+      node.status = 'queued';
+      node.timing.finishedAt = 0;
+      return;
+    }
+    const st = stages[i];
+    node.stage = { key: st.key, label: st.label || st.text, index: i + 1, total: stages.length };
+    const step = createNode({ parentId: node.id, type: node.type, scope: 'step', name: st.label || st.text, status: 'running' });
+    step.timing.startedAt = performance.now();
+    renderQueue();
+
+    await sleep(st.key === 'write' ? 320 : 200);
+    step.timing.durationMs = performance.now() - step.timing.startedAt;
+
+    const fault = opts.faultAt ? opts.faultAt(i) : null;
+    if (fault) {
+      step.status = 'failed';
+      step.error = fault;
+      node.status = fault.rollback ? 'rolledback' : 'failed';
+      node.error = fault;
+      node.stage = null;
+      node.timing.finishedAt = performance.now();
+      node.timing.durationMs = node.timing.finishedAt - node.timing.startedAt;
+      if (opts.onFault) opts.onFault(node, item, fault);
+      renderQueue();
+      return;
+    }
+    step.status = 'done';
+    node.progress.done = i + 1;
+    renderQueue();
+  }
+
+  node.status = opts.successStatus;
+  node.stage = null;
+  node.timing.finishedAt = performance.now();
+  node.timing.durationMs = node.timing.finishedAt - node.timing.startedAt;
+  if (opts.onSuccess) opts.onSuccess(node, item);
+  renderQueue();
+}
+
+/* 应用入口：建根 + 子节点 + 串行链 */
+function enqueueApply(items, { retryOf = null, rootName = null } = {}) {
+  const active = queuedItemNodeIds();
+  const applicable = items.filter(item => canApply(item) && !active.has(item.id));
+  if (!applicable.length) return 0;
+  const root = createNode({
+    type: 'apply', scope: 'batch',
+    name: rootName || `应用队列 · ${applicable.length} 项`,
+    status: 'queued',
+    progress: { done: 0, total: applicable.length, current: '' },
+  });
+  applicable.forEach(item => createNode({
+    parentId: root.id, type: 'apply', scope: 'item',
+    name: labelOf(item), target: item, status: 'queued',
+    progress: { done: 0, total: PHASES.length },
+    result: retryOf ? { retryOf } : null,
+  }));
+  selectedNodeId = root.id;
+  renderQueue();
+  runPhaseRoot(root.id, PHASES, {
+    successStatus: 'done',
+    faultAt: i => {
+      if (i === 1 && Math.random() < 0.06) return { message: 'hosts 文件写入失败：权限不足或文件被占用', rollback: false };
+      if (i === 3 && Math.random() < 0.05) return { message: '验证失败：本机解析出来的 IP 跟写进去的不一致，已自动回滚', rollback: true };
+      return null;
+    },
+    onSuccess: (node, item) => {
+      item.prevAppliedIp = item.appliedIp;
+      item.appliedIp = item.bestIp;
+      item.status = 'applied';
+      item.errorMsg = '';
+      patchTreeItem(item);
+      if (isCurrentlyDisplayed(item.id)) renderDetail();
+    },
+    onFault: (node, item, fault) => {
+      if (fault.rollback) {
+        item.status = 'rolledback';
+        item.appliedIp = item.prevAppliedIp;
+        item.prevAppliedIp = undefined;
+      } else {
+        item.status = 'error';
+      }
+      item.errorMsg = fault.message;
+      patchTreeItem(item);
+      if (isCurrentlyDisplayed(item.id)) renderDetail();
+    },
+  });
+  return applicable.length;
+}
+
 function taskStatusText(task) {
   if (task.kind === 'detect') {
     const map = { waiting:'待检测', running:'检测中', done:'已检测', failed:'检测失败', cancelled:'已取消', skipped:'预算不足，未检测' };
@@ -2478,190 +2934,157 @@ function taskStatusCls(task) {
   return TaskMeta[task.status].cls;
 }
 
-/* ============ 队列渲染 ============ */
-let queueTableSignature = '';
+/* ============ 队列渲染（任务列表 + 任务明细，双向联动） ============ */
 
-function renderQueueHeader() {
-  const total = state.queue.length;
-  const waiting = state.queue.filter(t=>t.status==='waiting').length;
-  const finished = state.queue.filter(isTerminalTask).length;
-  const retryable = state.queue.filter(t => t.kind === 'apply' && ['failed', 'rolledback'].includes(t.status)).length;
-
-  queueCountEl.textContent = total;
-
-  const detectTasks = state.queue.filter(t => t.kind === 'detect');
-  const applyTasks = state.queue.filter(t => t.kind === 'apply');
-  const detectFinished = detectTasks.filter(isTerminalTask).length;
-  const applyFinished = applyTasks.filter(isTerminalTask).length;
-
-  const summaryParts = [];
-  if (detectTasks.length > 0) {
-    summaryParts.push(`检测结束 ${detectFinished}/${detectTasks.length}`);
-  }
-  if (applyTasks.length > 0) {
-    summaryParts.push(`写入结束 ${applyFinished}/${applyTasks.length}`);
-  }
-  queueSummaryEl.textContent = summaryParts.join(' · ');
-
-  const runningTasks = state.queue.filter(t=>t.status==='running' || t.status==='restoring');
-  const runningTask = runningTasks[0];
-  if (runningTask) {
-    const isDetecting = runningTask.kind === 'detect';
-    const isRestoring = runningTask.status === 'restoring';
-    const prefix = isRestoring
-      ? '恢复中'
-      : (isDetecting && state.batchDetecting && runningTasks.length > 1
-        ? `并发检测 ${runningTasks.length} 项`
-        : (isDetecting ? '检测中' : '执行中'));
-    const phaseText = runningTask.phaseText ? `<span class="ph">· ${escapeHtml(runningTask.phaseText)}</span>` : '';
-    queueCurrentEl.className = 'q-current' + (isDetecting ? ' detecting' : '');
-    queueCurrentEl.innerHTML = `<span class="spin"></span><span>${prefix}：</span><span class="nm">${escapeHtml(runningTask.name)}</span>${phaseText}`;
-    queueCurrentEl.title = isDetecting && state.batchDetecting
-      ? `当前活动检测 ${runningTasks.length} 项`
-      : `${prefix}：${runningTask.name}${runningTask.phaseText?' · '+runningTask.phaseText:''}`;
-  } else {
-    queueCurrentEl.className = 'q-current';
-    queueCurrentEl.innerHTML = '';
-    queueCurrentEl.title = '';
-  }
-
-  document.getElementById('btnPause').disabled = state.batchDetecting || !(state.queueRunning || waiting>0);
-  document.getElementById('btnPause').textContent = state.paused ? '继续队列' : '暂停队列';
-  document.getElementById('btnCancel').disabled = waiting === 0;
-  document.getElementById('btnClearDone').disabled = finished === 0;
-  document.getElementById('btnClearQueue').disabled = total === 0 || state.queueRunning || state.batchDetecting || state.startupAutomationRunning
-    || state.queue.some(t => t.status === 'running' || t.status === 'restoring')
-    || allItems().some(item => item.status === 'detecting' || item.status === 'applying');
-  document.getElementById('btnRetryFailed').disabled = retryable === 0;
-
-  const el = document.getElementById('globalProgress');
-  const bar = el.querySelector('i');
-  if (total > 0 && (state.queueRunning || state.batchDetecting || finished < total)) {
-    el.classList.add('show');
-    bar.style.width = total ? (finished / total * 100) + '%' : '0';
-  } else if (finished > 0 && finished === total) {
-    el.classList.add('show');
-    bar.style.width = '100%';
-    setTimeout(() => { if (!state.queueRunning && !state.batchDetecting) el.classList.remove('show'); }, 1400);
-  } else {
-    el.classList.remove('show');
-    bar.style.width = '0';
-  }
+function qdComputePerPage() {
+  const el = document.getElementById('queueDetail');
+  if (!el) return 6;
+  return Math.max(3, Math.min(14, Math.floor((el.clientHeight - 52) / 30)));
 }
 
-function patchQueueRow(task) {
-  const tr = queueListEl.querySelector(`tr[data-task-id="${task.id}"]`);
-  if (!tr) return;
-  const cells = tr.children;
-  if (cells.length < 5) return;
+function qdMetaOf(status) {
+  const key = NODE_STATUS[status] ? status : 'queued';
+  return NODE_STATUS[key];
+}
 
-  const cls = taskStatusCls(task);
-  const dot = taskStatusDot(task);
-  const text = taskStatusText(task);
-  const phaseText = (task.status==='running' || task.status==='restoring') && task.phaseText
-    ? `<span class="phase">${escapeHtml(task.phaseText)}</span>` : '';
-  const errText = task.errorMsg ? `<span class="err">${escapeHtml(task.errorMsg)}</span>` : '';
+// 焦点 = 第一个未落定的子项；全部落定跟随最后一行。
+function qdFocusIndex(kids) {
+  const i = kids.findIndex(k => k.status === 'queued' || k.status === 'running' || k.status === 'restoring');
+  return i >= 0 ? i : Math.max(0, kids.length - 1);
+}
 
-  const kindLabel = task.kind === 'detect'
-    ? '<span class="q-kind detect">检测</span>'
-    : (task.kind === 'restore' ? '<span class="q-kind restore">恢复</span>' : '<span class="q-kind apply">应用</span>');
-
-  cells[1].innerHTML = `<div class="q-task"><span>${kindLabel}${escapeHtml(task.name)}</span>${phaseText}${errText}</div>`;
-  cells[2].innerHTML = `<span class="qstatus ${cls}"><span class="dot ${dot}"></span>${text}</span>`;
-  cells[3].textContent = task.duration || '—';
-
-  let actionHtml = '';
-  if (task.kind === 'apply' && task.status === 'done') {
-    const item = findItem(task.itemId);
-    if (item && canRestoreHosts(item)) {
-      actionHtml = `<button class="q-act restore" data-restore-id="${task.id}" title="恢复到应用前的 hosts 状态">恢复</button>`;
+// 双向联动：左树点二级菜单 / 明细行点击 → 主详情显示该子菜单，明细列表翻到它所在页并高亮。
+function queueSyncItem(itemId) {
+  for (const rid of nodeStore.roots) {
+    const root = nodeById(rid);
+    const child = childrenOf(root, 'item').find(k => k.target && k.target.id === itemId);
+    if (child) {
+      if (selectedNodeId !== root.id) { selectedNodeId = root.id; qdManual = false; qdLastFocusPage = -1; }
+      renderQueue();
+      return;
     }
-  } else if (task.kind === 'apply' && (task.status === 'failed' || task.status === 'rolledback')) {
-    actionHtml = `<button class="q-act retry" data-retry-id="${task.id}" title="重新入队执行">重试</button>`;
   }
-  cells[4].innerHTML = actionHtml;
-
-  const retryBtn = cells[4].querySelector('.q-act.retry');
-  if (retryBtn) retryBtn.onclick = () => retrySingle(task.id);
-  const restoreBtn = cells[4].querySelector('.q-act.restore');
-  if (restoreBtn) restoreBtn.onclick = () => restoreTask(task.id);
 }
 
 function renderQueue() {
-  renderQueueHeader();
+  const listEl = document.getElementById('queueList');
+  if (!listEl) return;
 
-  const total = state.queue.length;
-  if (total === 0) {
-    queueTableSignature = '';
-    queueListEl.innerHTML = `<div class="queue-empty"><div>队列为空</div><div class="small">勾选类目后点击「检测全部」或「应用队列」</div></div>`;
+  nodeStore.roots = nodeStore.roots.filter(rid => nodeStore.nodes.has(rid));
+  const roots = nodeStore.roots.map(nodeById);
+
+  const runningRoot = roots.find(r => r.status === 'running' || r.status === 'restoring');
+  queueCountEl.textContent = String(roots.length);
+  const runningText = runningRoot
+    ? `${runningRoot.type === 'restore' ? '恢复中' : (runningRoot.type === 'detect' ? '检测中' : '执行中')}：${runningRoot.progress.current || runningRoot.name}`
+    : '';
+  queueSummaryEl.textContent = runningText;
+  const waitingCount = roots.reduce((acc, r) => acc + childrenOf(r, 'item').filter(k => k.status === 'queued').length, 0);
+  const retryableCount = roots.reduce((acc, r) => acc + childrenOf(r, 'item').filter(k => k.type === 'apply' && (k.status === 'failed' || k.status === 'rolledback')).length, 0);
+  document.getElementById('btnPause').textContent = state.paused ? '继续队列' : '暂停队列';
+  document.getElementById('btnPause').disabled = !roots.length;
+  document.getElementById('btnCancel').disabled = waitingCount === 0;
+  document.getElementById('btnClearDone').disabled = !roots.some(r => NODE_TERMINAL.has(r.status));
+  document.getElementById('btnClearQueue').disabled = !roots.length || anyNodeRunning() || state.batchDetecting;
+  document.getElementById('btnRetryFailed').disabled = retryableCount === 0;
+
+  if (!roots.length) {
+    listEl.innerHTML = '<div class="queue-empty"><div>队列为空</div><div class="small">勾选类目后点击「检测全部」或「应用队列」</div></div>';
+    const detailEl = document.getElementById('queueDetail');
+    if (detailEl) detailEl.innerHTML = '<div class="queue-empty"><div>选择左侧任务查看子菜单明细</div></div>';
     return;
   }
 
-  const signature = state.queue.map(t => t.id).join('|');
-  if (signature === queueTableSignature && queueListEl.querySelector('table.qtable')) {
-    state.queue.forEach(patchQueueRow);
-    return;
-  }
+  // 任务列表：圆点 + 一级菜单名；列宽随文字自适应（容器 fit-content）。
+  listEl.innerHTML = roots.map(r => `
+    <div class="qrow ${selectedNodeId === r.id ? 'sel' : ''}" data-root="${r.id}" title="${NODE_STATUS[r.status].text}">
+      <span class="ndot ndot-${r.status}"></span>
+      <span class="qrow-name">${escapeHtml(r.name)}</span>
+    </div>`).join('');
 
-  queueTableSignature = signature;
-  const prevScrollTop = queueListEl.scrollTop;
-
-  const rows = state.queue.map((t, i) => {
-    const cls = taskStatusCls(t);
-    const dot = taskStatusDot(t);
-    const text = taskStatusText(t);
-    const phaseText = (t.status==='running' || t.status==='restoring') && t.phaseText
-      ? `<span class="phase">${escapeHtml(t.phaseText)}</span>` : '';
-    const errText = t.errorMsg ? `<span class="err">${escapeHtml(t.errorMsg)}</span>` : '';
-    const kindLabel = t.kind === 'detect'
-      ? '<span class="q-kind detect">检测</span>'
-      : (t.kind === 'restore' ? '<span class="q-kind restore">恢复</span>' : '<span class="q-kind apply">应用</span>');
-    let actionHtml = '';
-    if (t.kind === 'apply' && t.status === 'done') {
-      const item = findItem(t.itemId);
-      if (item && canRestoreHosts(item)) {
-        actionHtml = `<button class="q-act restore" data-restore-id="${t.id}" title="恢复到应用前的 hosts 状态">恢复</button>`;
-      }
-    } else if (t.kind === 'apply' && (t.status === 'failed' || t.status === 'rolledback')) {
-      actionHtml = `<button class="q-act retry" data-retry-id="${t.id}" title="重新入队执行">重试</button>`;
-    }
-    return `
-      <tr data-task-id="${t.id}">
-        <td style="color:var(--text-3)">${i+1}</td>
-        <td><div class="q-task"><span>${kindLabel}${escapeHtml(t.name)}</span>${phaseText}${errText}</div></td>
-        <td><span class="qstatus ${cls}"><span class="dot ${dot}"></span>${text}</span></td>
-        <td style="color:var(--text-3)">${t.duration||'—'}</td>
-        <td style="text-align:right">${actionHtml}</td>
-      </tr>`;
-  }).join('');
-
-  queueListEl.innerHTML = `
-    <table class="qtable">
-      <thead>
-        <tr>
-          <th>#</th><th>任务</th><th>状态</th><th>耗时</th>
-          <th>
-            <div class="q-col-op">
-              <span class="lbl">操作</span>
-              <button class="q-scroll" data-scroll="top" title="回到顶部">↑</button>
-              <button class="q-scroll" data-scroll="bottom" title="滚到底部">↓</button>
-            </div>
-          </th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>`;
-
-  queueListEl.scrollTop = Math.min(prevScrollTop, queueListEl.scrollHeight);
-
-  queueListEl.querySelectorAll('.q-act.retry').forEach(btn => btn.onclick = () => retrySingle(btn.dataset.retryId));
-  queueListEl.querySelectorAll('.q-act.restore').forEach(btn => btn.onclick = () => restoreTask(btn.dataset.restoreId));
-  queueListEl.querySelectorAll('.q-scroll').forEach(btn => {
-    btn.onclick = () => {
-      if (btn.dataset.scroll === 'top') queueListEl.scrollTo({ top: 0, behavior: 'smooth' });
-      else queueListEl.scrollTo({ top: queueListEl.scrollHeight, behavior: 'smooth' });
+  listEl.querySelectorAll('.qrow').forEach(row => {
+    row.onclick = () => {
+      selectedNodeId = row.dataset.root;
+      state.queueFocusManual = true;
+      qdManual = false;
+      qdLastFocusPage = -1;
+      renderQueue();
     };
   });
+
+  renderQueueDetail();
+}
+
+function renderQueueDetail() {
+  const el = document.getElementById('queueDetail');
+  if (!el) return;
+  const root = selectedNodeId ? nodeById(selectedNodeId) : null;
+  if (!root) {
+    el.innerHTML = '<div class="queue-empty"><div>选择左侧任务查看子菜单明细</div></div>';
+    return;
+  }
+
+  const kids = childrenOf(root, 'item');
+  qdPerPage = qdComputePerPage();
+  const pages = Math.max(1, Math.ceil(kids.length / qdPerPage));
+  const focus = qdFocusIndex(kids);
+  const focusPage = Math.floor(focus / qdPerPage);
+  // 焦点跨页自动跟随；箭头手动翻页后保持，直到焦点再次跨页。
+  if (focusPage !== qdLastFocusPage) {
+    qdPage = focusPage;
+    qdManual = false;
+    qdLastFocusPage = focusPage;
+  } else if (!qdManual) {
+    qdPage = focusPage;
+  }
+  if (qdPage > pages - 1) qdPage = pages - 1;
+
+  const start = qdPage * qdPerPage;
+  const slice = kids.slice(start, start + qdPerPage);
+
+  const rows = slice.map(k => {
+    const meta = qdMetaOf(k.status);
+    // 「当前阶段 / 结果」：运行中给阶段名，失败给原因，完成保持干净不提示结果。
+    let stageResult = '—';
+    if (k.stage) stageResult = escapeHtml(k.stage.label);
+    else if (k.status === 'failed' || k.status === 'rolledback') stageResult = k.error ? escapeHtml(k.error.message) : '执行失败';
+    else if (k.status === 'skipped') stageResult = '预算不足，未检测';
+    else if (k.status === 'running' || k.status === 'restoring') stageResult = '执行中…';
+    const prog = k.progress && k.progress.total
+      ? `${k.progress.done || 0}/${k.progress.total}${k.timing.durationMs ? ' · ' + (k.timing.durationMs / 1000).toFixed(1) + 's' : ''}`
+      : (k.timing.durationMs ? (k.timing.durationMs / 1000).toFixed(1) + 's' : '—');
+    const active = state.selectedId && k.target && state.selectedId === k.target.id;
+    return `<tr class="qrow2 ${k.id === kids[focus].id ? 'focus' : ''} ${active ? 'sel' : ''}" data-node="${k.id}" data-item="${k.target ? k.target.id : ''}">
+      <td><span class="ndot ndot-${k.status}" title="${meta.text}"></span><span title="${escapeHtml(k.name)}">${escapeHtml(k.name)}</span></td>
+      <td class="${k.status === 'failed' ? 'err' : ''}">${stageResult}</td>
+      <td style="color:var(--text-3)">${prog}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <table class="qtable2">
+      <thead><tr>
+        <th>名称</th><th>当前阶段 / 结果</th><th>进度 / 耗时</th>
+        <th class="qd-ctl"><span class="qd-page" id="qdPage">${pages > 1 ? `${qdPage + 1}/${pages} 页` : ''}</span><button class="qd-arrow" id="qdPrev" title="上一页">↑</button><button class="qd-arrow" id="qdNext" title="下一页">↓</button></th>
+      </tr></thead>
+      <tbody>${rows || '<tr><td colspan="4" style="color:var(--text-3)">这个任务还没有子菜单</td></tr>'}</tbody>
+    </table>`;
+
+  el.querySelectorAll('tr.qrow2').forEach(tr => {
+    tr.onclick = () => {
+      const itemId = tr.dataset.item;
+      if (itemId) {
+        state.selectedId = itemId;
+        state.focusManual = true;
+        renderAll();
+        queueSyncItem(itemId);
+      }
+    };
+  });
+  const prev = document.getElementById('qdPrev');
+  const next = document.getElementById('qdNext');
+  if (prev) prev.onclick = () => { qdManual = true; qdPage = Math.max(0, qdPage - 1); renderQueueDetail(); };
+  if (next) next.onclick = () => { qdManual = true; qdPage = Math.min(pages - 1, qdPage + 1); renderQueueDetail(); };
 }
 
 function renderStatus() {
@@ -2710,7 +3133,7 @@ function confirmDialog({ title, bodyHtml, confirmText='确认', danger=false }) 
   });
 }
 function showTaskHistory(item) {
-  const tasks = state.queue.filter(task => task.itemId === item.id);
+  const tasks = [...nodeStore.nodes.values()].filter(n => n.scope === 'item' && n.target && n.target.id === item.id);
   const bodyHtml = tasks.length
     ? `<div class="task-history">${tasks.map(task => {
         const details = [task.phaseText, task.errorMsg].filter(Boolean).map(escapeHtml).join('<br>');
@@ -2765,12 +3188,14 @@ async function detectAll({ allowStartupAutomation = false, targetItems = null, s
   }
 
   const existingDetectItemIds = new Set(
-    state.queue
-      .filter(t => t.kind === 'detect' && (t.status === 'waiting' || t.status === 'running'))
-      .map(t => t.itemId)
+    [...nodeStore.nodes.values()]
+      .filter(n => n.scope === 'item' && n.type === 'detect' && (n.status === 'queued' || n.status === 'running'))
+      .map(n => n.target && n.target.id)
   );
   const runningApplyItemIds = new Set(
-    state.queue.filter(t => t.kind === 'apply' && t.status === 'running').map(t => t.itemId)
+    [...nodeStore.nodes.values()]
+      .filter(n => n.scope === 'item' && n.type === 'apply' && n.status === 'running')
+      .map(n => n.target && n.target.id)
   );
 
   const targets = selected.filter(it => {
@@ -2793,8 +3218,6 @@ async function detectAll({ allowStartupAutomation = false, targetItems = null, s
     });
     if (!confirmed) return null;
   }
-  state.queue = state.queue.filter(t => !(t.kind === 'detect' && ['done','failed','cancelled','skipped'].includes(t.status)));
-
   const focusFollow = !!state.settings.detectFocusFollow;
   if (focusFollow) {
     state.detectOriginalCollapsed = new Set(state.collapsed);
@@ -2802,460 +3225,49 @@ async function detectAll({ allowStartupAutomation = false, targetItems = null, s
     state.detectCurrentCatId = null;
   }
 
-  const detectTasks = targets.map(item => {
-    const strategyId = selectedStrategyIdForItem(item);
-    const task = {
-      id: 'd_' + (++state.taskSeq),
-      kind: 'detect', itemId: item.id, name: labelOf(item),
-      strategyId,
-      status: 'waiting', phase: null, phaseText: '',
-      duration: '', errorMsg: '',
-      prevAppliedIp: item.appliedIp, startedAt: 0
-    };
-    state.queue.push(task);
-    return task;
+  // 按一级菜单分组：每个勾选的类目一个任务（包裹），子菜单进明细列表。
+  const groups = new Map();
+  targets.forEach(item => {
+    const cat = findCategoryOfItem(item.id);
+    const key = cat ? cat.id : '默认';
+    if (!groups.has(key)) groups.set(key, { name: cat ? cat.name : '批量检测', items: [] });
+    groups.get(key).items.push(item);
   });
+
+  const roots = [...groups.values()].map(group => {
+    const strategyId = selectedStrategyIdForItem(group.items[0]);
+    const root = createNode({
+      type: 'detect', scope: 'batch',
+      name: group.name, status: 'queued', strategyId,
+      progress: { done: 0, total: group.items.length, current: '', attempted: 0, budgetUsed: 0, budgetLimit: candidateBudgetSnapshot },
+      concurrency: { limit: Math.min(networkProfile.concurrency, 8), candidatesPerItem: networkProfile.candidatesPerItem },
+    });
+    group.items.forEach(item => createNode({
+      parentId: root.id, type: 'detect', scope: 'item',
+      name: labelOf(item), target: item, status: 'queued',
+      progress: { done: 0, total: 0, attempted: 0 },
+    }));
+    return root;
+  });
+  selectedNodeId = roots[0].id;
 
   state.batchDetecting = true;
   state.detectingServiceId = serviceId;
   const serviceName = serviceId ? state.categories.find(category => category.id === serviceId)?.name : '';
-  toast(`开始检测${serviceName ? `「${serviceName}」` : ''} ${detectTasks.length} 项（${networkProfile.label}，本轮最多 ${candidateBudgetSnapshot} 次候选 IP 探测；DNS 另计）…`);
+  toast(`开始检测${serviceName ? `「${serviceName}」` : ''} ${targets.length} 项（${networkProfile.label}，本轮最多 ${candidateBudgetSnapshot} 次候选 IP 探测；DNS 另计）…`);
   renderAll();
 
-  let successCount = 0;
-  let remainingCandidateBudget = candidateBudgetSnapshot;
-  let pendingTasks = detectTasks.slice();
-
   try {
-    while (pendingTasks.length && remainingCandidateBudget > 0) {
-      let cursor = 0;
-      const deferredTasks = [];
-      const worker = async () => {
-        while (cursor < pendingTasks.length) {
-          const task = pendingTasks[cursor++];
-          if (task.status === 'cancelled' || !state.queue.includes(task)) continue;
-
-          const item = findItem(task.itemId);
-          if (!item) continue;
-          if (!item.checked && !serviceId && !targetItems) {
-            task.status = 'cancelled';
-            patchQueueRow(task);
-            renderQueueHeader();
-            continue;
-          }
-
-          if (remainingCandidateBudget <= 0) {
-            deferredTasks.push(task);
-            continue;
-          }
-          const candidateLimit = Math.min(networkProfile.candidatesPerItem, remainingCandidateBudget);
-          remainingCandidateBudget -= candidateLimit;
-          state.activeDetectCount++;
-          const ok = await executeDetectTask(task, candidateLimit);
-          const attempted = Math.min(candidateLimit, task.candidateAttempts || 0);
-          remainingCandidateBudget += candidateLimit - attempted;
-          state.activeDetectCount--;
-          renderQueueHeader();
-          if (ok) successCount++;
-        }
-      };
-      const workerCount = Math.min(networkProfile.concurrency, pendingTasks.length);
-      await Promise.all(Array.from({ length: workerCount }, () => worker()));
-      pendingTasks = deferredTasks;
+    for (const root of roots) {
+      await runDetectRoot(root.id);
     }
-
-    for (const task of pendingTasks) {
-      if (task.status !== 'waiting') continue;
-      task.status = 'skipped';
-      task.errorMsg = '本轮候选 IP 上限已用完，尚未检测';
-      patchQueueRow(task);
-    }
-    renderQueueHeader();
-  } catch (err) {
-    console.error('[detectAll] 异常:', err);
-    toast('检测流程异常：' + (err && err.message ? err.message : String(err)));
   } finally {
     state.batchDetecting = false;
     state.detectingServiceId = null;
-    if (successCount > 0) state.lastDetect = nowStr();
-
-    if (focusFollow) {
-      state.collapsed.clear();
-      if (state.detectOriginalCollapsed) {
-        state.detectOriginalCollapsed.forEach(id => state.collapsed.add(id));
-      }
-      state.detectOriginalCollapsed = null;
-      state.detectCurrentCatId = null;
-    }
-
-    renderAll();
   }
-
-  const detected = targets.filter(i => i.status === 'detected').length;
-  const applied = targets.filter(i => i.status === 'applied').length;
-  const stale = targets.filter(i => i.status === 'stale').length;
-  const errs = targets.filter(i => i.status === 'error').length;
-  const skipped = detectTasks.filter(task => task.status === 'skipped').length;
-  const parts = [];
-  if (detected) parts.push(`待应用 ${detected}`);
-  if (applied) parts.push(`已是最优 ${applied}`);
-  if (stale) parts.push(`待更新 ${stale}`);
-  if (errs) parts.push(`失败 ${errs}`);
-  if (skipped) parts.push(`预算不足，未检测 ${skipped}`);
-  toast(`检测完成${serviceName ? `（${serviceName}）` : ''}：${parts.join(' · ') || '无变化'}`);
-
-  return targets;
-}
-
-async function executeDetectTask(task, candidateLimit = getNetworkProfile(state.settings.networkProfile).candidatesPerItem) {
-  if (task.status === 'cancelled') return false;
-  if (!state.queue.includes(task)) return false;
-  task.candidateAttempts = 0;
-
-  const item = findItem(task.itemId);
-  if (!item) {
-    task.status = 'failed';
-    task.errorMsg = '项目已不存在';
-    patchQueueRow(task);
-    renderQueueHeader();
-    return false;
-  }
-
-  const snap = {
-    status: item.status, bestIp: item.bestIp, latency: item.latency,
-    score: item.score, source: item.source,
-    lastCheck: item.lastCheck, errorMsg: item.errorMsg, candidates: item.candidates
-  };
-
-  task.status = 'running';
-  task.phaseText = `正在使用「${strategyName(task.strategyId)}」检测…`;
-  task.startedAt = performance.now();
-  item.status = 'detecting';
-  item.errorMsg = '';
-
-  patchTreeItem(item);
-  patchQueueRow(task);
-  renderQueueHeader();
-  if (isCurrentlyDisplayed(item.id)) renderDetail();
-  scrollTreeToItem(item.id);
-
-  let ok = false;
-
-  try {
-    if (task.strategyId !== 'dns-hosts') {
-      throw new Error(`加速方法「${strategyName(task.strategyId)}」尚未开放`);
-    }
-    await sleep(180 + Math.random() * 200);
-    generateCandidates(item, candidateLimit);
-    if (item.candidates.length === 0 || Math.random() < 0.05) throw new Error('DNS 查询超时，未获取到候选 IP');
-    task.candidateAttempts = item.candidates.length;
-    const best = item.candidates[0];
-    item.bestIp = best.ip;
-    item.latency = best.latency;
-    item.score = best.score;
-    item.source = strategyName(task.strategyId);
-    item.lastCheck = nowStr();
-
-    if (!item.appliedIp) item.status = 'detected';
-    else if (item.bestIp === item.appliedIp) item.status = 'applied';
-    else item.status = 'stale';
-    item.errorMsg = '';
-
-    task.status = 'done';
-    task.duration = ((performance.now() - task.startedAt) / 1000).toFixed(1) + 's';
-    task.phaseText = '';
-    ok = true;
-  } catch (err) {
-    item.status = snap.status;
-    item.bestIp = snap.bestIp;
-    item.latency = snap.latency;
-    item.score = snap.score;
-    item.source = snap.source;
-    item.lastCheck = snap.lastCheck;
-    item.candidates = snap.candidates;
-
-    if (snap.bestIp) {
-      item.errorMsg = `本次检测失败：${err.message}（已保留上次结果）`;
-    } else {
-      item.status = 'error';
-      item.errorMsg = `检测失败：${err.message}`;
-    }
-
-    task.status = 'failed';
-    task.errorMsg = err.message;
-    task.duration = ((performance.now() - task.startedAt) / 1000).toFixed(1) + 's';
-    task.phaseText = '';
-  }
-
-  patchTreeItem(item);
-  patchQueueRow(task);
-  renderQueueHeader();
-  if (isCurrentlyDisplayed(item.id)) renderDetail();
-
-  return ok;
-}
-
-async function detectSubset(items) {
-  return detectAll({ targetItems: items });
-}
-
-/* ============================================================================
- * 应用 / 还原 Hosts
- * ============================================================================ */
-
-async function runQueue() {
-  if (state.queueRunning) return;
-  state.queueRunning = true;
-  state.paused = false;
-  renderStatus();
-
-  const focusFollow = !!state.settings.applyFocusFollow;
-  if (focusFollow) {
-    state.applyOriginalCollapsed = new Set(state.collapsed);
-    state.collapsed.clear();
-    state.applyCurrentCatId = null;
-    renderTree();
-  }
-
-  try {
-    while (true) {
-      if (state.paused) break;
-      const task = state.queue.find(t => t.kind === 'apply' && t.status === 'waiting');
-      if (!task) break;
-
-      if (focusFollow) {
-        const item = findItem(task.itemId);
-        if (item) {
-          const cat = findCategoryOfItem(item.id);
-          const newCatId = cat ? cat.id : null;
-          if (newCatId !== state.applyCurrentCatId) {
-            state.categories.forEach(c => {
-              if (c.id === newCatId) state.collapsed.delete(c.id);
-              else state.collapsed.add(c.id);
-            });
-            state.applyCurrentCatId = newCatId;
-            renderTree();
-          }
-        }
-      }
-
-      await executeTask(task);
-    }
-  } catch (err) {
-    console.error('[runQueue] 异常:', err);
-  } finally {
-    state.queueRunning = false;
-    state.paused = false;
-    document.getElementById('btnPause').textContent = '暂停队列';
-
-    if (focusFollow) {
-      state.collapsed.clear();
-      if (state.applyOriginalCollapsed) {
-        state.applyOriginalCollapsed.forEach(id => state.collapsed.add(id));
-      }
-      state.applyOriginalCollapsed = null;
-      state.applyCurrentCatId = null;
-    }
-
-    renderAll();
-  }
-}
-
-function enqueue(items, { force = false } = {}) {
-  const active = new Set(state.queue.filter(t => ['waiting', 'running'].includes(t.status)).map(t => t.itemId));
-  let added = 0;
-  items.forEach(item => {
-    if (active.has(item.id)) return;
-    if (!canApply(item)) return;
-    const isNoop = !force && item.status === 'applied' && item.bestIp === item.appliedIp;
-    state.queue.push({
-      id: 't' + (++state.taskSeq),
-      kind: 'apply', itemId: item.id, name: labelOf(item),
-      status: isNoop ? 'skipped' : 'waiting',
-      phase: null,
-      phaseText: isNoop ? '当前已是最优，跳过' : '',
-      duration: '', errorMsg: '',
-      prevAppliedIp: item.appliedIp
-    });
-    added++;
-  });
-  renderStatus();
-  return added;
-}
-
-async function executeTask(task) {
-  const item = findItem(task.itemId);
-  if (!item) { task.status = 'failed'; task.errorMsg = '项目已不存在'; patchQueueRow(task); return; }
-  if (!canApply(item)) { task.status = 'failed'; task.errorMsg = '没有可用的候选 IP'; patchQueueRow(task); return; }
-
-  task.status = 'running';
-  item.status = 'applying';
-  patchTreeItem(item);
-  patchQueueRow(task);
-  renderQueueHeader();
-  if (isCurrentlyDisplayed(item.id)) renderDetail();
-  scrollTreeToItem(item.id);
-
-  const t0 = performance.now();
-  for (const phase of PHASES) {
-    if (state.paused) {
-      task.status = 'waiting'; task.phase = null; task.phaseText = '';
-      item.status = item.appliedIp
-        ? (item.bestIp === item.appliedIp ? 'applied' : 'stale')
-        : (item.bestIp ? 'detected' : 'unset');
-      patchTreeItem(item);
-      patchQueueRow(task);
-      return;
-    }
-    task.phase = phase.key;
-    task.phaseText = phase.text;
-    patchQueueRow(task);
-    if (isCurrentlyDisplayed(item.id)) renderDetail();
-    await sleep(phase.key === 'write' ? 320 : 200);
-  }
-  task.duration = ((performance.now() - t0) / 1000).toFixed(1) + 's';
-  task.phase = null; task.phaseText = '';
-
-  const roll = Math.random();
-  if (roll < 0.06) {
-    task.status = 'failed';
-    task.errorMsg = 'hosts 文件写入失败：权限不足或文件被占用';
-    item.status = 'error';
-    item.errorMsg = task.errorMsg;
-  } else if (roll < 0.11) {
-    task.status = 'rolledback';
-    task.errorMsg = '验证失败：本机解析出来的 IP 跟写进去的不一致，已自动回滚';
-    item.status = 'rolledback';
-    item.errorMsg = task.errorMsg;
-    item.appliedIp = task.prevAppliedIp;
-    item.prevAppliedIp = undefined;
-  } else {
-    task.status = 'done';
-    item.prevAppliedIp = item.appliedIp;
-    item.appliedIp = item.bestIp;
-    item.status = 'applied';
-    item.errorMsg = '';
-  }
-  patchTreeItem(item);
-  patchQueueRow(task);
-  renderQueueHeader();
-  if (isCurrentlyDisplayed(item.id)) renderDetail();
-}
-
-async function performRestoreHostsCore(item) {
-  if (!canRestoreHosts(item)) return false;
-
-  const prevAppliedIp = item.prevAppliedIp;
-
-  item.status = 'applying';
-  patchTreeItem(item);
-  if (isCurrentlyDisplayed(item.id)) renderDetail();
-
-  for (const phase of RESTORE_PHASES) {
-    await sleep(phase.key === 'write' ? 300 : 200);
-  }
-
-  if (Math.random() < 0.1) {
-    item.status = item.appliedIp
-      ? (item.bestIp === item.appliedIp ? 'applied' : 'stale')
-      : 'unset';
-    item.errorMsg = '还原失败：hosts 写入失败，可重试';
-    patchTreeItem(item);
-    if (isCurrentlyDisplayed(item.id)) renderDetail();
-    return false;
-  }
-
-  item.appliedIp = prevAppliedIp;
-  item.prevAppliedIp = undefined;
-
-  if (item.appliedIp === null) item.status = 'unset';
-  else if (item.bestIp === item.appliedIp) item.status = 'applied';
-  else item.status = 'stale';
-  item.errorMsg = '';
-
-  patchTreeItem(item);
-  if (isCurrentlyDisplayed(item.id)) renderDetail();
-
-  state.queue.forEach(t => {
-    if (t.kind === 'apply' && t.itemId === item.id && t.status === 'done') {
-      patchQueueRow(t);
-    }
-  });
-
-  return true;
-}
-
-async function restoreItemHosts(item) {
-  if (!item) return;
-  if (!canRestoreHosts(item)) { toast('没有可还原的状态'); return; }
-  if (state.startupAutomationRunning) { toast('启动自动化进行中，请稍候'); return; }
-  if (state.queueRunning) { toast('队列正在执行中，请稍候'); return; }
-  if (state.batchDetecting) { toast('正在批量检测，请稍候'); return; }
-
-  const prevIp = item.prevAppliedIp;
-  const curIp = item.appliedIp;
-
-  const ok = await confirmDialog({
-    title: '还原 Hosts',
-    bodyHtml: `
-      将把 <b>${escapeHtml(item.name)}</b> 的 hosts 记录还原到本次应用前的状态。<br><br>
-      <table style="font-size:12.5px;width:100%;border-collapse:collapse">
-        <tr><td style="color:var(--text-3);padding:3px 0">应用前 IP</td><td><b style="font-family:ui-monospace,monospace">${prevIp || '（无记录）'}</b></td></tr>
-        <tr><td style="color:var(--text-3);padding:3px 0">当前写入 IP</td><td><b style="font-family:ui-monospace,monospace">${curIp || '（无记录）'}</b></td></tr>
-      </table>
-      <br>${prevIp === null ? '<span style="color:var(--amber)">应用前 hosts 无记录，还原后相当于删除该项。</span>' : '还原后该项回到应用前的状态，还原按钮消失。'}
-    `,
-    confirmText: '确认还原',
-    danger: true
-  });
-  if (!ok) return;
-
-  const success = await performRestoreHostsCore(item);
-  if (success) toast(`${item.name} 已还原到应用前状态`);
-  else toast(`还原 ${item.name} 失败，可重试`);
-}
-
-async function restoreCategoryHosts(cat) {
-  if (!cat) return;
-  const restorable = cat.items.filter(it => canRestoreHosts(it));
-  if (!restorable.length) { toast('此类目下没有可还原项'); return; }
-  if (state.startupAutomationRunning) { toast('启动自动化进行中，请稍候'); return; }
-  if (state.queueRunning) { toast('队列正在执行中，请稍候'); return; }
-  if (state.batchDetecting) { toast('正在批量检测，请稍候'); return; }
-
-  const itemListHtml = restorable.map(it => {
-    const prev = it.prevAppliedIp;
-    const cur = it.appliedIp;
-    return `<li><b>${escapeHtml(it.name)}</b>：${prev || '（无记录）'} ← ${cur || '（无记录）'}</li>`;
-  }).join('');
-
-  const ok = await confirmDialog({
-    title: `还原「${cat.name}」下的 Hosts`,
-    bodyHtml: `
-      将把 <b>${restorable.length}</b> 项还原到应用前状态。<br>
-      还原后这些项的「还原Hosts」按钮会消失。<br><br>
-      <b>可还原项：</b>
-      <ul style="padding-left:18px;margin:6px 0;line-height:1.8;font-size:12px">${itemListHtml}</ul>
-    `,
-    confirmText: '确认还原',
-    danger: true
-  });
-  if (!ok) return;
-
-  let successCount = 0;
-  let failCount = 0;
-  for (const it of restorable) {
-    if (!canRestoreHosts(it)) continue;
-    const ok2 = await performRestoreHostsCore(it);
-    if (ok2) successCount++;
-    else failCount++;
-  }
-
+  if (roots.some(r => r.progress.done > 0)) state.lastDetect = nowStr();
   renderAll();
-
-  if (failCount === 0) toast(`「${cat.name}」下 ${successCount} 项已全部还原`);
-  else if (successCount === 0) toast(`「${cat.name}」下全部 ${failCount} 项还原失败`);
-  else toast(`「${cat.name}」下 ${successCount} 项成功，${failCount} 项失败`);
+  return roots[0];
 }
 
 async function applyQueue() {
@@ -3295,87 +3307,78 @@ async function applyQueue() {
   runQueue();
 }
 
+async function detectSubset(items) {
+  return detectAll({ targetItems: items });
+}
+
 async function applySingle(item) {
   if (state.startupAutomationRunning) { toast('启动自动化进行中，请稍候'); return; }
   if (state.queueRunning) { toast('队列正在执行中，请稍候'); return; }
   if (!canApply(item)) { toast('请先检测生成候选 IP'); return; }
-  const added = enqueue([item], { force: true });
+  const added = enqueueApply([item]);
   if (!added) { toast('该项已在队列中'); return; }
   toast(`已加入队列：${item.name}`);
-  runQueue();
 }
 
-async function restoreTask(taskId) {
-  const task = state.queue.find(x => x.id === taskId);
-  if (!task || task.kind !== 'apply' || task.status !== 'done') return;
+async function restoreTask(nodeId) {
+  const applyNode = nodeById(nodeId);
+  if (!applyNode || applyNode.type !== 'apply' || applyNode.status !== 'done') return;
   if (state.queueRunning) { toast('队列正在执行中，请稍后再恢复'); return; }
-
-  const item = findItem(task.itemId);
+  const item = applyNode.target;
   if (!item) return;
 
   if (!canRestoreHosts(item)) {
     toast('该项已还原，无需重复操作');
-    task.status = 'restored';
-    patchQueueRow(task);
-    renderQueueHeader();
+    applyNode.status = 'restored';
+    renderQueue();
     return;
   }
 
-  const prevIp = item.prevAppliedIp;
-  const curIp = item.appliedIp;
-
   const ok = await confirmDialog({
     title: '恢复到应用前状态',
-    bodyHtml: `
-      将把 <b>${escapeHtml(task.name)}</b> 在 hosts 中的记录恢复到本次应用前的状态。<br><br>
-      <table style="font-size:12.5px;width:100%;border-collapse:collapse">
-        <tr><td style="color:var(--text-3);padding:3px 0">应用前 IP</td><td><b style="font-family:ui-monospace,monospace">${prevIp || '（无记录）'}</b></td></tr>
-        <tr><td style="color:var(--text-3);padding:3px 0">当前写入 IP</td><td><b style="font-family:ui-monospace,monospace">${curIp || '（无记录）'}</b></td></tr>
-      </table>
-      <br>恢复流程：备份 → 写回 → 刷新 DNS → 验证。恢复成功后该任务标记为「已恢复」。
-    `,
+    bodyHtml: `将把 <b>${escapeHtml(item.name)}</b> 在 hosts 中的记录恢复到本次应用前的状态。<br><br>恢复流程：备份 → 写回 → 刷新 DNS → 验证。恢复成功后该任务标记为「已恢复」。`,
     confirmText: '确认恢复',
     danger: true
   });
   if (!ok) return;
 
-  task.status = 'restoring';
-  task.errorMsg = '';
-  patchQueueRow(task);
-  renderQueueHeader();
+  const root = createNode({
+    type: 'restore', scope: 'batch', name: `恢复 · ${item.name}`,
+    status: 'queued',
+    progress: { done: 0, total: 1, current: '' },
+  });
+  createNode({
+    parentId: root.id, type: 'restore', scope: 'item',
+    name: item.name, target: item, status: 'queued',
+    progress: { done: 0, total: RESTORE_PHASES.length },
+  });
+  selectedNodeId = root.id;
+  renderQueue();
+  runPhaseRoot(root.id, RESTORE_PHASES, {
+    successStatus: 'restored',
+    faultAt: () => (Math.random() < 0.1 ? { message: '写回 hosts 失败，已保留当前配置', rollback: false } : null),
+    onSuccess: (node, it) => {
+      it.appliedIp = it.prevAppliedIp;
+      it.prevAppliedIp = undefined;
+      if (it.appliedIp === null) it.status = 'unset';
+      else if (it.bestIp === it.appliedIp) it.status = 'applied';
+      else it.status = 'stale';
+      it.errorMsg = '';
+      patchTreeItem(it);
+      if (isCurrentlyDisplayed(it.id)) renderDetail();
+    },
+    onFault: (node, it, fault) => {
+      it.status = it.appliedIp ? 'applied' : 'unset';
+      it.errorMsg = fault.message;
+      patchTreeItem(it);
+      if (isCurrentlyDisplayed(it.id)) renderDetail();
+    },
+  });
+}
 
-  const t0 = performance.now();
-  for (const phase of RESTORE_PHASES) {
-    task.phaseText = phase.text;
-    patchQueueRow(task);
-    if (isCurrentlyDisplayed(task.itemId)) renderDetail();
-    await sleep(phase.key === 'write' ? 300 : 200);
-  }
-  task.duration = ((performance.now() - t0) / 1000).toFixed(1) + 's';
-  task.phaseText = '';
-
-  if (Math.random() < 0.1) {
-    task.status = 'failed';
-    task.errorMsg = '恢复失败：hosts 写入失败，已保留当前配置';
-    patchQueueRow(task);
-    toast('恢复失败，请查看队列错误信息');
-    return;
-  }
-
-  if (item) {
-    item.appliedIp = item.prevAppliedIp;
-    item.prevAppliedIp = undefined;
-    if (item.appliedIp === null) item.status = 'unset';
-    else if (item.bestIp === item.appliedIp) item.status = 'applied';
-    else item.status = 'stale';
-    item.errorMsg = '';
-    patchTreeItem(item);
-    if (isCurrentlyDisplayed(item.id)) renderDetail();
-  }
-  task.status = 'restored';
-  task.phaseText = '已恢复到应用前状态';
-  patchQueueRow(task);
-  toast(`${task.name} 已恢复`);
+async function runQueue() {
+  // 应用/恢复的串行执行由 runPhaseRoot 的 promise 链承担；这里只兼容旧调用点。
+  renderQueue();
 }
 
 async function runStartupAutomation() {
@@ -3408,11 +3411,7 @@ async function runStartupAutomation() {
       return;
     }
 
-    const active = new Set(
-      state.queue
-        .filter(t => t.kind === 'apply' && ['waiting', 'running'].includes(t.status))
-        .map(t => t.itemId)
-    );
+    const active = queuedItemNodeIds();
     const toEnqueue = applicable.filter(i => !active.has(i.id));
     if (!toEnqueue.length) {
       toast('启动自动化：所有项已在队列中，跳过入队');
@@ -3483,7 +3482,9 @@ treeEl.addEventListener('click', e => {
 
   if (kind === 'item') {
     state.selectedId = id;
+    state.focusManual = true;
     renderAll();
+    queueSyncItem(id);
   } else if (kind === 'cat') {
     if (state.collapsed.has(id)) state.collapsed.delete(id);
     else state.collapsed.add(id);
@@ -3530,16 +3531,7 @@ document.getElementById('searchInput').addEventListener('input', e => {
 document.getElementById('btnDetectAll').onclick = () => detectAll();
 document.getElementById('btnApplyQueue').onclick = applyQueue;
 
-/* ============================================================================
- * 需求④：打开 Hosts
- * ----------------------------------------------------------------------------
- * 原型运行在浏览器里，无法直接调系统默认编辑器；真实桌面端（Wails / Electron / Tauri）
- * 需要在这里把 openPath 类接口接到后端，例如：
- *   · Wails   : runtime.BrowserOpenURL 或自定义 Go 方法 openHostsFile
- *   · Electron: shell.openPath('C:\\Windows\\System32\\drivers\\etc\\hosts')
- *   · Tauri   : open(path)
- * 当前实现里保留一段平台路径推断 + 确认对话框，方便后续替换。
- * ========================================================================== */
+/* 打开 Hosts 文件 */
 function detectHostsPath() {
   const ua = navigator.userAgent || '';
   if (/Windows/i.test(ua)) return 'C:\\Windows\\System32\\drivers\\etc\\hosts';
@@ -3580,7 +3572,7 @@ document.getElementById('btnPause').onclick = () => {
 };
 
 document.getElementById('btnCancel').onclick = async () => {
-  const waiting = state.queue.filter(t => t.status === 'waiting');
+  const waiting = [...nodeStore.nodes.values()].filter(n => n.scope === 'item' && n.status === 'queued');
   if (!waiting.length) return;
   const ok = await confirmDialog({
     title: '取消等待中的任务',
@@ -3589,39 +3581,37 @@ document.getElementById('btnCancel').onclick = async () => {
     danger: true
   });
   if (!ok) return;
-  waiting.forEach(t => {
-    t.status = 'cancelled';
-    const item = findItem(t.itemId);
-    if (item && t.kind === 'apply') {
+  waiting.forEach(n => {
+    n.status = 'cancelled';
+    n.error = { message: '已取消' };
+    const item = n.target;
+    if (item && n.type === 'apply') {
       item.status = item.appliedIp
         ? (item.bestIp === item.appliedIp ? 'applied' : 'stale')
         : (item.bestIp ? 'detected' : 'unset');
       patchTreeItem(item);
     }
-    patchQueueRow(t);
   });
-  renderQueueHeader();
+  nodeStore.roots.forEach(rid => recompute(nodeById(rid)));
+  renderQueue();
   toast(`已取消 ${waiting.length} 个等待任务`);
 };
 
 document.getElementById('btnClearDone').onclick = () => {
-  const before = state.queue.length;
-  state.queue = state.queue.filter(t => !isTerminalTask(t));
+  const before = nodeStore.roots.length;
+  clearFinishedRoots();
   renderAll();
-  toast(`已清理 ${before - state.queue.length} 条已结束任务`);
+  toast(`已清理 ${before - nodeStore.roots.length} 个已结束任务`);
 };
 
 document.getElementById('btnClearQueue').onclick = async () => {
-  const active = state.queueRunning || state.batchDetecting || state.startupAutomationRunning
-    || state.queue.some(t => t.status === 'running' || t.status === 'restoring')
+  const active = anyNodeRunning() || state.batchDetecting || state.startupAutomationRunning
     || allItems().some(item => item.status === 'detecting' || item.status === 'applying');
   if (active) {
     toast('任务正在执行，完成或取消后才能清空队列');
     return;
   }
-  if (!state.queue.length) return;
-
-  const count = state.queue.length;
+  const count = nodeStore.roots.length;
   const ok = await confirmDialog({
     title: '清空全部队列记录',
     bodyHtml: `将永久移除队列中的 <b>${count}</b> 条任务记录；不会修改当前 Hosts 或检测结果。`,
@@ -3629,56 +3619,34 @@ document.getElementById('btnClearQueue').onclick = async () => {
     danger: true
   });
   if (!ok) return;
-
-  state.queue = [];
+  clearAllNodes();
   state.paused = false;
   renderAll();
   toast(`已清空 ${count} 条队列记录`);
 };
 
 document.getElementById('btnRetryFailed').onclick = () => {
-  const failed = state.queue.filter(t => t.kind === 'apply' && ['failed', 'rolledback'].includes(t.status));
+  const failed = [...nodeStore.nodes.values()].filter(n => n.scope === 'item' && n.type === 'apply' && (n.status === 'failed' || n.status === 'rolledback'));
   if (!failed.length) { toast('没有需要重试的任务'); return; }
   retryTasks(failed);
 };
 
-function retrySingle(taskId) {
-  const t = state.queue.find(x => x.id === taskId);
-  if (!t || t.kind !== 'apply' || !['failed', 'rolledback'].includes(t.status)) return;
-  retryTasks([t]);
+function retrySingle(nodeId) {
+  const n = nodeById(nodeId);
+  if (!n || n.type !== 'apply' || !['failed', 'rolledback'].includes(n.status)) return;
+  retryTasks([n]);
 }
 
-function retryTasks(failedTasks) {
-  const activeItems = new Set(
-    state.queue.filter(task => ['waiting', 'running', 'restoring'].includes(task.status)).map(task => task.itemId)
-  );
-  const retryable = failedTasks.filter(task => {
-    const item = findItem(task.itemId);
-    return item && canApply(item) && !activeItems.has(item.id);
-  });
-  retryable.forEach(task => {
-    const item = findItem(task.itemId);
-    state.queue.push({
-      id: 't' + (++state.taskSeq),
-      kind: 'apply',
-      itemId: item.id,
-      name: labelOf(item),
-      status: 'waiting',
-      phase: null,
-      phaseText: '',
-      duration: '',
-      errorMsg: '',
-      prevAppliedIp: item.appliedIp,
-      retryOf: task.id
-    });
-    activeItems.add(item.id);
-  });
-  renderAll();
-  const rejected = failedTasks.length - retryable.length;
-  toast(retryable.length
-    ? `已新建 ${retryable.length} 个重试任务${rejected ? `，${rejected} 项因目标忙碌或候选已失效未重试` : ''}`
-    : '没有可重试的任务：候选可能已失效，或项目仍有任务运行');
-  if (retryable.length) runQueue();
+function retryTasks(failedNodes) {
+  const active = queuedItemNodeIds();
+  const retryable = failedNodes.filter(n => n.target && canApply(n.target) && !active.has(n.target.id));
+  if (!retryable.length) {
+    toast('没有可重试的任务：候选可能已失效，或项目仍有任务运行');
+    return;
+  }
+  const names = retryable.map(n => n.target.id);
+  enqueueApply(retryable.map(n => n.target), { retryOf: retryable[0].id, rootName: `重试失败 · ${retryable.length} 项` });
+  toast(`已新建 ${retryable.length} 个重试任务`);
 }
 
 document.getElementById('btnRestore').onclick = async () => {
@@ -3692,7 +3660,7 @@ document.getElementById('btnRestore').onclick = async () => {
     danger: true
   });
   if (!ok) return;
-  state.queue = [];
+  clearAllNodes();
   state.paused = false;
   state.queueRunning = false;
   state.batchDetecting = false;
@@ -3756,7 +3724,7 @@ buildData();
 loadSelection();
 state.categories.forEach(cat => state.collapsed.add(cat.id));
 
-/* 主题引擎：6 套配色照 ~/phpo 那份原型搬过来；这里只负责接线。 */
+/* 主题引擎：6 套配色 */
 const THEMES = [
   { id: 'light', name: '晨光白', desc: '清爽浅色 · 日间适用', colors: ['#f6f7f9', '#ffffff', '#3b82f6', '#16a34a'] },
   { id: 'sakura', name: '樱花粉', desc: '柔和浅粉 · 温柔细腻', colors: ['#fdf7f8', '#ffffff', '#ec4899', '#059669'] },
@@ -3786,7 +3754,6 @@ function applyThemeId(id) {
   val = applyThemeId(val);
 })();
 
-/* 顶部托盘胶囊的圆点菜单：一排 6 个主题圆点 + 分隔线 + 最小化到托盘 / 退出（演示占位） */
 (function buildTrayPill() {
   const pill = document.getElementById('trayPill');
   const menu = document.getElementById('trayMenu');
@@ -3819,7 +3786,6 @@ function applyThemeId(id) {
   renderDots();
 })();
 
-/* 需求②：设置中心外观面板里的主题平铺卡片（可向下滚动选择）。 */
 function renderSettingsThemeGrid() {
   const grid = document.getElementById('settingsThemeGrid');
   if (!grid) return;
@@ -3838,7 +3804,7 @@ function renderSettingsThemeGrid() {
     card.addEventListener('click', () => {
       const id = card.dataset.settingsThemeId;
       if (id === state.settings.theme) return;
-      state.settings.theme = id; /* setter 会触发 applyThemeId + 切换 data-theme */
+      state.settings.theme = id;
       persistSettings();
       renderSettingsThemeGrid();
     });

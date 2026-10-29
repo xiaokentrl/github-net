@@ -1,5 +1,7 @@
 .task
 bin
+# 根目录偶尔会被手动 go build 落一颗同名二进制，挡掉
+/github-net
 frontend/dist
 frontend/node_modules
 build/linux/appimage/build
