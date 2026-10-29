@@ -27,12 +27,17 @@ const (
 	CodeStrategyUnavailable = "strategy_unavailable"
 
 	// 队列这一组的码：前端按码分支，不解析中文。
-	// 这里只翻现在真能抛出来的那三个哨兵；队列的 ErrQueueStopped 和 ErrInvalidRequest 只有
-	// Enqueue 会抛，而排任务的入口还没接，提前给它们建翻译等于写一条没人走到的分支。
 	CodeInvalidTaskID = "invalid_task_id"
 	CodeTaskNotFound  = "task_not_found"
 	CodeTaskFinished  = "task_finished"
 	CodeQueueRunning  = "queue_running"
+
+	// 检测入口这一组的码：前端按码分支，不解析中文。
+	// invalid_item_id：这次要检测的项目 ID 在目录里找不到（多半是过期界面发来的）。
+	// no_strategy_selected：这个项目所在的加速范围还没选默认方法，检测被入口挡下，
+	//   具体原因（没选、方法已不在注册表、不适用本范围）只写进可展示消息。
+	CodeInvalidItemID      = "invalid_item_id"
+	CodeNoStrategySelected = "no_strategy_selected"
 )
 
 // Error 带稳定错误码。cause 是不导出的字段：它只给日志和 errors.Is 用，
@@ -99,8 +104,13 @@ func ToPublicError(err error) *Error {
 	if errors.Is(err, task.ErrQueueRunning) {
 		return NewError(CodeQueueRunning, "有任务正在执行，这时候清空队列会让它从界面上消失", err)
 	}
-	// 队列另外两个哨兵 ErrQueueStopped 和 ErrInvalidRequest 只有 Enqueue 会抛，
-	// 而排任务的入口（DetectItems/ApplyItems/RestoreItems）还没接，这里不提前给它们建翻译。
+	if errors.Is(err, task.ErrQueueStopped) {
+		// 应用正在退出，队列不再收新任务；这不是用户能重试的状态，如实说。
+		return NewError(CodeQueueRunning, "应用正在退出，这条检测没有排进队列", err)
+	}
+	if errors.Is(err, task.ErrInvalidRequest) {
+		return NewError(CodeInvalidTaskID, "这条任务请求缺少必要信息，已拒绝排队", err)
+	}
 	return NewError(CodeInternal, "操作失败，请稍后重试", err)
 }
 

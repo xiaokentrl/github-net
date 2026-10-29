@@ -1,0 +1,146 @@
+import { useSyncExternalStore } from 'react'
+import type { Snapshot, Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
+import type { DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import { getDetectResult } from '../../api/client'
+import type { DetectProgressPayload, TaskProgressPayload } from '../../api/events'
+
+// 队列与检测结果是跨页面共享的状态：详情页和队列面板读同一份，这里就是那唯一一份。
+// 不引第二份 localStorage、也不让组件各存任务副本；页面卸载不影响它，订阅挂在应用级。
+//
+// 用 React 自带的 useSyncExternalStore 做模块级外部存储，不引入新的状态库——
+// 现有代码都是 hooks + props 风格，这里保持一致；外部存储的纪律（快照不可变、订阅可清理）都守住了。
+
+export type LiveCounters = { done: number; total: number; active: number; probesUsed: number; dnsQueries: number }
+
+type TaskState = {
+  loaded: boolean
+  loadError: boolean
+  paused: boolean
+  sequence: number
+  tasks: Task[]
+  // results 是每个项目最近一轮检测的权威快照；事件带来的行是临时补画，任务终态后会被 refreshResult 换成后端原样。
+  results: Record<string, DetectResultView>
+  // live 是正在跑的那一轮的整体计数（解析/探测阶段的 done/total/active 等），任务行上显示用。
+  live: Record<string, LiveCounters>
+}
+
+let state: TaskState = {
+  loaded: false,
+  loadError: false,
+  paused: false,
+  sequence: 0,
+  tasks: [],
+  results: {},
+  live: {},
+}
+
+const listeners = new Set<() => void>()
+
+function publish(next: Partial<TaskState>) {
+  state = { ...state, ...next }
+  for (const listener of listeners) listener()
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+function getSnapshot(): TaskState {
+  return state
+}
+
+// 队列面板和详情页都从这一个 hook 读队列；应用级只挂一份事件订阅（见 taskEvents.ts）。
+export function useTaskQueue(): TaskState {
+  return useSyncExternalStore(subscribe, getSnapshot)
+}
+
+// applyTaskSnapshot 先订阅后快照：水位以内的事件会被这条整体替换掉，不重复应用。
+export function applyTaskSnapshot(snap: Snapshot) {
+  publish({
+    loaded: true,
+    loadError: false,
+    paused: snap.paused,
+    sequence: snap.sequence,
+    tasks: snap.tasks ?? [],
+  })
+}
+
+// markTaskLoadError 记下「快照没拉到」；队列面板据此显示错误和重试入口，不装成空队列。
+export function markTaskLoadError() {
+  publish({ loaded: true, loadError: true })
+}
+
+// applyTaskEvent 按水位收任务事件：旧序号丢弃（快照里已包含），新任务按 ID 覆盖。
+// 检测任务开跑（进入 running）意味着新一轮开始：把该项目上一轮的候选和计数清掉，
+// 免得上一轮的行和这一轮的行混在一张表里。
+export function applyTaskEvent(payload: TaskProgressPayload) {
+  if (payload.sequence <= state.sequence) return
+  const tasks = state.tasks.some((t) => t.id === payload.task.id)
+    ? state.tasks.map((t) => (t.id === payload.task.id ? payload.task : t))
+    : [...state.tasks, payload.task]
+  const next: Partial<TaskState> = { sequence: payload.sequence, tasks }
+  if (payload.task.kind === 'detect' && payload.task.status === 'running') {
+    const results = { ...state.results }
+    const live = { ...state.live }
+    delete results[payload.task.itemId]
+    delete live[payload.task.itemId]
+    next.results = results
+    next.live = live
+  }
+  if (isTerminal(payload.task.status) && payload.task.kind === 'detect') {
+    // 终态后后端已经把整轮结论存好，这里拉权威快照替换事件补画的临时行。
+    void refreshResult(payload.task.itemId)
+    const live = { ...state.live }
+    delete live[payload.task.itemId]
+    next.live = live
+  }
+  publish(next)
+}
+
+// applyDetectEvent 把候选行合并进该项目的视图。行按 candidateID 幂等更新：
+// 同一行的重复事件不产生第二行，乱序事件以先到的定格态为准（终态行不再被改写）。
+export function applyDetectEvent(p: DetectProgressPayload) {
+  const live: Record<string, LiveCounters> = { ...state.live, [p.itemId]: { done: p.done, total: p.total, active: p.active, probesUsed: p.probesUsed, dnsQueries: p.dnsQueries } }
+  if (!p.candidate) {
+    publish({ live })
+    return
+  }
+  const previous = state.results[p.itemId] ?? emptyResult(p.itemId)
+  const row = p.candidate
+  const hosts = (previous.hosts ?? []).map((h) => ({ ...h, candidates: [...(h.candidates ?? [])] }))
+  let host = hosts.find((h) => h.hostname === row.hostname)
+  if (!host) {
+    host = { hostname: row.hostname, resolved: true, candidates: [] }
+    hosts.push(host)
+  }
+  const existing = host.candidates.findIndex((c) => c.id === row.id)
+  const current = existing >= 0 ? host.candidates[existing] : null
+  if (current && isFinalStatus(current.status)) {
+    // 已经定格的行不再吃迟到事件，界面上「定格后闪回检测中」就是这么来的。
+    publish({ live })
+    return
+  }
+  if (existing >= 0) host.candidates[existing] = row
+  else host.candidates.push(row)
+  publish({ live, results: { ...state.results, [p.itemId]: { ...previous, hosts } } })
+}
+
+// refreshResult 从后端拉一个项目的权威结果放进 store；任务终态后调用。
+export async function refreshResult(itemId: string): Promise<DetectResultView> {
+  const view = await getDetectResult(itemId)
+  publish({ results: { ...state.results, [itemId]: view } })
+  return view
+}
+
+function emptyResult(itemId: string): DetectResultView {
+  return { itemId, scopeId: '', strategyId: '', available: 0, probesUsed: 0, dnsQueries: 0, truncated: false, deadlineHit: false, cancelled: false, hosts: [] }
+}
+
+function isTerminal(status: Task['status']): boolean {
+  return status === 'done' || status === 'failed' || status === 'cancelled' || status === 'skipped' || status === 'rolledback' || status === 'restored'
+}
+
+function isFinalStatus(status: string): boolean {
+  return status === 'available' || status === 'unavailable' || status === 'timeout' || status === 'cancelled' || status === 'notStarted' || status === 'untested'
+}

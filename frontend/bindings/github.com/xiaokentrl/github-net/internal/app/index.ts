@@ -15,7 +15,11 @@ export type {
     AppStatus,
     CatalogCategory,
     CatalogItem,
+    DetectHostView,
+    DetectResultView,
     HostsState,
     ItemsSnapshot,
-    RuntimeInfo
+    RuntimeInfo,
+    StrategyOption,
+    StrategySnapshot
 } from "./models.js";

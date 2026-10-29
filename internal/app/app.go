@@ -9,6 +9,7 @@ import (
 	"github.com/xiaokentrl/github-net/internal/accelerator/strategies"
 	"github.com/xiaokentrl/github-net/internal/catalog"
 	"github.com/xiaokentrl/github-net/internal/config"
+	"github.com/xiaokentrl/github-net/internal/event"
 	"github.com/xiaokentrl/github-net/internal/hosts"
 	"github.com/xiaokentrl/github-net/internal/task"
 )
@@ -39,6 +40,13 @@ type Service struct {
 	// 队列不落地，没有历史文件可读可写。
 	tasks *task.Queue
 
+	// detectResults 存每个项目最近一轮的检测结论，详情页的候选表从它取。
+	detectResults *detectResultStore
+
+	// detectReady 表示检测执行器已经换装（目录和设置都就绪）。
+	// 它决定 GetAppStatus 的 DNSDetectionReady，前端据此放开检测入口。
+	detectReady bool
+
 	// strategyTable 是方法注册表的读取接缝，零值即生产行为（读包级全局表）。
 	// 声明在 Service 上而不是每个命令各自读包级函数，是为了让方法选择区的
 	// 「真表走不到的分支」有测试落点，见 strategies.go。
@@ -55,6 +63,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 		sequence = func() int64 { return 0 }
 	}
 	c, err := catalog.Load()
+	results := newDetectResultStore()
 	s := &Service{
 		appName:        appName,
 		version:        version,
@@ -64,14 +73,20 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 		// 加载失败时 c 是 nil，先把错误留下，读接口再负责翻译成人能看懂的错误码。
 		productCatalogErr: err,
 		hostsPath:         HostsPath(),
-		tasks:             newTaskQueue(taskEmit),
+		detectResults:     results,
 		stamp:             currentBuildStamp(),
 	}
+	// 队列的执行动作在目录和设置都就绪时才换上真实检测执行器；缺哪样都先走拒答，
+	// 不降级硬跑。换装和排任务的入口 DetectItems 是同一步放行的，见 TECHNICAL_PLAN 阶段三。
+	var exec task.Executor = pendingExecutor{}
 	if err == nil {
 		s.settings, s.settingsErr = newSettingsStore(c)
-	} else {
-		s.settingsErr = err
+		if s.settings != nil {
+			exec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit))
+			s.detectReady = true
+		}
 	}
+	s.tasks = newTaskQueue(exec, taskEmit)
 	return s
 }
 
@@ -125,7 +140,8 @@ func (s *Service) GetItems() (ItemsSnapshot, error) {
 // GetAppStatus 返回平台、Hosts 写权限探测结果、DNS 解析选型和应用版本，
 // 外加这份构建的源码提交时间与哈希（「关于我们」用，来自二进制自带的 VCS 标记）。
 // Hosts 权限只是「能不能打开来写」的探测，本工具当前不写 Hosts；
-// DNS 一栏报的是首期选型（系统解析器），检测任务还没接入，所以 DetectionReady 是 false。
+// DNS 一栏报的是首期选型（系统解析器），DNSDetectionReady 表示检测执行器已换装、
+// 前端可以放开检测入口；目录或设置读不出来时它是 false，不假装能测。
 func (s *Service) GetAppStatus() (AppStatus, error) {
 	status := AppStatus{
 		App:               s.appName,
@@ -135,7 +151,7 @@ func (s *Service) GetAppStatus() (AppStatus, error) {
 		HostsPath:         HostsPath(),
 		HostsAccess:       ProbeHostsAccess(HostsPath()),
 		DNSResolver:       DNSResolverSystem,
-		DNSDetectionReady: false,
+		DNSDetectionReady: s.detectReady,
 		BuildTime:         s.stamp.Time,
 		BuildRevision:     s.stamp.Revision,
 		BuildModified:     s.stamp.Modified,

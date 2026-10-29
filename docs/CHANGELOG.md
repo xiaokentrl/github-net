@@ -6,6 +6,8 @@
 
 ## [未发布]
 
+- **真实检测放行（2026-10-30）**：装配层在目录与设置就绪时换装 `detectExecutor`，`DetectItems` 排任务入口同轮接通（整批校验：项目在目录、范围已选方法、方法可用，不合格整批拒绝）；候选结论存内存、`GetDetectResult` 取现状、`detect:progress` 事件逐候选推送；`GetAppStatus` 的 `DNSDetectionReady` 随换装翻真。前端接上详情页检测按钮、按主机名分组的候选逐行状态表和底部任务队列面板（暂停/继续、取消、清空）。真实网络冒烟通过：解析、TLS 探测、预算超时与路由不可达如实落档。检测仍不写 Hosts，应用与恢复属阶段四。
+
 - **工程骨架**：Wails v3 + React/TS/Vite 骨架、`Taskfile.yml`、Linux CI 门禁（前端构建、后端格式化/静态检查/测试、Linux x64 出包）。
 - **产品目录**：`internal/catalog/catalog.json` 收敛服务、项目、域名和稳定 ID；`GetItems` 接口让分类树和详情页读后端真实数据，不再用前端写死的列表。
 - **设置服务**：`internal/config` 接入，配置经后端读写并带 revision 与幂等键，不走前端 `localStorage`。失败面补齐用例（2026-10-29）：写盘失败不报成功、内存与磁盘既有内容不动、幂等键不被失败的保存消耗、原子替换中断不留临时文件、备份也失败时不删原件只按默认值继续跑，配置目录 700／文件与隔离副本 600 各有一道门。每轮候选探测总上限的取值在 2026-10-29 落句：**默认 130、可填上限 1040**，按目录实数现算（去重后 65 个 hostname × 档位每 hostname 候选上限 2／16），不再沿用原型那份「54 个菜单项目 × 2 = 108」的估算；新增 `internal/config/budget_parity_test.go` 与 `internal/app/budget_parity_test.go` 两道门，前者把前端 `NetworkPane.tsx`／`profileOptions.ts` 的字面量和后端常量逐一对齐，后者用 `Catalog.UniqueHostnames()` 现算乘积反推默认值与上限，目录或档位一改就先红。同轮把**档位并发数**也并进前一道门：`config.ProfileConcurrency`（省流 2、标准 8、完整 8）成为那列数字的唯一来源，测试按整行形状抓 `low/standard/full: { candidates: n, concurrency: n }` 再分别取两个数，少任一个就判「这条约束等于没在门里」而不是拿两个空集合判通过；两个方向各改坏验过红（前端把省流并发 2→3、后端把完整档 8→6），还原后 `sha256sum` 与动手前一致。

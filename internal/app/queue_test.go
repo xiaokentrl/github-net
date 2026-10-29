@@ -387,8 +387,10 @@ func TestQueueCommandsPublishProgressEvents(t *testing.T) {
 func TestPendingExecutorFailsQueuedTaskInsteadOfCrashing(t *testing.T) {
 	svc := NewService("github-net", "test", nil, nil)
 
-	// 命令层没有排任务的入口，这里直接从队列侧塞一条，模拟「先接了入队、忘了接执行器」。
-	if _, err := svc.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: "github.com"}); err != nil {
+	// 检测执行器已换装，这条保护网改用还没接执行器的「应用」类：
+	// 万一以后有人先接了应用入队、忘了阶段四的写盘执行器，任务会以「失败」被界面看见，
+	// 而不是让驱动协程撞上 nil 把整个应用带崩。这里直接从队列侧塞一条模拟。
+	if _, err := svc.tasks.Enqueue(task.NewRequest{Kind: task.KindApply, ItemID: "github.com"}); err != nil {
 		t.Fatalf("排队失败: %v", err)
 	}
 	waitFor(t, "这条任务被执行器拒掉", func() bool {

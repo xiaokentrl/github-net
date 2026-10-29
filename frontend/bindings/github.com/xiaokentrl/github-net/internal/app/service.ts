@@ -46,13 +46,34 @@ export function ClearQueue(): $CancellablePromise<task$0.Snapshot> {
 }
 
 /**
+ * DetectItems 把指定项目排进检测队列，返回它们的任务快照。
+ * 同一个项目已有等待中/执行中的同任务时直接返回已在的那条（队列去重），
+ * 所以连点两次「检测」不会出现两条一样的任务，也不会报错。
+ * 
+ * 校验全部通过才开始排队：一项不合格就整批拒绝、什么都不排，
+ * 避免「测了三个、第四个因为没选方法被拒」这种半截状态。
+ */
+export function DetectItems(itemIDs: string[] | null): $CancellablePromise<task$0.Task[] | null> {
+    return $Call.ByID(499348079, itemIDs);
+}
+
+/**
  * GetAppStatus 返回平台、Hosts 写权限探测结果、DNS 解析选型和应用版本，
  * 外加这份构建的源码提交时间与哈希（「关于我们」用，来自二进制自带的 VCS 标记）。
  * Hosts 权限只是「能不能打开来写」的探测，本工具当前不写 Hosts；
- * DNS 一栏报的是首期选型（系统解析器），检测任务还没接入，所以 DetectionReady 是 false。
+ * DNS 一栏报的是首期选型（系统解析器），DNSDetectionReady 表示检测执行器已换装、
+ * 前端可以放开检测入口；目录或设置读不出来时它是 false，不假装能测。
  */
 export function GetAppStatus(): $CancellablePromise<$models.AppStatus> {
     return $Call.ByID(645086831);
+}
+
+/**
+ * GetDetectResult 返回一个项目最近一轮检测的候选结论；没有记录时给空形状，
+ * 「还没测过」不是错误。详情页先进这里拿现状，再用 detect:progress 事件追更新。
+ */
+export function GetDetectResult(itemID: string): $CancellablePromise<$models.DetectResultView> {
+    return $Call.ByID(4180763528, itemID);
 }
 
 /**
@@ -70,6 +91,14 @@ export function GetItems(): $CancellablePromise<$models.ItemsSnapshot> {
  */
 export function GetSettings(): $CancellablePromise<config$0.Config> {
     return $Call.ByID(77437691);
+}
+
+/**
+ * GetStrategies 列出某个加速范围当前可选的方法，并给出这个范围已保存的选择。
+ * 列表只来自注册表：范围存在但一个方法都没注册，就是空数组，界面上如实显示「没有可选方法」。
+ */
+export function GetStrategies(scopeID: string): $CancellablePromise<$models.StrategySnapshot> {
+    return $Call.ByID(487544399, scopeID);
 }
 
 /**
@@ -123,4 +152,13 @@ export function RuntimeInfo(): $CancellablePromise<$models.RuntimeInfo> {
  */
 export function SaveSettings(patch: config$0.Patch, expectedRevision: number, mutationID: string): $CancellablePromise<config$0.Config> {
     return $Call.ByID(2645721314, patch, expectedRevision, mutationID);
+}
+
+/**
+ * SelectStrategy 保存某个范围以后用哪个加速方法。它只是记账：不启动检测、不写 Hosts、不碰系统代理。
+ * 落盘沿用设置的并发规则（expectedRevision + 幂等 mutationID），所以签名比契约里那两个参数多两个。
+ * 拒绝时一个字都不写：配置里的旧选择保持原样，界面上也不会出现「已保存」的假象。
+ */
+export function SelectStrategy(scopeID: string, strategyID: string, expectedRevision: number, mutationID: string): $CancellablePromise<$models.StrategySnapshot> {
+    return $Call.ByID(3592968659, scopeID, strategyID, expectedRevision, mutationID);
 }

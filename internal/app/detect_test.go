@@ -158,9 +158,10 @@ func detectStore(t *testing.T, defaults map[string]string) *config.Store {
 
 // newDetectExecutorForTest 用真实构造函数建，再由用例把方法解析换成测试自己的表：
 // 假方法不进全局注册表，免得重复注册把装配层那道注册门照脏。
+// 结果存储每个用例新给一份；事件发布器给 nil，测试不用总线。
 func newDetectExecutorForTest(t *testing.T, store *config.Store, probe accelerator.ProbeFunc) *detectExecutor {
 	t.Helper()
-	return newDetectExecutor(detectCatalog(), store, probe)
+	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil)
 }
 
 func detectCandidates() map[string][]strategies.Candidate {

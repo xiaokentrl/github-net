@@ -9,6 +9,7 @@ import (
 	"github.com/xiaokentrl/github-net/internal/accelerator/strategies"
 	"github.com/xiaokentrl/github-net/internal/catalog"
 	"github.com/xiaokentrl/github-net/internal/config"
+	"github.com/xiaokentrl/github-net/internal/event"
 	"github.com/xiaokentrl/github-net/internal/hosts"
 	"github.com/xiaokentrl/github-net/internal/task"
 )
@@ -17,12 +18,11 @@ import (
 // 把队列给的记录（项目、范围、方法）翻译成一轮检测的输入，再把一轮的状态变化折算回队列的进度和终态。
 // 分工不停在这层：怎么取候选属加速方法，连不连得上属探测层，一轮怎么排属检测编排，本文件只管对齐三者与队列。
 //
-// 它现在没有调用点。把队列里的 pendingExecutor 换成它是「真实网络放行」那一步的动作本身，
-// 要和排任务的入口（DetectItems）同轮落地：只换装不接入口，界面上什么都不会变，
-// 却让任何人不加第二处改动就能发起真实查询。
+// 装配层在目录和设置都就绪时把它换进队列（替换 pendingExecutor），同轮接通排任务的入口
+// DetectItems——这是「真实网络放行」那一步。缺哪样就继续用 pendingExecutor，不降级硬跑。
 //
-// 这一层不写 Hosts、不改系统任何状态，产出只有一条任务的终态和它的进度汇报。
-// 本轮查出来的候选结果不在这里存放——放在哪儿、界面怎么取，属 DetectItems 那一步一起定的事。
+// 这一层不写 Hosts、不改系统任何状态，产出只有一条任务的终态、它的进度汇报，
+// 以及交给出结果存储的这一轮候选结论（详情页从那里取，执行器自己不持有）。
 type detectExecutor struct {
 	// catalog 是项目与域名的唯一来源；构造本执行器时目录必须已经读出来。
 	catalog *catalog.Catalog
@@ -35,12 +35,16 @@ type detectExecutor struct {
 	strategyFor func(id string) (strategies.Strategy, bool)
 	// probe 是探测接缝，nil 表示用探测层的 HTTPS 那条，也就是真实外网。
 	probe accelerator.ProbeFunc
+	// results 收每轮的候选结论；nil 表示没人要结果（纯测试场景），执行器照跑不存。
+	results *detectResultStore
+	// pub 把候选级状态变化原样发给前端；nil 表示不发（测试和没接总线的场景）。
+	pub *event.DetectEmitter
 }
 
 // newDetectExecutor 建检测执行器。调用方必须在产品目录和设置服务都准备好之后再来建：
 // 目录读不出来时任何检测都没有可查的项目，那种情况队列该继续用 pendingExecutor。
-func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc) *detectExecutor {
-	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe}
+func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter) *detectExecutor {
+	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub}
 }
 
 // detectItem 是一个项目在目录里跟这一轮有关的两件事：能检测的域名和它所属的加速范围。
@@ -84,14 +88,18 @@ func (e *detectExecutor) Execute(ctx context.Context, t task.Task, report task.R
 		return detectFailure("这一轮的检测预算和当前设置对不上，这一轮没有开始")
 	}
 
-	// 一轮一个 Runner：观察者的落点是这一条任务的进度回调，挂在队列那个唯一执行者给的 report 上。
-	runner := accelerator.NewRunner(strategy.Lookup, e.probe, &progressBridge{report: report})
+	// 一轮一个 Runner：观察者的落点是这一条任务的进度回调，挂在队列那个唯一执行者给的 report 上；
+	// 候选级事件经 pub 原样转发给前端。两个出口都在检测那把锁内被调，顺序稳定。
+	runner := accelerator.NewRunner(strategy.Lookup, e.probe, &progressBridge{report: report, pub: e.pub})
 	result, err := runner.Run(ctx, accelerator.Input{ItemID: t.ItemID, Hostnames: item.hostnames}, budget)
 	if err != nil {
 		// 一轮没跑起来的错误都是「调用方给错了东西」那几类（预算与范围对不上、方法没实现），
 		// 原始错误里没有用户能用来下一步的信息，也不保证不含域名，所以这里只给人话不给 err.Error()。
 		return detectFailure("这一轮检测没能跑起来，检查设置后重试")
 	}
+	// 跑完的结论交给结果存储，详情页从那里取。取消的那轮也存：已完成的那部分候选
+	// 是真实测出来的东西，界面上该留着看。nil 结果（没跑起来）存储自己会拒收。
+	e.results.put(item.scopeID, strategyID, result)
 	if result.Cancelled {
 		// 队列在取消那一刻已经把这条定成「已取消」，这里 returned 的结论不会再改写它；
 		// 给失败而不是成功，是为了让单独调用这一层（没有队列）的调用方拿到不撒谎的结论。
@@ -143,14 +151,17 @@ func uniqueHostnames(raw []string) []string {
 	return out
 }
 
-// progressBridge 把一轮检测里每条候选的状态变化折算成队列那一行的进度。
+// progressBridge 把一轮检测里每条候选的状态变化分成两路：
+// 队列的 report 只要整轮进度（阶段、完成数），候选行自己的样子经 pub 原样发给前端。
 // 它在检测那把锁内被调用、同一轮只有一个现场，所以这里不再自己加锁；
 // 往下走是队列 reporter 的锁，两把锁的先后顺序在任何路径上都只有一边，不会互相等。
 type progressBridge struct {
 	report task.Report
+	pub    *event.DetectEmitter
 }
 
 func (b *progressBridge) Observe(p accelerator.Progress) {
+	b.pub.Publish(p)
 	b.report(detectPhase(p), detectPhaseText(p), detectPercent(p))
 }
 

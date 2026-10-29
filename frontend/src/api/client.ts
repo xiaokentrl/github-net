@@ -1,16 +1,24 @@
 // 组件不直接调用 Wails 绑定，只走这一层；这里也不写业务规则。
-// 后端已经接好 11 个命令（原来那 4 个读命令，加上队列那 7 个），队列那 7 条的 TS 绑定也已生成入库。
-// 这一层仍只登记界面真正用得上的 4 个：队列那一屏还没迁进来，接上时再补封装。
-// 其余 7 个（检测、应用、还原、打开 Hosts、检查更新等）在后端仍是契约，不为它们写空壳。
+// 后端已接 13 个命令：4 个读/设命令、检测 2 条、队列 7 条；绑定都已生成入库。
+// 这一层只登记界面用得上的命令；应用、还原、打开 Hosts、检查更新在后端仍是契约，不为它们写空壳。
 import {
+  CancelTask,
+  ClearFinishedTasks,
+  ClearQueue,
+  DetectItems,
   GetAppStatus,
+  GetDetectResult,
   GetItems,
   GetSettings,
+  GetTasks,
+  PauseQueue,
+  ResumeQueue,
   SaveSettings,
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/service'
 import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
-import type { AppStatus, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { AppStatus, DetectResultView, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
+import type { Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 
 export type NetworkProfile = 'low' | 'standard' | 'full'
 
@@ -58,4 +66,41 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     autoApplyOnStartup: null,
   }
   return SaveSettings(body, expectedRevision, mutationID)
+}
+
+// ===== 检测与队列 =====
+
+// 发起检测：后端整批校验（项目在目录里、范围已选方法、方法可用），不合格整批拒绝。
+// 已在队列里的项目返回同一条任务，不会重复排队。
+export function detectItems(itemIds: string[]): Promise<Task[] | null> {
+  return DetectItems(itemIds)
+}
+
+// 取一个项目最近一轮的检测结论；没测过时后端给空形状，不是错误。
+export function getDetectResult(itemId: string): Promise<DetectResultView> {
+  return GetDetectResult(itemId)
+}
+
+export function getTasks(): Promise<Snapshot> {
+  return GetTasks()
+}
+
+export function pauseQueue(): Promise<Snapshot> {
+  return PauseQueue()
+}
+
+export function resumeQueue(): Promise<Snapshot> {
+  return ResumeQueue()
+}
+
+export function cancelTask(taskId: string): Promise<Snapshot> {
+  return CancelTask(taskId)
+}
+
+export function clearFinishedTasks(): Promise<Snapshot> {
+  return ClearFinishedTasks()
+}
+
+export function clearQueue(): Promise<Snapshot> {
+  return ClearQueue()
 }

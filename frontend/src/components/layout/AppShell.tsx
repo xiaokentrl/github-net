@@ -20,7 +20,7 @@ const PERM_HINT_KEY: Record<HostsAccess, string> = {
   [HostsAccess.HostsAccessUnknown]: 'topbar.perm.hint.unknown',
 }
 
-// 骨架：顶栏 + 工具栏槽 + 左树右详情 + 底部状态栏槽。
+// 骨架：顶栏 + 工具栏槽 + 左树右详情 + 队列槽 + 底部状态栏槽。
 // 「检查更新」按钮和自定义窗口按钮要等 CheckForUpdates 接好才出现，这里不放假入口。
 export function AppShell({
   appName,
@@ -34,6 +34,7 @@ export function AppShell({
   sidebar,
   sidebarFooter,
   detail,
+  queue,
   statusbar,
 }: {
   appName: string
@@ -47,6 +48,7 @@ export function AppShell({
   sidebar: ReactNode
   sidebarFooter: ReactNode
   detail: ReactNode
+  queue: ReactNode
   statusbar: ReactNode
 }) {
   const resize = useSidebarResize(sidebarWidth, onSidebarResize)
@@ -111,6 +113,7 @@ export function AppShell({
         <section className={styles.detail}>{detail}</section>
       </main>
 
+      {queue}
       <footer className={styles.statusbar}>{statusbar}</footer>
     </div>
   )

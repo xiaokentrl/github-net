@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import { getAppStatus, getItems, getSettings, type NetworkProfile } from '../api/client'
+import { detectItems, getAppStatus, getItems, getSettings, type NetworkProfile } from '../api/client'
 import { subscribeRuntimeStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
@@ -12,6 +12,8 @@ import type { HostsLookup } from '../components/navigation/CategoryNode'
 import { SearchBox } from '../components/navigation/SearchBox'
 import { SettingsDialog, type SettingsPaneID } from '../features/settings/SettingsDialog'
 import { ItemDetail } from '../features/items/ItemDetail'
+import { TaskPanel } from '../features/tasks/TaskPanel'
+import { subscribeTaskEvents } from '../features/tasks/taskEvents'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
@@ -52,6 +54,9 @@ export function App() {
 
   const [sequence, setSequence] = useState(0)
   const [dropped, setDropped] = useState(0)
+
+  // 检测入口被后端拒绝时的一句话，显示在详情页的检测按钮旁边；下一次检测成功就清掉。
+  const [detectError, setDetectError] = useState('')
 
   // 收到的最新序号存在 ref 里，订阅回调才不会读到旧值。
   const sequenceRef = useRef(0)
@@ -137,12 +142,17 @@ export function App() {
       setSequence(payload.sequence)
     })
 
+    // 任务与候选进度：应用级只挂一份订阅，先订阅再拉快照（taskEvents.ts）。
+    // 订阅退掉重挂后，队列面板的载入态由 taskStore 自行恢复，这里不用管。
+    const unsubscribeTasks = subscribeTaskEvents()
+
     return () => {
       // 让仍在路上的响应作废，并退订事件；退订必须调用，否则回调会一直堆积。
       statusRequestRef.current += 1
       settingsRequestRef.current += 1
       catalogRequestRef.current += 1
       unsubscribe()
+      unsubscribeTasks()
     }
   }, [loadStatus, loadSettings, loadCatalog])
 
@@ -234,6 +244,15 @@ export function App() {
     setDialogOpen(true)
   }, [])
 
+  // 检测入口：后端整批校验，被拒的原因显示在检测按钮旁边，不弹 Toast。
+  // 成功的反馈不在这一层——任务排进队列后，进度由 task:progress 事件推给队列面板和详情页。
+  const startDetect = useCallback((itemId: string) => {
+    setDetectError('')
+    detectItems([itemId]).catch((err: unknown) => {
+      setDetectError(getErrorMessage(err))
+    })
+  }, [])
+
   const debouncedQuery = useDebouncedValue(query, 150)
 
   const sidebar = (
@@ -277,7 +296,17 @@ export function App() {
         }
         sidebar={sidebar}
         sidebarFooter={<SettingsEntry onOpen={() => openSettings('layout')} />}
-        detail={<ItemDetail item={selected.item} category={selected.category} hosts={hostsOf.get(selectedId)} />}
+        detail={
+          <ItemDetail
+            item={selected.item}
+            category={selected.category}
+            hosts={hostsOf.get(selectedId)}
+            detectReady={status?.dnsDetectionReady ?? false}
+            detectError={detectError}
+            onDetect={startDetect}
+          />
+        }
+        queue={<TaskPanel />}
         statusbar={
           <StatusBar
             status={status}

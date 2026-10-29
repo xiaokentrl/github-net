@@ -8,26 +8,26 @@ import (
 	"github.com/xiaokentrl/github-net/internal/task"
 )
 
-// pendingExecutor 是「还没有能做事的执行器」这件事的可见答案。
+// pendingExecutor 是「执行动作还没接上」这件事的可见答案。
 //
-// 现在没有任何命令能把任务排进来——入口是 DetectItems/ApplyItems/RestoreItems，
-// 那三条要真实网络和写系统 Hosts 分别放行。但队列对象已经建好并挂在服务上，
-// 所以万一以后有人先接了入队、忘了接执行器，这条任务会以「失败」落到队列里被界面看见，
-// 而不是让驱动协程撞上 nil 把整个应用带崩。接上真正的检测执行器那一步会把它整个换掉。
+// 检测执行器（detectExecutor）在目录和设置就绪时由装配层换进队列；应用和恢复
+// 要写系统 Hosts，属阶段四的受限辅助服务，它们排进来的任务会以「失败」落到队列里被看见，
+// 而不是让驱动协程撞上 nil 把整个应用带崩。目录或设置读不出来时检测也走这条拒答。
 type pendingExecutor struct{}
 
 func (pendingExecutor) Execute(_ context.Context, _ task.Task, _ task.Report) task.Outcome {
 	return task.Outcome{Status: task.StatusFailed, Message: "这一类任务还没有接上执行动作，这条任务没有开始"}
 }
 
-// newTaskQueue 建服务内部那一条内存队列：执行动作现在是「还没接上」的拒答，
+// newTaskQueue 建服务内部那一条内存队列。执行动作由装配层决定：
+// 目录和设置都就绪时是真实检测执行器，否则是上面的拒答。
 // 进度事件经 emit 投出去（emit 给 nil 就是不发事件，测试和还没接总线的阶段走这条路）。
 //
 // 队列藏在 Service 里、不放在装配层，代价是退出这件事不能写成 Service 的方法：
 // Wails 会把 Service 的每个导出方法都当成命令绑给前端，而「停掉队列」不该是前端能点的东西。
 // 所以停止走下面那个包级函数，由 main.go 在退出时调用。
-func newTaskQueue(emit func(name string, payload any)) *task.Queue {
-	return task.NewQueue(pendingExecutor{}, event.NewTaskEmitter(emit))
+func newTaskQueue(exec task.Executor, emit func(name string, payload any)) *task.Queue {
+	return task.NewQueue(exec, event.NewTaskEmitter(emit))
 }
 
 // GetTasks 返回队列快照和 sequence 水位。它只读内存里的一把锁，没有失败面，所以不返回错误。

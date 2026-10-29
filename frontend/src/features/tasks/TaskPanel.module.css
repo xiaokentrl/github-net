@@ -1,0 +1,120 @@
+/* 队列面板：固定在主区下方的窄条，颜色和间距全部引用令牌，不另写一套。 */
+.panel {
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  padding: 0.25rem 0.75rem 0.5rem;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.title {
+  font-size: 0.85rem;
+  margin: 0;
+  color: var(--text-2);
+}
+
+.summary {
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.head button,
+.row button {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--strip);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.head button:disabled,
+.row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.list {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.badge {
+  flex: none;
+  font-size: 0.72rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+
+.badge.running {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.badge.done,
+.badge.restored {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.badge.failed,
+.badge.cancelled {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.name {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress {
+  color: var(--text-2);
+  font-size: 0.76rem;
+}
+
+.errorText {
+  color: var(--red);
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty,
+.error {
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+.error {
+  color: var(--red);
+}

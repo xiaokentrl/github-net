@@ -1,0 +1,86 @@
+/* 候选结果区：只管布局，颜色和间距引用令牌。 */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.3rem 0;
+}
+
+.detect {
+  font: inherit;
+  padding: 0.25rem 0.9rem;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--on-primary);
+  cursor: pointer;
+}
+
+.detect:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.live {
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+.note {
+  margin: 0.3rem 0;
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+.result {
+  margin-top: 0.4rem;
+}
+
+.meta {
+  margin: 0 0 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+
+.host {
+  margin-bottom: 0.6rem;
+}
+
+.hostname {
+  margin: 0.15rem 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 0.15rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.table th {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.v6 {
+  color: var(--text-2);
+  font-size: 0.72rem;
+}
+
+.reason {
+  color: var(--text-2);
+}
+
+.detectError {
+  margin: 0.3rem 0;
+  font-size: 0.8rem;
+  color: var(--red);
+}
