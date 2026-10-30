@@ -117,7 +117,7 @@ func TestUserSuppliedOnlyOnManualItem(t *testing.T) {
 
 func TestSnapshotJSONHasNoAuditFields(t *testing.T) {
 	c := mustCatalog(t)
-	snapshot := ItemsSnapshot{Categories: CatalogToCategories(c), Hosts: HostsStates(c, emptySnapshot(), 1)}
+	snapshot := ItemsSnapshot{Categories: CatalogToCategories(c), Hosts: HostsStates(c, emptySnapshot(), noWriting(), 1)}
 	data, err := json.Marshal(snapshot)
 	if err != nil {
 		t.Fatalf("序列化失败: %v", err)
@@ -174,7 +174,7 @@ func stateFor(t *testing.T, states []HostsState, itemID string) HostsState {
 
 func TestHostsStatesOrderAndReadTrace(t *testing.T) {
 	c := mustCatalog(t)
-	states := HostsStates(c, emptySnapshot(), 7)
+	states := HostsStates(c, emptySnapshot(), noWriting(), 7)
 	if len(states) != 54 {
 		t.Fatalf("状态条数 = %d，期望 54", len(states))
 	}
@@ -204,7 +204,7 @@ func TestHostsStatesOrderAndReadTrace(t *testing.T) {
 
 func TestHostsStatesWithoutBlockIsNoneForEveryItem(t *testing.T) {
 	c := mustCatalog(t)
-	states := HostsStates(c, emptySnapshot(), 1)
+	states := HostsStates(c, emptySnapshot(), noWriting(), 1)
 	for _, state := range states {
 		if state.Status != HostsNone {
 			t.Fatalf("项目 %s 的状态 = %q，区段不存在时只能报 none，不能报成检测结果", state.ItemID, state.Status)
@@ -218,7 +218,7 @@ func TestHostsStatesWithoutBlockIsNoneForEveryItem(t *testing.T) {
 func TestHostsStatesReadFailedCarriesReason(t *testing.T) {
 	c := mustCatalog(t)
 	snap := hosts.Snapshot{ReadAt: time.Now(), ReadErr: "文件不存在：/etc/hosts"}
-	states := HostsStates(c, snap, 3)
+	states := HostsStates(c, snap, noWriting(), 3)
 	for _, state := range states {
 		if state.Status != HostsReadFailed || state.Message != "文件不存在：/etc/hosts" {
 			t.Fatalf("读不到时必须逐条报 readFailed 并带上原因，实际 %+v", state)
@@ -230,7 +230,7 @@ func TestHostsStatesDamagedBlockIsConflictForAll(t *testing.T) {
 	c := mustCatalog(t)
 	// 有头没尾：整段区段判读不了，谁都不许报成 none 或 applied。
 	snap := readHosts(t, "127.0.0.1 localhost\n"+hosts.MarkerBegin()+"\n1.2.3.4 github.com\n")
-	states := HostsStates(c, snap, 1)
+	states := HostsStates(c, snap, noWriting(), 1)
 	if snap.Block.Usable() {
 		t.Fatal("这条构造应当判读不了")
 	}
@@ -241,9 +241,113 @@ func TestHostsStatesDamagedBlockIsConflictForAll(t *testing.T) {
 	}
 }
 
-func TestHostsStatesBlockWithoutSummary(t *testing.T) {
+// noWriting 是「问过特权服务、它说没写过」：知道的结论是「没有写入记录」。
+func noWriting() AppliedState { return AppliedState{Known: true} }
+
+// writtenState 按事务层同一套算法造出「写完之后」的 Hosts 全文和写入记录，
+// 读侧判 applied/partial 时比对的就是这两样，不手拼摘要。
+func writtenState(t *testing.T, content string, applies map[string][]hosts.Mapping, order ...string) (hosts.Written, string) {
+	t.Helper()
+	meta := hosts.Recovery{}
+	for _, itemID := range order {
+		var err error
+		meta, content, err = hosts.Apply(meta, content, itemID, applies[itemID])
+		if err != nil {
+			t.Fatalf("构造写入记录失败（%s）：%v", itemID, err)
+		}
+	}
+	return meta.Written(), content
+}
+
+func TestHostsStatesAppliedPartialAndNone(t *testing.T) {
 	c := mustCatalog(t)
-	// 区段完整可读，但本工具还没写过、也就没有可比对的写入摘要：
+	written, content := writtenState(t, "127.0.0.1 localhost\n", map[string][]hosts.Mapping{
+		// gh-main 有三个主机名，这里只写两个：读侧应报「部分应用」。
+		"gh-main": {{IP: "140.82.113.4", Hostnames: []string{"github.com", "api.github.com"}}},
+		// gh-raw 只有一个主机名，写全：读侧应报「已应用」。
+		"gh-raw": {{IP: "185.199.108.133", Hostnames: []string{"raw.githubusercontent.com"}}},
+	}, "gh-main", "gh-raw")
+	snap := readHosts(t, content)
+	states := HostsStates(c, snap, AppliedState{Known: true, Written: written}, 5)
+
+	counts := map[HostsStatus]int{}
+	for _, state := range states {
+		counts[state.Status]++
+		if state.Status != HostsNone && state.Message != "" {
+			t.Errorf("项目 %s 报 %q 却带了原因 %q", state.ItemID, state.Status, state.Message)
+		}
+	}
+	if got := stateFor(t, states, "gh-main").Status; got != HostsPartial {
+		t.Errorf("gh-main 状态 = %q，期望 partial（三个主机名只写了两个）", got)
+	}
+	if got := stateFor(t, states, "gh-raw").Status; got != HostsApplied {
+		t.Errorf("gh-raw 状态 = %q，期望 applied", got)
+	}
+	if got := stateFor(t, states, "gh-pages").Status; got != HostsNone {
+		t.Errorf("没写过的 gh-pages 状态 = %q，期望 none", got)
+	}
+	if counts[HostsApplied] != 1 || counts[HostsPartial] != 1 || counts[HostsNone] != 52 {
+		t.Errorf("applied=%d partial=%d none=%d，期望 1/1/52（共 54 项）",
+			counts[HostsApplied], counts[HostsPartial], counts[HostsNone])
+	}
+}
+
+func TestHostsStatesDigestMismatchIsConflict(t *testing.T) {
+	c := mustCatalog(t)
+	written, content := writtenState(t, "127.0.0.1 localhost\n", map[string][]hosts.Mapping{
+		"gh-main": {{IP: "140.82.113.4", Hostnames: []string{"github.com", "api.github.com", "gist.github.com"}}},
+	}, "gh-main")
+	// 同一批映射、摘要换成另一个合法值：等价于「最后一次成功写入之后区段被改过」。
+	written.Digest = strings.Repeat("0", 64)
+	states := HostsStates(c, readHosts(t, content), AppliedState{Known: true, Written: written}, 1)
+	// 区段里有记录的项目（github.com 由 gh-main 和 cu-china 共用）报冲突并说清是摘要对不上；
+	// 区段里没有记录的仍是 none——没写过就是没写过，不跟着一起报警。
+	var conflicted int
+	for _, state := range states {
+		switch state.ItemID {
+		case "gh-main", "cu-china":
+			conflicted++
+			if state.Status != HostsConflict || !strings.Contains(state.Message, "摘要对不上") {
+				t.Errorf("项目 %s 该报 conflict 且说是摘要对不上，实际 %+v", state.ItemID, state)
+			}
+		default:
+			if state.Status != HostsNone {
+				t.Errorf("区段里没有记录的项目 %s 不该跟着报警，实际 %q", state.ItemID, state.Status)
+			}
+		}
+	}
+	if conflicted != 2 {
+		t.Errorf("报冲突的项目数 = %d，期望 2", conflicted)
+	}
+}
+
+func TestHostsStatesHelperUnavailableIsHonest(t *testing.T) {
+	c := mustCatalog(t)
+	// 服务问不着、文件里有区段：判不了是不是本工具写的，区段里有记录的项目报冲突并带原因。
+	content := "127.0.0.1 localhost\n" +
+		hosts.MarkerBegin() + "\n140.82.113.4 github.com\n" + hosts.MarkerEnd() + "\n"
+	unknown := AppliedState{Reason: "特权辅助服务不可用"}
+	states := HostsStates(c, readHosts(t, content), unknown, 1)
+	for _, id := range []string{"gh-main", "cu-china"} {
+		state := stateFor(t, states, id)
+		if state.Status != HostsConflict || !strings.Contains(state.Message, "特权辅助服务不可用") {
+			t.Errorf("项目 %s 要报 conflict 并带原因，实际 %+v", id, state)
+		}
+	}
+	if got := stateFor(t, states, "gh-raw").Status; got != HostsNone {
+		t.Errorf("区段里没有记录的 gh-raw 该是 none，实际 %q", got)
+	}
+	// 服务问不着、文件里没有区段：这一档仍是诚实的 none，不用跟着报冲突。
+	for _, state := range HostsStates(c, emptySnapshot(), unknown, 1) {
+		if state.Status != HostsNone {
+			t.Fatalf("没有区段时服务问不着也应是 none，项目 %s 报了 %q", state.ItemID, state.Status)
+		}
+	}
+}
+
+func TestHostsStatesBlockWithoutWritingRecord(t *testing.T) {
+	c := mustCatalog(t)
+	// 区段完整可读，但特权服务说没写过：没法确认这段是谁写的，
 	// 有映射的项目按 conflict 报（不假装已生效），没映射的项目照实报 none。
 	content := "127.0.0.1 localhost\n" +
 		hosts.MarkerBegin() + "\n140.82.113.4 github.com\n" + hosts.MarkerEnd() + "\n"
@@ -251,7 +355,7 @@ func TestHostsStatesBlockWithoutSummary(t *testing.T) {
 	if !snap.OK() || !snap.Block.Usable() || !snap.Block.HasRecord("github.com") {
 		t.Fatalf("构造的区段应当可读且含 github.com，实际 %+v", snap.Block)
 	}
-	states := HostsStates(c, snap, 2)
+	states := HostsStates(c, snap, noWriting(), 2)
 
 	var conflicted, none int
 	for _, state := range states {
@@ -274,7 +378,7 @@ func TestHostsStatesBlockWithoutSummary(t *testing.T) {
 
 	// 区段外的用户手写行不算本工具记录：同一份文件去掉标记，那一行就该报 none。
 	noBlock := readHosts(t, "127.0.0.1 localhost\n140.82.113.4 github.com\n")
-	for _, state := range HostsStates(c, noBlock, 1) {
+	for _, state := range HostsStates(c, noBlock, noWriting(), 1) {
 		if state.Status != HostsNone {
 			t.Fatalf("区段外的手写行被当成了本工具记录：%+v", state)
 		}
@@ -315,7 +419,8 @@ func TestToPublicErrorBranches(t *testing.T) {
 
 func TestGetItemsServesCatalogWithHonestStatus(t *testing.T) {
 	s := NewService("github-net", "test", nil, nil)
-	// 指向临时文件，测试不读真实的 /etc/hosts：这台机器上的 Hosts 会变，断言不能跟着变。
+	// 特权和 Hosts 都指向测试自己的东西：这台机器上的真实服务和 Hosts 会变，断言不能跟着变。
+	s.priv = &fakePriv{}
 	path := filepath.Join(t.TempDir(), "hosts")
 	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n127.0.1.1 kentrl\n"), 0o600); err != nil {
 		t.Fatalf("写临时 Hosts 失败：%v", err)
@@ -379,6 +484,7 @@ func TestGetItemsServesCatalogWithHonestStatus(t *testing.T) {
 // revision 是「第几次读」的计数：前端靠它丢掉旧快照，所以每次读都必须比上一次大。
 func TestGetItemsRevisionIncreasesPerRead(t *testing.T) {
 	s := NewService("github-net", "test", nil, nil)
+	s.priv = &fakePriv{}
 	path := filepath.Join(t.TempDir(), "hosts")
 	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0o600); err != nil {
 		t.Fatalf("写临时 Hosts 失败：%v", err)

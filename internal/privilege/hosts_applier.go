@@ -94,6 +94,24 @@ func (a *HostsApplier) RestoreAll() (int, error) {
 	return len(restored), nil
 }
 
+// State 只读恢复元数据，回答「最后一次成功写入是哪批映射」。
+// 不改任何文件，也不读 Hosts 原文：界面拿它和现读的区段比对，判断已应用还是被改过。
+// 元数据不存在就是「没写过」，返回零值而不是错误——这两件事不能混。
+func (a *HostsApplier) State() (hosts.Written, error) {
+	metaRaw, err := os.ReadFile(a.metaPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return hosts.Written{}, nil
+	}
+	if err != nil {
+		return hosts.Written{}, fmt.Errorf("%w：读恢复元数据失败：%v", ErrHostsRead, err)
+	}
+	meta, err := hosts.UnmarshalMetadata(metaRaw)
+	if err != nil {
+		return hosts.Written{}, fmt.Errorf("恢复元数据读不出来，没法判断现在生效的是哪批映射（%v）；删除 %s 可重置，但会失去还原能力", err, a.metaPath())
+	}
+	return meta.Written(), nil
+}
+
 // load 读 Hosts 原文和恢复元数据。元数据损坏时明确拒绝：不能拿半对的账本去动系统文件。
 func (a *HostsApplier) load() (string, hosts.Recovery, error) {
 	raw, err := os.ReadFile(a.hostsPath)

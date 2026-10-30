@@ -49,14 +49,12 @@ const (
 	// HostsNone 表示已读过，管理区段里没有本工具为该项目的记录。
 	// 区段外用户手写的同名行不算本工具记录，所以「系统里已有解析」和这一档可以并存。
 	HostsNone HostsStatus = "none"
-	// HostsPartial 表示已读过，该项目只有部分 hostname 有本工具记录。
-	// 这一档要拿写入摘要比对才能确认，等 Hosts 写入接上才会由后端产出。
+	// HostsPartial 表示已读过，该项目只有部分 hostname 是它自己认领的、且区段摘要对得上的映射。
 	HostsPartial HostsStatus = "partial"
-	// HostsApplied 表示已读过，该项目全部 hostname 都有本工具记录且区段摘要校验通过。
-	// 同上：没有写入摘要就没有可比对的东西，这一档目前不由后端产出。
+	// HostsApplied 表示已读过，该项目全部 hostname 都由它认领，且区段摘要与最后一次成功写入一致。
 	HostsApplied HostsStatus = "applied"
-	// HostsConflict 表示区段判读不了（标记异常或被外部改过），
-	// 或者区段里有本工具映射却拿不到可比对的写入摘要；后端停在这里，不覆盖、不假装已生效。
+	// HostsConflict 表示没法确认这段映射是不是本工具写的：区段判读不了、被外部改过、
+	// 或拿不到特权服务记录的写入摘要。后端停在这里，不覆盖、不假装已生效。
 	HostsConflict HostsStatus = "conflict"
 	// HostsReadFailed 表示读不到 Hosts（文件不存在、没有读权限、路径拿不到等）；
 	// 它和 HostsNone 是两回事，不能合并显示。
@@ -133,15 +131,28 @@ func CatalogToCategories(c *catalog.Catalog) []CatalogCategory {
 	return out
 }
 
-// HostsStates 把「读了一次 Hosts」的结果摊成每个项目的状态，顺序跟目录一致。
-// 现在后端能产出的档位是 none、conflict、readFailed 三种：
-// applied 和 partial 要求拿最后一次成功写入的区段摘要来比对，而写入还没接，
-// 所以「区段里有本工具映射、却没有可比对的摘要」按冲突报——这是规划定下来的处理，不是猜的。
-func HostsStates(c *catalog.Catalog, snap hosts.Snapshot, revision int64) []HostsState {
+// AppliedState 是「最后一次成功写入」的读侧结论：知道，或者不知道且带原因。
+// 写入记录在特权服务那边（root 目录里），界面进程自己读不到，所以每次读目录都问一次。
+type AppliedState struct {
+	Known   bool
+	Written hosts.Written
+	Reason  string
+}
+
+// HostsStates 把「读了一次 Hosts」和「问了一次写入记录」摊成每个项目的状态，顺序跟目录一致。
+// 结论分两类：
+//   - 全区一个说法：读不到、区段判读不了——这些情况下逐个判断没有意义；
+//   - 区段能读时就按项目看：区段和写入记录对得上时，按项目认领了哪些主机名分
+//     applied / partial / none；对不上时（被外部改过、或问不着写入记录），区段里有这个项目
+//     记录才报 conflict，一个记录都没有的仍是 none——没写过就是没写过，不跟着一起报警。
+func HostsStates(c *catalog.Catalog, snap hosts.Snapshot, applied AppliedState, revision int64) []HostsState {
 	out := make([]HostsState, 0)
 	readAt := snap.ReadAt.UTC().Format(time.RFC3339)
-	status, message := hostsVerdict(snap)
-	partialVerdict := status == HostsConflict && snap.Block.Present && snap.Block.Usable()
+	status, message := hostsVerdict(snap, applied)
+	// 对得上：按认领关系逐项分档。
+	byOwnership := status == ""
+	// 对不上但区段读得懂：区段里有这个项目的记录才报冲突。
+	byRecord := status == HostsConflict && snap.Block.Present && snap.Block.Usable()
 	for _, cat := range c.Categories {
 		for _, item := range cat.Items {
 			state := HostsState{
@@ -151,20 +162,61 @@ func HostsStates(c *catalog.Catalog, snap hosts.Snapshot, revision int64) []Host
 				Revision: revision,
 				ReadAt:   readAt,
 			}
-			// 区段能判读时逐个项目看自己有没有映射：没有的就是「已读过、没替过」。
-			if partialVerdict && !itemHasRecord(snap.Block, item.Hostnames) {
-				state.Status = HostsNone
-				state.Message = ""
+			switch {
+			case byOwnership:
+				covered, total := itemCoverage(applied.Written.Entries, item.ID, item.Hostnames)
+				switch {
+				case covered == 0 || total == 0:
+					state.Status = HostsNone
+					state.Message = ""
+				case covered == total:
+					state.Status = HostsApplied
+				default:
+					state.Status = HostsPartial
+				}
+			case byRecord:
+				if !itemHasRecord(snap.Block, item.Hostnames) {
+					state.Status = HostsNone
+					state.Message = ""
+				}
 			}
 			// 拍板 1b（区段外同名行照实写入、只提示）：区段之前的手写行里如果有同名的
 			// 主机名，写入的映射会被它挡住、实际不生效——状态仍是「已应用」，但把事实说清。
-			if partialVerdict && itemShadowsOutside(snap, item.Hostnames) {
+			if (state.Status == HostsApplied || state.Status == HostsPartial) && itemShadowsOutside(snap, item.Hostnames) {
 				state.Message = "区段外有同名的手写行，这条映射被它挡住、暂不生效"
 			}
 			out = append(out, state)
 		}
 	}
 	return out
+}
+
+// itemCoverage 数这个项目的主机名里有几条是它自己认领的工具映射。
+// 认领关系从写入记录来，不从区段猜：同一个主机名的 IP 可能被别的项目改写过，
+// 那时区段里有记录，但已经不是这个项目的映射了。
+func itemCoverage(entries []hosts.Entry, itemID string, hostnames []string) (covered, total int) {
+	owned := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		for _, owner := range e.Owners {
+			if owner == itemID {
+				owned[e.Hostname] = true
+				break
+			}
+		}
+	}
+	seen := make(map[string]bool, len(hostnames))
+	for _, h := range hostnames {
+		name := hosts.NormalizeHostname(h)
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		total++
+		if owned[name] {
+			covered++
+		}
+	}
+	return covered, total
 }
 
 // itemShadowsOutside 判断这个项目的域名里有没有被区段外手写行挡住的。
@@ -181,21 +233,36 @@ func itemShadowsOutside(snap hosts.Snapshot, hostnames []string) bool {
 	return false
 }
 
-// hostsVerdict 给出这一份 Hosts 的整体结论。
+// hostsVerdict 给出这一份 Hosts 的整体结论。空状态表示区段和写入记录对得上，
+// 由调用方按项目各自认领了哪些主机名去分 applied / partial / none。
 // 读不到和区段判读不了是全区一个说法：这两种情况下逐个判断都没有意义。
-func hostsVerdict(snap hosts.Snapshot) (HostsStatus, string) {
-	switch {
-	case !snap.OK():
+func hostsVerdict(snap hosts.Snapshot, applied AppliedState) (HostsStatus, string) {
+	if !snap.OK() {
 		return HostsReadFailed, snap.ReadErr
-	case snap.Block.Present && !snap.Block.Usable():
+	}
+	if snap.Block.Present && !snap.Block.Usable() {
 		return HostsConflict, snap.Block.Reason
-	case !snap.Block.Present:
-		return HostsNone, ""
+	}
+	if !applied.Known {
+		// 服务问不着时只知道「文件里有没有区段」，判不了它是不是本工具最后写的那批。
+		// 没有区段仍是 none；有区段就按冲突报，不假装已生效。
+		if !snap.Block.Present {
+			return HostsNone, ""
+		}
+		return HostsConflict, "拿不到特权服务记录的写入摘要（" + applied.Reason + "），没法确认这段映射是不是本工具写的，先按冲突处理。"
+	}
+	switch check, reason := hosts.CheckBlock(snap.Block, applied.Written); check {
+	case hosts.CheckMatched:
+		return "", ""
+	case hosts.CheckConflict:
+		return HostsConflict, reason
 	default:
-		return HostsConflict, "区段里有本工具写的映射，但还没有可比对的写入摘要（Hosts 写入还没接），先按冲突处理，不假装已生效。"
+		return HostsNone, ""
 	}
 }
 
+// itemHasRecord 报告这个项目的域名里有没有出现在管理区段里的。
+// 区段读得懂、但没法确认是不是本工具写的那批时，用它决定哪些项目该报冲突。
 func itemHasRecord(block hosts.Block, hostnames []string) bool {
 	for _, hostname := range hostnames {
 		if block.HasRecord(hostname) {

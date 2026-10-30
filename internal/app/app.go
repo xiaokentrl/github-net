@@ -157,8 +157,9 @@ func (s *Service) Ping(token string) (string, error) {
 }
 
 // GetItems 返回产品目录和每个项目当前的 Hosts 状态，是目录的唯一来源；前端不再自己存一份列表。
-// Hosts 状态是每次调用现读的：只读打开系统 Hosts，找出本工具的管理区段，按项目逐个判定。
-// 读不到文件报 readFailed、区段判读不了报 conflict，这两种都不会被显示成「未替换」。
+// Hosts 状态是每次调用现读的：只读打开系统 Hosts，找出本工具的管理区段，再问一次特权服务
+// 「最后一次成功写入是哪批映射」，两边比对后按项目逐个判定。
+// 读不到文件报 readFailed、区段判读不了或被改过报 conflict，这两种都不会被显示成「未替换」。
 func (s *Service) GetItems() (ItemsSnapshot, error) {
 	if s.productCatalogErr != nil {
 		// 前端在这里只会拿到错误；快照仍给空数组形状，避免有人直接用返回值时撞上 null。
@@ -167,8 +168,22 @@ func (s *Service) GetItems() (ItemsSnapshot, error) {
 	snapshot := hosts.Read(s.hostsPath)
 	return ItemsSnapshot{
 		Categories: CatalogToCategories(s.productCatalog),
-		Hosts:      HostsStates(s.productCatalog, snapshot, s.hostsReads.Add(1)),
+		Hosts:      HostsStates(s.productCatalog, snapshot, s.readAppliedState(), s.hostsReads.Add(1)),
 	}, nil
+}
+
+// readAppliedState 问一次特权服务「最后一次成功写入是哪批映射」。
+// 写入记录在 root 目录里，界面进程读不到，只能经由服务；服务没接或问了出错都带原因回来，
+// 调用方据此按冲突处理，不拿「问不着」冒充「没写过」。
+func (s *Service) readAppliedState() AppliedState {
+	if s.priv == nil {
+		return AppliedState{Reason: "特权辅助服务这一层没接上"}
+	}
+	written, err := s.priv.State()
+	if err != nil {
+		return AppliedState{Reason: unwrapMessage(err)}
+	}
+	return AppliedState{Known: true, Written: written}
 }
 
 // appliedIPsFor 读一轮检测开局时这些主机名已经写在管理区段上的地址，交给检测执行器当已知候选。

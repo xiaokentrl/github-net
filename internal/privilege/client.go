@@ -26,6 +26,7 @@ type Caller interface {
 	Apply(itemID string, mappings []hosts.Mapping) error
 	RestoreItem(itemID string) error
 	RestoreAll() (restored int, err error)
+	State() (hosts.Written, error)
 }
 
 // Client 是 Caller 的真实现：连固定端点、一问一答、答完即关。
@@ -78,6 +79,19 @@ func (c *Client) RestoreAll() (int, error) {
 		return 0, err
 	}
 	return resp.Restored, nil
+}
+
+// State 只读问一次「最后一次成功写入是哪批映射」。服务答「没写过」时返回零值，
+// 不是错误；连不上或服务拒了才报错，调用方据此区分「确实没写过」和「问不着」。
+func (c *Client) State() (hosts.Written, error) {
+	resp, err := c.call(Request{Op: OpHostsState})
+	if err != nil {
+		return hosts.Written{}, err
+	}
+	if resp.Written == nil {
+		return hosts.Written{}, nil
+	}
+	return *resp.Written, nil
 }
 
 // call 发一帧、收一帧；把网络层错误归类成上面三类失败，业务拒绝带服务侧的可展示消息。

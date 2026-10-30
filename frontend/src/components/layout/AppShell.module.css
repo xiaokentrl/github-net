@@ -82,7 +82,7 @@
 .toolbar {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--gap);
   min-height: var(--toolbar-h);
@@ -96,38 +96,45 @@
   white-space: nowrap;
 }
 
-/* 工具栏上跳进设置中心某一页的入口。原型这里是一颗同样的描边小按钮，
-   尺寸和边框都跟它一致，不另造一套视觉。 */
-.jump {
+/* 档位快捷按钮：照原型 .network-profile-quick 第 92–93 行的一颗小描边按钮，
+   文字是「档位 · ≤每轮上限 候选」，点开进设置中心的网络与流量页。 */
+.profileQuick {
+  flex: none;
   height: 26px;
   padding: 0 9px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: transparent;
   color: var(--text-2);
-  font-size: 11.5px;
   font-family: inherit;
-  cursor: pointer;
+  font-size: 11.5px;
   white-space: nowrap;
+  cursor: pointer;
 }
 
-.jump:hover {
+.profileQuick:hover {
   background: var(--hov);
   color: var(--text);
 }
 
-.jump:focus-visible {
+.profileQuick:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-/* 三档解释要一直看得见，所以它单独占一行，不塞进标题提示里。 */
-.note {
-  flex: 1 1 100%;
-  margin: 0;
-  color: var(--text-3);
-  font-size: 12px;
-  line-height: 1.4;
+/* 保存提示只占一行里剩下的一点地方：窗口窄了先把它截断，不把工具栏挤成两行。 */
+.saveStatus {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.saveStatus > * {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .main {

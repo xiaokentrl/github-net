@@ -94,6 +94,12 @@ func (s *Server) callHandler(req Request) (resp *Response) {
 			return &Response{Code: CodeApplyFailed, Message: err.Error()}
 		}
 		return &Response{OK: true, Restored: n}
+	case OpHostsState:
+		written, err := s.handler.State()
+		if err != nil {
+			return &Response{Code: CodeApplyFailed, Message: err.Error()}
+		}
+		return &Response{OK: true, Written: &written}
 	}
 	return &Response{Code: CodeBadOp, Message: "不认识的操作"}
 }

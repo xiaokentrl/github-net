@@ -354,13 +354,17 @@
 /* 搜索框照抄原型第 67–71 行的 .search：它原样站在工具栏里，宽 210px、高 30px，
    左内边距 30px 留给放大镜；放大镜是两条伪元素（一个圆圈 + 一根 45° 斜柄），
    聚焦时描边变主色并加一圈主色光晕。 */
+/* 搜索框现在只出现在工具栏里，是那一行里可伸缩的一格：
+   窗口变窄时先挤它（最低 120px），其余按钮都不缩，工具栏不会被迫折行。 */
 .search {
   position: relative;
-  flex: none;
+  flex: 1 1 210px;
+  min-width: 120px;
+  max-width: 360px;
 }
 
 .search input {
-  width: 210px;
+  width: 100%;
   height: 30px;
   padding: 0 10px 0 30px;
   border: 1px solid var(--border-strong);

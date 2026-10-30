@@ -1,16 +1,16 @@
 import type { Config } from '../../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
-import type { NetworkProfile } from '../../api/client'
 import { SearchBox } from '../navigation/SearchBox'
-import { PROFILE_IDS, profileLabel, profileNote } from '../../features/settings/profileOptions'
+import { profileLabel } from '../../features/settings/profileOptions'
 import { t } from '../../i18n'
 import { InlineStatus, type SaveKind } from '../../components/ui/InlineStatus'
-import { Select } from '../../components/ui/Select'
 import styles from './AppShell.module.css'
 
-// 工具栏照原型第 803–817 行的顺序与分组：左边 搜索 / 模式 / 打开Hosts，
-// 右边 检测全部 / 档位 / 应用队列 / 恢复。全选/反选/折叠已挪进侧栏顶部（SidebarTools）。
-// 多出来的是本仓自己的两块：档位那组（原型只有一颗快捷按钮）和设置版本号/档位说明，
-// 都塞在档位这一格里，不新增视觉。
+// 工具栏照原型第 803–817 行的顺序与分组：
+// 左边 搜索 / 模式 / 打开Hosts，右边 检测全部 / 档位 / 应用队列 / 恢复。
+// 档位那一格是原型同一颗快捷按钮（第 813 行，文字「省流 · ≤108 候选」）：显示当前档位和每轮候选上限，
+// 点开进设置中心的网络与流量页去改。这里不再放下拉框、上限说明、跳转按钮和版本号——
+// 那些内容把工具栏撑成了两行，而档位与上限在设置页里本来就能改。
+// 全选/反选/折叠已挪进侧栏顶部（SidebarTools），原型同步。
 export function Toolbar({
   settings,
   error,
@@ -19,7 +19,6 @@ export function Toolbar({
   busy,
   query,
   onQueryChange,
-  onProfileChange,
   onOpenNetwork,
   onDetectChecked,
   onApplyChecked,
@@ -34,7 +33,6 @@ export function Toolbar({
   busy: boolean
   query: string
   onQueryChange: (value: string) => void
-  onProfileChange: (profile: NetworkProfile) => void
   onOpenNetwork: () => void
   onDetectChecked: () => void
   onApplyChecked: () => void
@@ -44,8 +42,6 @@ export function Toolbar({
 }) {
   if (error) return <span className={styles.text}>{t('settings.error', { reason: error })}</span>
   if (!settings) return <span className={styles.text}>{t('detail.loading')}</span>
-
-  const profile = settings.network.profile
 
   return (
     <>
@@ -72,16 +68,17 @@ export function Toolbar({
         {t('toolbar.detectChecked')}
       </button>
 
-      <Select
-        label={t('toolbar.profile.label')}
-        value={profile}
-        disabled={busy}
-        options={PROFILE_IDS.map((id) => ({ value: id, label: profileLabel(id) }))}
-        onChange={(value) => onProfileChange(value as NetworkProfile)}
-      />
-      <span className={styles.text}>{t('toolbar.profile.summary', { cap: settings.network.maxCandidateProbesPerRun })}</span>
-      <button type="button" className={styles.jump} title={t('toolbar.network.jumpHint')} onClick={onOpenNetwork}>
-        {t('toolbar.network.jump')}
+      {/* 档位与每轮候选上限合成一颗按钮：数字都来自当前配置，点一下去设置页改。 */}
+      <button
+        type="button"
+        className={styles.profileQuick}
+        title={t('toolbar.profile.quickHint')}
+        onClick={onOpenNetwork}
+      >
+        {t('toolbar.profile.quick', {
+          profile: profileLabel(settings.network.profile),
+          cap: settings.network.maxCandidateProbesPerRun,
+        })}
       </button>
 
       <button type="button" className={`${styles.action} ${styles.primary}`} disabled={busy} onClick={onApplyChecked}>
@@ -97,9 +94,10 @@ export function Toolbar({
         {t('toolbar.restore')}
       </button>
 
-      <InlineStatus kind={saveKind} text={saveText} />
-      <span className={styles.text}>{t('toolbar.settings.revision', { revision: settings.revision })}</span>
-      <p className={styles.note}>{profileNote(profile)}</p>
+      {/* 保存结果在设置页里也有一份；这里留一格，窗口窄了先把它截断，不把工具栏挤成两行。 */}
+      <span className={styles.saveStatus}>
+        <InlineStatus kind={saveKind} text={saveText} />
+      </span>
     </>
   )
 }

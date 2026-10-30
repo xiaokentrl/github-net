@@ -95,6 +95,21 @@ func (r Recovery) AllReleased() bool {
 	return !r.InUse()
 }
 
+// Written 是恢复元数据在「读侧」要的那一小块：最后一次成功写入的区段摘要，和现在由工具维护的映射。
+// 写侧有完整的 Recovery（还带首次写入前的原文和每个项目的应用前快照）；界面只回答
+// 「这道区段是不是我们写的那批、哪个项目还认领着哪几个主机名」，所以单独一个类型，
+// 免得把用户 Hosts 原文那类东西带上界面这条路。
+type Written struct {
+	Digest  string
+	Entries []Entry
+	InUse   bool
+}
+
+// Written 把完整的恢复元数据收成读侧视图。
+func (r Recovery) Written() Written {
+	return Written{Digest: r.Digest, Entries: r.Entries, InUse: r.InUse()}
+}
+
 // Digest 算「区段里现在是哪批映射」的摘要，走渲染那一套同一个规范化（IP 规范写法、
 // 行内与行间排序、去重）。所以它比的是映射集合，不是字节：行序变了、IP 换了一种等价写法、
 // 行内主机名重复，都不算用户改了东西——下一次写入本来就会把它们规范成同一个形状，
@@ -132,11 +147,17 @@ const (
 // 契约要求「区段与已保存摘要不一致」「有工具标记但没有有效恢复点」都算冲突，
 // 并且重新检测不许静默抹掉用户改动——这句话落到代码里就是这个函数的返回值。
 func Check(content string, meta Recovery) (CheckStatus, string) {
-	block := Parse(content)
+	return CheckBlock(Parse(content), meta.Written())
+}
+
+// CheckBlock 是 Check 的分身：区段已经解析好了，直接拿它比对。
+// 读侧（GetItems）每一轮本来就要解析区段，没必要为了比对再拼回字符串；
+// 拼回去的那一份还可能和刚才解析的不是同一份，等于自己给自己造了个走样的机会。
+func CheckBlock(block Block, written Written) (CheckStatus, string) {
 	if block.Present && !block.Usable() {
 		return CheckConflict, "区段结构判读不了：" + block.Reason
 	}
-	if !meta.InUse() {
+	if !written.InUse {
 		if block.Present {
 			return CheckConflict, "文件里有本工具的区段标记，恢复元数据里却没有任何记录，" +
 				"没法确认这段是谁写的，先停在这里，请人工处理。"
@@ -150,7 +171,7 @@ func Check(content string, meta Recovery) (CheckStatus, string) {
 	if err != nil {
 		return CheckConflict, err.Error()
 	}
-	if got != meta.Digest {
+	if got != written.Digest {
 		return CheckConflict, "区段内容与最后一次成功写入的摘要对不上，说明被外部改过，先停在这里，请人工处理。"
 	}
 	return CheckMatched, ""

@@ -6,7 +6,7 @@
 //	端点固定在 /run/github-net（/run 只有 root 建得出这一层目录，别人占不了名）；
 //	root 态 socket 0666（普通权限的界面连得进来），本机来的连接一律放行
 //	（SO_PEERCRED 仍取一次，证明确实是本机 socket 对端）；
-//	服务只开放白名单操作：应用映射、单项还原、全部还原、状态询问。
+//	服务只开放白名单操作：应用映射、单项还原、全部还原、状态询问、读写入记录。
 //	不接受任意路径、任意命令或任意文件内容——新 Hosts 的内容由服务自己按映射渲染，
 //	客户端只传「哪个项目、哪些主机名指到哪个 IP」这个用户决定本身。
 package privilege
@@ -26,12 +26,15 @@ const (
 	EndpointName    = "helper.sock"
 )
 
-// 操作白名单：协议里只认这四个。别的 op 一律拒绝，服务侧不解释、不透传。
+// 操作白名单：协议里只认这五个。别的 op 一律拒绝，服务侧不解释、不透传。
+// hostsState 是只读的：只回「最后一次成功写入的摘要和当前映射」，不改任何文件；
+// 界面靠它判断「已应用/部分应用」，而恢复元数据在 root 目录里，界面进程自己读不到。
 const (
 	OpPing        = "ping"
 	OpApply       = "apply"
 	OpRestoreItem = "restoreItem"
 	OpRestoreAll  = "restoreAll"
+	OpHostsState  = "hostsState"
 )
 
 // 单帧上限：请求最大也就几十个映射，1 MiB 绰绰有余；超限当协议错误拒掉，
@@ -47,12 +50,14 @@ type Request struct {
 }
 
 // Response 是服务的一次应答。OK 为 false 时 Code/Message 一定非空；
-// Restored 是 restoreAll 实际还原的项目数，其他操作不带。
+// Restored 是 restoreAll 实际还原的项目数，其他操作不带；
+// Written 只在 hostsState 时带上「最后一次成功写入」的读侧视图。
 type Response struct {
-	OK       bool   `json:"ok"`
-	Code     string `json:"code,omitempty"`
-	Message  string `json:"message,omitempty"`
-	Restored int    `json:"restored,omitempty"`
+	OK       bool           `json:"ok"`
+	Code     string         `json:"code,omitempty"`
+	Message  string         `json:"message,omitempty"`
+	Restored int            `json:"restored,omitempty"`
+	Written  *hosts.Written `json:"written,omitempty"`
 }
 
 // 服务侧拒绝请求时用的稳定码；客户端和日志都按码分支，不解析中文。
@@ -67,10 +72,12 @@ const (
 )
 
 // Handler 是服务对白名单操作的实现。返回 error 表示这一笔没做成（事务层保证失败时原文件不动）。
+// State 是只读的，不改任何文件。
 type Handler interface {
 	Apply(itemID string, mappings []hosts.Mapping) error
 	RestoreItem(itemID string) error
 	RestoreAll() (restored int, err error)
+	State() (hosts.Written, error)
 }
 
 // ValidateRequest 是服务侧的入口校验：op 在白名单、字段与操作匹配。
@@ -99,8 +106,10 @@ func ValidateRequest(req Request) *Response {
 		return nil
 	case OpRestoreAll:
 		return nil
+	case OpHostsState:
+		return nil
 	default:
-		return &Response{Code: CodeBadOp, Message: fmt.Sprintf("不认识的操作 %q，服务只开白名单那四个", req.Op)}
+		return &Response{Code: CodeBadOp, Message: fmt.Sprintf("不认识的操作 %q，服务只开白名单那五个", req.Op)}
 	}
 }
 

@@ -20,6 +20,8 @@ type fakePriv struct {
 	restoredID string
 	restoreAll int
 	err        error
+	// written 是 State 的应答：默认零值即「没写过」。
+	written hosts.Written
 }
 
 func (f *fakePriv) Ping() error { return f.err }
@@ -46,6 +48,13 @@ func (f *fakePriv) RestoreAll() (int, error) {
 		return 0, f.err
 	}
 	return f.restoreAll, nil
+}
+
+func (f *fakePriv) State() (hosts.Written, error) {
+	if f.err != nil {
+		return hosts.Written{}, f.err
+	}
+	return f.written, nil
 }
 
 // newApplyService 建一个入口+执行器都齐的服务：队列执行器是分发台

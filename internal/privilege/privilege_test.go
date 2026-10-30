@@ -148,6 +148,45 @@ func TestRestoreAllReturnsCount(t *testing.T) {
 	}
 }
 
+func TestStateReportsLastWrittenMappings(t *testing.T) {
+	c, _, _, cleanup := startTestHelper(t)
+	defer cleanup()
+
+	// 没写过：零值，不是错误。
+	written, err := c.State()
+	if err != nil {
+		t.Fatalf("没写过时 State 不该报错: %v", err)
+	}
+	if written.InUse || written.Digest != "" || len(written.Entries) != 0 {
+		t.Fatalf("没写过时应是零值，实际 %+v", written)
+	}
+
+	// 写过之后：摘要非空、条目带认领项目，且 Original 不外发（读侧用不上）。
+	if err := c.Apply("item-1", []hosts.Mapping{{IP: "203.0.113.10", Hostnames: []string{"api.github.com"}}}); err != nil {
+		t.Fatalf("apply 不该失败: %v", err)
+	}
+	written, err = c.State()
+	if err != nil {
+		t.Fatalf("State 不该失败: %v", err)
+	}
+	if !written.InUse || len(written.Digest) != 64 {
+		t.Fatalf("写过之后应带 64 位摘要且处于使用中，实际 %+v", written)
+	}
+	if len(written.Entries) != 1 || written.Entries[0].Hostname != "api.github.com" ||
+		written.Entries[0].IP != "203.0.113.10" || len(written.Entries[0].Owners) != 1 ||
+		written.Entries[0].Owners[0] != "item-1" {
+		t.Fatalf("条目和刚写的不一致: %+v", written.Entries)
+	}
+
+	// 全部还原后记录清空，State 回到零值。
+	if _, err := c.RestoreAll(); err != nil {
+		t.Fatalf("restoreAll 不该失败: %v", err)
+	}
+	if written, err = c.State(); err != nil || written.InUse || len(written.Entries) != 0 {
+		t.Fatalf("还原后应回到没写过的形状，实际 %+v (err=%v)", written, err)
+	}
+}
+
 func TestCorruptMetadataIsRejected(t *testing.T) {
 	c, _, dataDir, cleanup := startTestHelper(t)
 	defer cleanup()

@@ -556,8 +556,9 @@ export function App() {
   }, [])
 
   // 工具栏「恢复」和队列面板那颗共用同一条实现（useRestoreAll）；失败挂在详情页的 hostsError 上。
+  // 还原不进队列、没有任务落定事件，所以成功后在这里重读目录，树上的状态才跟着回到「未替换」。
   const handleRestoreError = useCallback((err: unknown) => setHostsError(getErrorMessage(err)), [])
-  const { busy: restoreBusy, restoreAll } = useRestoreAllTasks(handleRestoreError)
+  const { busy: restoreBusy, restoreAll } = useRestoreAllTasks(handleRestoreError, loadCatalog)
 
   const debouncedQuery = useDebouncedValue(query, 150)
 
@@ -606,7 +607,6 @@ export function App() {
             busy={save.kind === 'pending'}
             query={query}
             onQueryChange={setQuery}
-            onProfileChange={changeProfile}
             onOpenNetwork={() => openSettings('network')}
             onDetectChecked={() => startDetectChecked(checkedIds)}
             onApplyChecked={() => startApplyChecked(checkedIds)}
@@ -653,6 +653,7 @@ export function App() {
               setSelectedId(itemId)
               focusManualRef.current = true
             }}
+            onHostsChanged={loadCatalog}
           />
         }
         updateLatest={updateLatest}

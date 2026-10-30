@@ -42,6 +42,7 @@ function qdFocusIndex(kids: Task[]): number {
 // listWidth + onListWidthChange：两栏之间那条分隔条可拖，宽度落在配置里（原型同一条规则）。
 // activeItemId + onPickItem 承担双向联动：点明细行 → 主详情显示该子菜单的候选 IP；
 // 主详情/左树选中子菜单 → 明细行高亮并翻到所在页。
+// onHostsChanged：面板里的「全部还原」改的是系统 Hosts，改完要让主界面重读一遍目录状态。
 export function TaskPanel({
   height,
   onHeightChange,
@@ -49,6 +50,7 @@ export function TaskPanel({
   onListWidthChange,
   activeItemId,
   onPickItem,
+  onHostsChanged,
 }: {
   height: number | null
   onHeightChange: (height: number) => void
@@ -56,6 +58,7 @@ export function TaskPanel({
   onListWidthChange: (width: number) => void
   activeItemId: string
   onPickItem: (itemId: string) => void
+  onHostsChanged: () => void
 }) {
   const state = useTaskQueue()
 
@@ -105,7 +108,7 @@ export function TaskPanel({
 
   // 全部还原：要求队列空闲（原型语义）；成功后清空队列记录并刷新 Hosts 状态。
   // 工具栏那颗「恢复」和这里共用同一条实现（useRestoreAll），规则只写一遍。
-  const { restoreAll: onRestoreAll } = useRestoreAllTasks(handleError)
+  const { restoreAll: onRestoreAll } = useRestoreAllTasks(handleError, onHostsChanged)
 
   // ===== 双栏状态 =====
   // 轮次状态由它的任务推出来：有在跑的=执行中，全排队=排队中，有失败=失败，其余=完成。
