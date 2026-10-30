@@ -23,6 +23,9 @@ const ReleasesAPI = "https://api.github.com/repos/xiaokentrl/github-net/releases
 // 检查是三次请求里最轻的一种：8 秒拿不到就当网络失败，不让用户盯着转圈。
 const checkTimeout = 8 * time.Second
 
+// 下载安装包是另一档：7MB 级别的包在普通宽带下 8 秒拿不完，单独给 5 分钟。
+const downloadTimeout = 5 * time.Minute
+
 // 四类失败，前端按码分支、给不同的话：
 //
 //	ErrNoStableRelease —— 仓库还没有任何正式发布：如实说，不算错误页。
@@ -60,15 +63,18 @@ type UpdateAsset struct {
 // Client 查 GitHub releases。baseURL 可注入（测试）；生产用 ReleasesAPI。
 type Client struct {
 	baseURL string
-	http    *http.Client
-	now     func() time.Time
+	// http 只用于元数据检查（8 秒上限）；download 是安装包下载专用（5 分钟上限）。
+	http     *http.Client
+	download *http.Client
+	now      func() time.Time
 }
 
 func NewClient() *Client {
 	return &Client{
-		baseURL: ReleasesAPI,
-		http:    &http.Client{Timeout: checkTimeout},
-		now:     time.Now,
+		baseURL:  ReleasesAPI,
+		http:     &http.Client{Timeout: checkTimeout},
+		download: &http.Client{Timeout: downloadTimeout},
+		now:      time.Now,
 	}
 }
 

@@ -71,7 +71,7 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	if err != nil {
 		return "", fmt.Errorf("%w：%v", ErrNetwork, err)
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.download.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w：%v", ErrNetwork, err)
 	}
