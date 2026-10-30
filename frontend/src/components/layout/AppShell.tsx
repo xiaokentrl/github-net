@@ -32,6 +32,7 @@ export function AppShell({
   onSidebarResize,
   toolbar,
   sidebar,
+  sidebarTools,
   sidebarFooter,
   detail,
   queue,
@@ -48,6 +49,7 @@ export function AppShell({
   onSidebarResize: (width: number) => void
   toolbar: ReactNode
   sidebar: ReactNode
+  sidebarTools: ReactNode
   sidebarFooter: ReactNode
   detail: ReactNode
   queue: ReactNode
@@ -108,6 +110,7 @@ export function AppShell({
 
       <main className={styles.main}>
         <aside ref={resize.targetRef} className={styles.sidebar} style={sidebarStyle}>
+          <div className={styles.sidebarTools}>{sidebarTools}</div>
           <div className={styles.treeScroll}>{sidebar}</div>
           <div className={styles.sideFoot}>{sidebarFooter}</div>
         </aside>

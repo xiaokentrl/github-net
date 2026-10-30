@@ -5,6 +5,7 @@ import { subscribeRuntimeStatus, subscribeUpdateStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
 import { SettingsEntry } from '../components/layout/SettingsEntry'
+import { SidebarTools } from '../components/layout/SidebarTools'
 import { StatusBar } from '../components/layout/StatusBar'
 import { Toolbar } from '../components/layout/Toolbar'
 import { CategoryTree } from '../components/navigation/CategoryTree'
@@ -251,7 +252,7 @@ export function App() {
     })
   }, [snapshot])
 
-  // 工具栏「全选」按钮在两种说法之间切换：已经全勾上时显示「全不选」（原型第 3586–3591 行）。
+  // 侧栏顶部「全选」按钮在两种说法之间切换：已经全勾上时显示「全不选」（原型第 3588–3593 行）。
   const allChecked = useMemo(() => {
     const ids = (snapshot?.categories ?? []).flatMap((cat) => (cat.items ?? []).map((it) => it.id))
     return ids.length > 0 && ids.every((id) => checkedIds.has(id))
@@ -603,14 +604,10 @@ export function App() {
             saveKind={save.kind}
             saveText={save.text}
             busy={save.kind === 'pending'}
-            allChecked={allChecked}
             query={query}
             onQueryChange={setQuery}
             onProfileChange={changeProfile}
             onOpenNetwork={() => openSettings('network')}
-            onCheckAll={checkAll}
-            onInvertChecked={invertChecked}
-            onFoldAll={foldAll}
             onDetectChecked={() => startDetectChecked(checkedIds)}
             onApplyChecked={() => startApplyChecked(checkedIds)}
             onOpenHosts={openHostsFile}
@@ -619,6 +616,15 @@ export function App() {
           />
         }
         sidebar={sidebar}
+        sidebarTools={
+          <SidebarTools
+            allChecked={allChecked}
+            busy={save.kind === 'pending'}
+            onCheckAll={checkAll}
+            onInvertChecked={invertChecked}
+            onFoldAll={foldAll}
+          />
+        }
         sidebarFooter={<SettingsEntry onOpen={() => openSettings('layout')} />}
         detail={
           <ItemDetail

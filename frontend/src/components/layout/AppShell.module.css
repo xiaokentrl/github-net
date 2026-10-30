@@ -187,6 +187,22 @@
   background: var(--on-primary);
 }
 
+/* 树上面那排按钮，抄原型 .sidebar-tools(125)：三颗等宽、比工具栏按钮矮一点。 */
+.sidebarTools {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebarTools .action {
+  flex: 1;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
 /* 树的滚动区在侧栏内部（原型 .tree-scroll 127 行：flex:1 + min-height:0）。 */
 .treeScroll {
   flex: 1;
@@ -327,15 +343,6 @@
 
 .action.danger:hover:not(:disabled) {
   background: var(--red-soft);
-}
-
-/* 工具栏里分组用的竖线（原型 .divider-v 第 60 行）。 */
-.divider {
-  flex: none;
-  width: 1px;
-  height: 20px;
-  margin: 0 4px;
-  background: var(--border);
 }
 
 /* 模式选择框（原型 select.mode 第 73 行）：本工具只会写系统 Hosts，另两项按原型置灰。 */

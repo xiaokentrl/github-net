@@ -7,8 +7,8 @@ import { InlineStatus, type SaveKind } from '../../components/ui/InlineStatus'
 import { Select } from '../../components/ui/Select'
 import styles from './AppShell.module.css'
 
-// 工具栏照原型第 802–819 行的顺序与分组：
-// 左边 全选 / 反选 / 折叠 | 搜索 / 模式 / 打开Hosts，右边 检测全部 / 档位 / 应用队列 / 恢复。
+// 工具栏照原型第 803–817 行的顺序与分组：左边 搜索 / 模式 / 打开Hosts，
+// 右边 检测全部 / 档位 / 应用队列 / 恢复。全选/反选/折叠已挪进侧栏顶部（SidebarTools）。
 // 多出来的是本仓自己的两块：档位那组（原型只有一颗快捷按钮）和设置版本号/档位说明，
 // 都塞在档位这一格里，不新增视觉。
 export function Toolbar({
@@ -17,14 +17,10 @@ export function Toolbar({
   saveKind,
   saveText,
   busy,
-  allChecked,
   query,
   onQueryChange,
   onProfileChange,
   onOpenNetwork,
-  onCheckAll,
-  onInvertChecked,
-  onFoldAll,
   onDetectChecked,
   onApplyChecked,
   onOpenHosts,
@@ -36,14 +32,10 @@ export function Toolbar({
   saveKind: SaveKind
   saveText: string
   busy: boolean
-  allChecked: boolean
   query: string
   onQueryChange: (value: string) => void
   onProfileChange: (profile: NetworkProfile) => void
   onOpenNetwork: () => void
-  onCheckAll: (checked: boolean) => void
-  onInvertChecked: () => void
-  onFoldAll: () => void
   onDetectChecked: () => void
   onApplyChecked: () => void
   onOpenHosts: () => void
@@ -57,23 +49,6 @@ export function Toolbar({
 
   return (
     <>
-      <button
-        type="button"
-        className={styles.action}
-        disabled={busy}
-        title={t('toolbar.checkAllTitle')}
-        onClick={() => onCheckAll(!allChecked)}
-      >
-        {allChecked ? t('toolbar.uncheckAll') : t('toolbar.checkAll')}
-      </button>
-      <button type="button" className={styles.action} disabled={busy} onClick={onInvertChecked}>
-        {t('toolbar.invertChecked')}
-      </button>
-      <button type="button" className={styles.action} disabled={busy} title={t('toolbar.foldTitle')} onClick={onFoldAll}>
-        {t('toolbar.fold')}
-      </button>
-      <span className={styles.divider} aria-hidden="true" />
-
       <SearchBox value={query} onChange={onQueryChange} />
 
       {/* 模式：本工具只写系统 Hosts；另两项照原型置灰，点了也不会变。 */}
