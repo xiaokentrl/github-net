@@ -1,11 +1,13 @@
 import { Events } from '@wailsio/runtime'
 import type { Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
+import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { CandidateStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
 
 // 事件名必须和 Go 侧 internal/event 的常量一致，改一边就要改另一边。
 const STATUS_EVENT = 'app:runtime-status'
 const TASK_EVENT = 'task:progress'
 const DETECT_EVENT = 'detect:progress'
+const SETTINGS_EVENT = 'settings:changed'
 const UPDATE_EVENT = 'update:status'
 
 export type RuntimeStatusPayload = {
@@ -85,6 +87,19 @@ export function subscribeUpdateStatus(onPayload: (payload: UpdateNoticePayload) 
     const payload = event.data as UpdateNoticePayload | undefined
     if (!payload) return
     onPayload(payload)
+  })
+}
+
+// 托盘菜单切主题后推来的新配置：App 用它整体刷新（语言/主题/缩放同一条 applyConfig 路）。
+export type SettingsChangedPayload = {
+  config: Config
+}
+
+export function subscribeSettingsChanged(onPayload: (payload: Config) => void): () => void {
+  return Events.On(SETTINGS_EVENT, (event: Events.WailsEvent) => {
+    const payload = event.data as { config?: Config } | undefined
+    if (!payload || !payload.config) return
+    onPayload(payload.config)
   })
 }
 

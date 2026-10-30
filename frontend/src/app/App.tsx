@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { applyItems, detectBudget, detectItems, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile } from '../api/client'
-import { subscribeRuntimeStatus, subscribeUpdateStatus } from '../api/events'
+import { subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
 import { SettingsEntry } from '../components/layout/SettingsEntry'
@@ -169,6 +169,11 @@ export function App() {
       }
     })
 
+    // 托盘切主题推来的新配置：整体刷新（语言/主题/缩放一条路），和设置屏保存同一条 applyConfig。
+    const unsubscribeSettings = subscribeSettingsChanged((config) => {
+      applyConfig(config)
+    })
+
     return () => {
       // 让仍在路上的响应作废，并退订事件；退订必须调用，否则回调会一直堆积。
       statusRequestRef.current += 1
@@ -177,6 +182,7 @@ export function App() {
       unsubscribe()
       unsubscribeTasks()
       unsubscribeUpdate()
+      unsubscribeSettings()
     }
   }, [loadStatus, loadSettings, loadCatalog])
 

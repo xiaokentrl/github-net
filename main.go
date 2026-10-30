@@ -28,6 +28,17 @@ const (
 	appID      = "io.github.xiaokentrl.githubnet"
 )
 
+// trayThemes 是托盘「主题」子菜单的六套配色（id 与前端 themes.ts、config 校验同一份口径；
+// 显示名跟着前端 themes.ts 的中文名，改名字两边一起改）。
+var trayThemes = []struct{ id, name string }{
+	{"light", "晨光白"},
+	{"sakura", "樱花粉"},
+	{"forest", "森林绿"},
+	{"ocean", "深海蓝"},
+	{"midnight", "午夜蓝"},
+	{"oled", "极夜黑"},
+}
+
 func main() {
 	emitter := &event.StatusEmitter{}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -150,12 +161,37 @@ func main() {
 	tray.SetIcon(trayIcon)
 	tray.SetTooltip(appName)
 
-	menu := application.NewMenu()
-	menu.Add("显示主窗口").OnClick(func(*application.Context) { requestWindowFocus() })
-	menu.Add("隐藏主窗口").OnClick(func(*application.Context) { window.Hide() })
-	menu.AddSeparator()
-	menu.Add("退出").OnClick(func(*application.Context) { platformApp.Quit() })
-	tray.SetMenu(menu)
+	// 托盘菜单：显示/隐藏/退出 + 「主题」子菜单（六套，当前项勾选）。
+	// 切主题走配置服务保存并向前端发 settings:changed；菜单整体重建让勾选跟到新主题上。
+	var buildTrayMenu func() *application.Menu
+	buildTrayMenu = func() *application.Menu {
+		menu := application.NewMenu()
+		menu.Add("显示主窗口").OnClick(func(*application.Context) { requestWindowFocus() })
+		menu.Add("隐藏主窗口").OnClick(func(*application.Context) { window.Hide() })
+		menu.AddSeparator()
+		themeMenu := menu.AddSubmenu("主题")
+		current := ""
+		if cfg, err := service.GetSettings(); err == nil {
+			current = cfg.Appearance.Theme
+		}
+		for _, th := range trayThemes {
+			id, name := th.id, th.name
+			item := themeMenu.AddCheckbox(name, id == current)
+			item.OnClick(func(*application.Context) {
+				cfg, err := service.SetTheme(id)
+				if err != nil {
+					platformApp.Logger.Error("托盘切主题失败", "theme", id, "err", err)
+					return
+				}
+				platformApp.Event.Emit(event.SettingsChangedName, event.SettingsChanged{Config: cfg})
+				tray.SetMenu(buildTrayMenu())
+			})
+		}
+		menu.AddSeparator()
+		menu.Add("退出").OnClick(func(*application.Context) { platformApp.Quit() })
+		return menu
+	}
+	tray.SetMenu(buildTrayMenu())
 
 	tray.OnClick(func() {
 		if window.IsVisible() {

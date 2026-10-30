@@ -3,6 +3,7 @@ package app
 import (
 	"crypto/ed25519"
 	"errors"
+	"fmt"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -222,6 +223,28 @@ func (s *Service) GetAppStatus() (AppStatus, error) {
 		status.ConfigNotice = s.settingsFailure().Message
 	}
 	return status, nil
+}
+
+// SetTheme 托盘菜单切主题：后端内部调用，拿不到前端的 revision，
+// 用当前快照的 revision 走同一条保存链（校验→原子落盘→递增），冲突或失败如实返回。
+// 同主题直接返回现状，不写盘。
+func (s *Service) SetTheme(themeID string) (config.Config, error) {
+	if s.settings == nil {
+		return config.Config{}, s.settingsFailure()
+	}
+	cfg, err := s.settings.Snapshot()
+	if err != nil {
+		return config.Config{}, ToPublicError(err)
+	}
+	if cfg.Appearance.Theme == themeID {
+		return cfg, nil
+	}
+	patch := config.Patch{Theme: &themeID}
+	out, err := s.settings.Save(patch, cfg.Revision, "tray-theme-"+themeID+"-"+fmt.Sprint(time.Now().UnixNano()))
+	if err != nil {
+		return config.Config{}, ToPublicError(err)
+	}
+	return out, nil
 }
 
 // settingsFailure 保证「没有配置服务」这件事一定带回一个错误，绝不返回 (空配置, nil)。
