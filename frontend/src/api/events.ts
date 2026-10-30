@@ -55,6 +55,7 @@ export type DetectProgressPayload = {
     reason?: string
     startedAt?: string
     finishedAt?: string
+    applied: boolean
   } | null
 }
 

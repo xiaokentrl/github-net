@@ -75,6 +75,18 @@
   font-size: 0.72rem;
 }
 
+/* 已生效那条：整行淡绿底 + IP 后一句话，读屏拿得到这句话（原型同款）。 */
+.currentRow td {
+  background: var(--green-soft);
+}
+
+.currentTag {
+  margin-left: 0.25rem;
+  color: var(--green);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
 .reason {
   color: var(--text-2);
 }

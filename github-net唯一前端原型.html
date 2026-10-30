@@ -289,6 +289,7 @@
   .tag.probe-running{background:var(--primary)}
   .tag.probe-ok{background:var(--green)}
   .tag.probe-fail{background:var(--red)}
+  .cur-tag{margin-left:4px;font-size:10px;color:var(--green);font-weight:600}
 
   .score-bar{display:inline-block;width:46px;height:5px;background:#eef1f6;border-radius:3px;overflow:hidden;vertical-align:middle;margin-right:7px}
   .score-bar i{display:block;height:100%;background:linear-gradient(90deg,#34d399,#16a34a);border-radius:3px}
@@ -2482,7 +2483,7 @@ function renderDetail() {
     return `
       <tr class="${isCurrent?'current':(i===0?'best':'')}">
         <td>${i+1}</td>
-        <td class="mono">${c.ip}</td>
+        <td class="mono">${c.ip}${isCurrent?'<span class="cur-tag">当前生效</span>':''}</td>
         <td class="tags-cell">${tagHtml}${probeHtml}</td>
         <td>${latencyText}</td>
         <td><span class="score-bar"><i style="width:${c.score}%"></i></span>${c.score}</td>

@@ -20,6 +20,12 @@ export interface Candidate {
     "reason"?: string;
     "startedAt"?: string;
     "finishedAt"?: string;
+
+    /**
+     * Applied 说这一条当时已经写在这个主机名上。它不改变这一条的地位：
+     * 照样列进候选、照样被探测、照样扣本轮预算，只是界面上要多说一句「当前生效」。
+     */
+    "applied": boolean;
 }
 
 /**

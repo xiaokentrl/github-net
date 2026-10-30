@@ -43,12 +43,41 @@ type detectExecutor struct {
 	gate chan struct{}
 	// rounds 是批量检测共享预算的账本；nil 等价于「每任务不受轮预算约束」（旧测试路径）。
 	rounds *roundBudgets
+	// appliedIPs 读「这些主机名当前写在系统 Hosts 上的是哪些地址」，读不出来就给空。
+	// 留成接缝是为了让测试自己喂一份已知地址，不去碰真文件；线上由 Service 用它那一份 hostsPath 实现。
+	appliedIPs func(hostnames []string) map[string][]string
 }
 
 // newDetectExecutor 建检测执行器。调用方必须在产品目录和设置服务都准备好之后再来建：
 // 目录读不出来时任何检测都没有可查的项目，那种情况队列该继续用 pendingExecutor。
-func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter, gate chan struct{}, rounds *roundBudgets) *detectExecutor {
-	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub, gate: gate, rounds: rounds}
+func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter, gate chan struct{}, rounds *roundBudgets, appliedIPs func(hostnames []string) map[string][]string) *detectExecutor {
+	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub, gate: gate, rounds: rounds, appliedIPs: appliedIPs}
+}
+
+// appliedFor 取出这些主机名当前已经写在管理区段里的地址，作为本轮的已知地址交给检测编排。
+// 区段读不到、或读到了但判读不了（结构有毛病、标记成对不上）都返回 nil：
+// 那种时候「现在生效的是哪个地址」本身就没有可信答案，宁可少一行候选，
+// 也不把判读不出来的东西当成已生效——后者会让一条错误的行带着「当前生效」的字出现在界面上。
+func appliedFor(block hosts.Block, hostnames []string) map[string][]string {
+	if !block.Usable() {
+		return nil
+	}
+	want := make(map[string]bool, len(hostnames))
+	for _, h := range hostnames {
+		want[hosts.NormalizeHostname(h)] = true
+	}
+	out := make(map[string][]string)
+	for _, rec := range block.Records {
+		for _, host := range rec.Hostnames {
+			if want[host] {
+				out[host] = append(out[host], rec.IP)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // detectItem 是一个项目在目录里跟这一轮有关的两件事：能检测的域名和它所属的加速范围。
@@ -107,8 +136,13 @@ func (e *detectExecutor) Execute(ctx context.Context, t task.Task, report task.R
 
 	// 一轮一个 Runner：观察者的落点是这一条任务的进度回调，挂在队列那个唯一执行者给的 report 上；
 	// 候选级事件经 pub 原样转发给前端。两个出口都在检测那把锁内被调，顺序稳定。
+	// 已知地址在这一轮开始那一刻现读一次：读到的后一行也算这一轮的候选，中途 Hosts 被别人改了不追。
+	var applied map[string][]string
+	if e.appliedIPs != nil {
+		applied = e.appliedIPs(item.hostnames)
+	}
 	runner := accelerator.NewRunnerGated(strategy.Lookup, e.probe, &progressBridge{report: report, pub: e.pub}, e.gate)
-	result, err := runner.Run(ctx, accelerator.Input{ItemID: t.ItemID, Hostnames: item.hostnames}, budget)
+	result, err := runner.Run(ctx, accelerator.Input{ItemID: t.ItemID, Hostnames: item.hostnames, Applied: applied}, budget)
 	if err != nil {
 		// 一轮没跑起来的错误都是「调用方给错了东西」那几类（预算与范围对不上、方法没实现），
 		// 原始错误里没有用户能用来下一步的信息，也不保证不含域名，所以这里只给人话不给 err.Error()。

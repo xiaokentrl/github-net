@@ -290,11 +290,11 @@ export function App() {
     })
   }, [])
 
-  // 批量检测：先问后端要预算预估；预算盖不全时按规划先请用户确认，取消就不发。
+  // 批量检测：项目清单已由详情页按 detectableItems 过滤，这里不再重算第二遍口径。
+  // 先问后端要预算预估；预算盖不全时按规划先请用户确认，取消就不发。
   const startDetectAll = useCallback(
     (items: CatalogItem[]) => {
-      const ids = items.filter((it) => !it.userSupplied && (it.hostnames?.length ?? 0) > 0).map((it) => it.id)
-      if (ids.length === 0) return
+      const ids = items.map((it) => it.id)
       setDetectError('')
       detectBudget(ids)
         .then((budget) => {

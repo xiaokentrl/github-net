@@ -790,7 +790,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 - `api/browser.ts`（2026-10-29 已建）：打开系统浏览器的唯一落点，走 Wails 运行时的 `Browser.OpenURL`，不是服务命令、也不进那 18 个命令的清单，所以单独成一个文件而不是塞进 `client.ts`；组件仍然不直接 import 运行时。地址由后端先校验并清洗（`javascript:`/`data:`/`file:`/`ftp:` 一律拒，http/https 必须有主机名），失败会 reject，调用方必须接住。
 - `hooks/useExternalLink.ts`（2026-10-29 已建）：把上面那层调用的失败变成一个看得见的状态（`failed` 文案 + `open`）。单独成一个 hook 只为这一件事：外链点了没打开又没提示是最难查的状态，必须当场说清；每次点先清掉上一条。
 - `api/errors.ts`：把后端错误转换为稳定错误码和可展示消息；不能把失败伪装成成功或空数据。
-- `api/events.ts`：提供任务事件订阅并返回清理函数；页面退出时取消订阅。
+- `api/events.ts`：提供任务事件订阅并返回清理函数；页面退出时取消订阅。这里的 `task:progress` 和 `detect:progress` 载荷类型是**手写的 Go 侧镜像**（`internal/task.Progress`、`internal/accelerator.Progress`）——事件不走绑定生成器，生成器只覆盖服务方法签名，所以 Go 加了字段必须同步改这里，没有自动门守着；漏改时界面拿到 `undefined`，表现等同于事件丢失。2026-10-30 检测候选新增 `applied`（这一条是不是当前已生效的地址）就是两侧各改一次：`bindings/.../internal/accelerator/models.ts` 由生成器出，`api/events.ts` 里那个候选对象手工补。本文件其余部分本轮没动：这次改的是检测轮次内部的候选来源和一行界面标注，前端目录结构、分层归属、命令清单都没变。
 - `api/generated/`：Wails 生成的绑定文件。目录内的 README 说明生成方式；实际文件以锁定版本模板为准，禁止手工编辑。
 - `i18n/messages/*.json`：每种语言一个完整资源文件。语言发现、回退和校验由 `localeDiscovery.ts`、`index.ts` 与测试负责。
 - `styles/tokens.css`：唯一的颜色、间距、字号、圆角、阴影和层级源头。

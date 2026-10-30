@@ -14,6 +14,7 @@ import (
 	"github.com/xiaokentrl/github-net/internal/catalog"
 	"github.com/xiaokentrl/github-net/internal/config"
 	"github.com/xiaokentrl/github-net/internal/detector"
+	"github.com/xiaokentrl/github-net/internal/hosts"
 	"github.com/xiaokentrl/github-net/internal/task"
 )
 
@@ -158,10 +159,11 @@ func detectStore(t *testing.T, defaults map[string]string) *config.Store {
 
 // newDetectExecutorForTest 用真实构造函数建，再由用例把方法解析换成测试自己的表：
 // 假方法不进全局注册表，免得重复注册把装配层那道注册门照脏。
-// 结果存储每个用例新给一份；事件发布器给 nil，测试不用总线。
+// 结果存储每个用例新给一份；事件发布器给 nil，测试不用总线；已知地址默认也给 nil（不补「当前生效」那一行），
+// 要用例关心它时再改 exec.appliedIPs。
 func newDetectExecutorForTest(t *testing.T, store *config.Store, probe accelerator.ProbeFunc) *detectExecutor {
 	t.Helper()
-	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil, nil, nil)
+	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil, nil, nil, nil)
 }
 
 func detectCandidates() map[string][]strategies.Candidate {
@@ -490,6 +492,168 @@ func TestDetectUniqueHostnamesDedupesBeforeBudget(t *testing.T) {
 	got := uniqueHostnames([]string{"API.GitHub.com.", "api.github.com", " codeload.github.com ", "", "   .   ", "api.github.com."})
 	if strings.Join(got, ",") != detectHostAPI+","+detectHostCodeload {
 		t.Errorf("规范化去重后应该只剩两条、且保持原顺序，实际 %v", got)
+	}
+}
+
+// appliedFor 从管理区段里挑出这些域名当前写在系统里的地址，作为本轮的已知地址。
+// 三种「没有可信答案」都要给 nil：区段判读不了、区段里根本没有这些域名、连区段都没有。
+func TestAppliedForReadsManagedBlock(t *testing.T) {
+	content := strings.Join([]string{
+		"127.0.0.1 localhost",
+		hosts.MarkerBegin(),
+		"203.0.113.99 " + detectHostAPI,
+		"203.0.113.98 " + detectHostCodeload + " " + detectHostSteam,
+		hosts.MarkerEnd(),
+		"",
+	}, "\n")
+
+	got := appliedFor(hosts.Parse(content), []string{detectHostAPI, strings.ToUpper(detectHostCodeload) + "."})
+	if len(got) != 2 {
+		t.Fatalf("两个域名各一条已知地址，实得 %v", got)
+	}
+	if strings.Join(got[detectHostAPI], ",") != "203.0.113.99" {
+		t.Errorf("%s 的已知地址应为 203.0.113.99，实得 %v", detectHostAPI, got[detectHostAPI])
+	}
+	if strings.Join(got[detectHostCodeload], ",") != "203.0.113.98" {
+		t.Errorf("域名要先规范化再比较：大写带尾点的写法也该对上，实得 %v", got)
+	}
+	if _, ok := got[detectHostSteam]; ok {
+		t.Errorf("本轮没查 %s，它在区段里的地址不该掺进来", detectHostSteam)
+	}
+
+	// 区段被外部改过（结构判读不了）：宁可不补这一行，也不给一条可能错的东西打上「当前生效」。
+	broken := hosts.Parse(hosts.MarkerBegin() + "\n" + hosts.MarkerBegin() + "\n" +
+		"203.0.113.99 " + detectHostAPI + "\n" + hosts.MarkerEnd())
+	if out := appliedFor(broken, []string{detectHostAPI}); out != nil {
+		t.Errorf("区段判读不了要返回空，实得 %v", out)
+	}
+	// 判读不了但手里确实攥着几条记录的那种形状（将来别的读路径可能给）：Usable 这一道门要拦得住，
+	// 不能因为「反正有记录」就当可信答案用出去。
+	carrying := hosts.Block{Present: true, Anomaly: hosts.AnomalyBadRecord, Reason: "区段被外部改过。", Version: hosts.ManagedVersion,
+		Records: []hosts.Record{{IP: "203.0.113.99", Hostnames: []string{detectHostAPI}}}}
+	if out := appliedFor(carrying, []string{detectHostAPI}); out != nil {
+		t.Errorf("区段判读不了、哪怕带着一排记录也不能用，实得 %v", out)
+	}
+	if out := appliedFor(hosts.Parse("127.0.0.1 localhost"), []string{detectHostAPI}); out != nil {
+		t.Errorf("没有管理区段要返回空，实得 %v", out)
+	}
+	if out := appliedFor(hosts.Parse(content), nil); out != nil {
+		t.Errorf("一个域名都没查时不该造出任何已知地址，实得 %v", out)
+	}
+}
+
+// Service.appliedIPsFor 是线上那一条读路径：只读打开 Hosts，读到就按区段挑，
+// 读不到（文件没了、没权限）不报错也不假装，只给空——那种时候界面少一行「当前生效」，不是检测跑不动。
+func TestAppliedIPsForReadsHostsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hosts")
+	s := &Service{hostsPath: path}
+
+	if got := s.appliedIPsFor([]string{detectHostAPI}); got != nil {
+		t.Errorf("Hosts 文件还不存在时不该给出已知地址，实得 %v", got)
+	}
+
+	write := func(t *testing.T, lines ...string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(strings.Join(append(lines, ""), "\n")), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(t, "127.0.0.1 localhost", hosts.MarkerBegin(), "203.0.113.99 "+detectHostAPI, hosts.MarkerEnd())
+	if got := s.appliedIPsFor([]string{detectHostAPI}); strings.Join(got[detectHostAPI], ",") != "203.0.113.99" {
+		t.Errorf("区段里那条地址要作为已知地址给出，实得 %v", got)
+	}
+
+	write(t, hosts.MarkerBegin(), hosts.MarkerBegin(), "203.0.113.99 "+detectHostAPI, hosts.MarkerEnd())
+	if got := s.appliedIPsFor([]string{detectHostAPI}); got != nil {
+		t.Errorf("区段判读不了时不给已知地址（宁缺毋滥），实得 %v", got)
+	}
+}
+
+// 执行器在一轮开始那一刻现读一次已知地址并交给检测编排：
+// 界面上那一行「当前生效」由此而来，而且它占名额、照样被探测。
+func TestDetectExecutorFeedsAppliedIPsIntoRound(t *testing.T) {
+	lookup := &detectLookup{cands: detectCandidates()}
+	exec := newDetectExecutorForTest(t, detectStore(t, nil), availableProbe)
+	exec.strategyFor = lookup.table(lookup.strategy(detectMethodGitHub, []string{detectScopeGitHub}))
+	var asked []string
+	exec.appliedIPs = func(hostnames []string) map[string][]string {
+		asked = append([]string(nil), hostnames...)
+		return map[string][]string{detectHostAPI: {"203.0.113.99"}}
+	}
+
+	out := exec.Execute(context.Background(),
+		task.Task{Kind: task.KindDetect, ItemID: "api", ScopeID: detectScopeGitHub, StrategyID: detectMethodGitHub},
+		(&detectReports{}).report)
+	if out.Status != task.StatusDone {
+		t.Fatalf("一轮跑完该收在完成，实际 %+v", out)
+	}
+	if strings.Join(asked, ",") != detectHostAPI+","+detectHostCodeload {
+		t.Errorf("读已知地址要用去重后的域名，否则同一个域名的三种写法各占一行，实得 %v", asked)
+	}
+
+	view, ok := exec.results.view("api")
+	if !ok {
+		t.Fatal("这一轮的结果该存进结果存储供详情页取")
+	}
+	var appliedRows, total int
+	byHost := map[string]int{}
+	for _, h := range view.Hosts {
+		for _, c := range h.Candidates {
+			total++
+			if c.Applied {
+				appliedRows++
+				byHost[c.Hostname]++
+				if c.Status == "" {
+					t.Errorf("已生效那一行也要有探测结论，实得 %+v", c)
+				}
+			}
+		}
+	}
+	if appliedRows != 1 || byHost[detectHostAPI] != 1 {
+		t.Errorf("已知地址该有 1 行「当前生效」，实得 %d（%v）", appliedRows, byHost)
+	}
+	if total != 4 {
+		t.Errorf("候选总数 = 已生效 1 条 + 解析 3 条 = 4，实得 %d", total)
+	}
+	// 名额跟着减：已生效占了 1 格，那次解析的上限从档位的 2 变成 1；没被占的域名仍是 2。
+	limit, ok := config.ProfileCandidateLimit(config.ProfileLow)
+	if !ok {
+		t.Fatal("省流档没有每主机名候选上限")
+	}
+	hostsCalled, _, maxes := lookup.calls()
+	seen := map[string]int{}
+	for i, h := range hostsCalled {
+		seen[h] = maxes[i]
+	}
+	if got := seen[detectHostAPI]; got != limit-1 {
+		t.Errorf("被已生效占了一格后，传给方法的上限应是 %d，实得 %d", limit-1, got)
+	}
+	if got := seen[detectHostCodeload]; got != limit {
+		t.Errorf("没有已知地址的域名上限不该少，应是 %d，实得 %d", limit, got)
+	}
+
+	// 反向：接缝不给已知地址时，一行「当前生效」都不该冒出来。
+	lookup.reset()
+	bare := newDetectExecutorForTest(t, detectStore(t, nil), availableProbe)
+	bare.strategyFor = exec.strategyFor
+	if out := bare.Execute(context.Background(),
+		task.Task{Kind: task.KindDetect, ItemID: "api", ScopeID: detectScopeGitHub, StrategyID: detectMethodGitHub},
+		(&detectReports{}).report); out.Status != task.StatusDone {
+		t.Fatalf("没有已知地址也照样该跑完一轮，实际 %+v", out)
+	}
+	if _, _, maxes := lookup.calls(); maxes[0] != limit || maxes[1] != limit {
+		t.Errorf("没有已生效行时两个域名的上限都该是档位的 %d，实得 %v", limit, maxes)
+	}
+	bareView, ok := bare.results.view("api")
+	if !ok {
+		t.Fatal("这一轮的结果也该存进结果存储")
+	}
+	for _, h := range bareView.Hosts {
+		for _, c := range h.Candidates {
+			if c.Applied {
+				t.Errorf("没给已知地址却冒出了「当前生效」的行：%+v", c)
+			}
+		}
 	}
 }
 

@@ -32,6 +32,12 @@ const CANDIDATE_KEY: Record<string, string> = {
   untested: 'detect.candidate.untested',
 }
 
+// 「哪些项目能进批量检测」只有一个主人：这里算，App 拿到的是已经算好的那批。
+// 挡在外面的是两类——域名由用户自填的手动映射，和目录里没给主机名的项：都没有可解析的目标。
+export function detectableItems(items: CatalogItem[]): CatalogItem[] {
+  return items.filter((it) => !it.userSupplied && (it.hostnames?.length ?? 0) > 0)
+}
+
 // 详情里每一行都来自后端 GetItems / GetDetectResult / 事件：没有的字段就说没有，不补演示数据。
 export function ItemDetail({
   item,
@@ -63,6 +69,9 @@ export function ItemDetail({
 
   const status = hosts?.status ?? HostsStatus.HostsUnknown
   const hostnames = item.hostnames ?? []
+  // 批量按钮的口径是「这一分类里能测的那几项」，不是分类里的全部条目：文案、提示和真正发出去的批次必须同一个数。
+  const batch = detectableItems(category.items ?? [])
+  const selfDetectable = !item.userSupplied && hostnames.length > 0
   const result = state.results[item.id]
   const live = state.live[item.id]
   const detecting = state.tasks.some((task) => task.itemId === item.id && task.kind === 'detect' && (task.status === 'running' || task.status === 'waiting'))
@@ -112,26 +121,26 @@ export function ItemDetail({
       )}
 
       <h3 className={styles.subTitle}>{t('detect.section')}</h3>
-      {hostnames.length === 0 || item.userSupplied ? (
-        <p className={detectStyles.note}>{t('detect.unavailable')}</p>
-      ) : detectReady ? (
+      {detectReady ? (
         <div className={detectStyles.actions}>
-          <button
-            type="button"
-            className={detectStyles.detect}
-            disabled={detecting}
-            onClick={() => onDetect(item.id)}
-          >
-            {detecting ? t('detect.running') : t('detect.start')}
-          </button>
-          {category && (category.items ?? []).length > 1 ? (
+          {selfDetectable ? (
+            <button
+              type="button"
+              className={detectStyles.detect}
+              disabled={detecting}
+              onClick={() => onDetect(item.id)}
+            >
+              {detecting ? t('detect.running') : t('detect.start')}
+            </button>
+          ) : null}
+          {batch.length > 1 ? (
             <button
               type="button"
               disabled={detecting}
-              onClick={() => onDetectAll(category.items ?? [])}
-              title={t('detect.allHint', { count: (category.items ?? []).length })}
+              onClick={() => onDetectAll(batch)}
+              title={t('detect.allHint', { count: batch.length })}
             >
-              {t('detect.all', { count: (category.items ?? []).length })}
+              {t('detect.all', { count: batch.length })}
             </button>
           ) : null}
           {detecting && live ? (
@@ -143,8 +152,11 @@ export function ItemDetail({
       ) : (
         <p className={detectStyles.note}>{t('detect.notReady')}</p>
       )}
+      {detectReady && !selfDetectable ? (
+        <p className={detectStyles.note}>{t('detect.unavailable')}</p>
+      ) : null}
 
-      {hostnames.length > 0 && !item.userSupplied ? (
+      {selfDetectable ? (
         <div className={detectStyles.actions}>
           <button
             type="button"
@@ -207,10 +219,11 @@ export function ItemDetail({
                   </thead>
                   <tbody>
                     {(host.candidates ?? []).map((candidate) => (
-                      <tr key={candidate.id}>
+                      <tr key={candidate.id} className={candidate.applied ? detectStyles.currentRow : undefined}>
                         <td>
                           {candidate.ip}
                           {candidate.ipv6 ? <span className={detectStyles.v6}> · {t('detect.ipv6')}</span> : null}
+                          {candidate.applied ? <span className={detectStyles.currentTag}>{t('detect.current')}</span> : null}
                         </td>
                         <td>{t(CANDIDATE_KEY[candidate.status] ?? 'detect.candidate.unknown')}</td>
                         <td>{candidate.latencyMs > 0 ? t('detect.latency', { ms: candidate.latencyMs }) : '—'}</td>

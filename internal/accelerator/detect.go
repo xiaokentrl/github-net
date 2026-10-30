@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -57,6 +58,9 @@ type Candidate struct {
 	Reason     string          `json:"reason,omitempty"` // 一句人话；探测层保证不含主机名和地址
 	StartedAt  string          `json:"startedAt,omitempty"`
 	FinishedAt string          `json:"finishedAt,omitempty"`
+	// Applied 说这一条当时已经写在这个主机名上。它不改变这一条的地位：
+	// 照样列进候选、照样被探测、照样扣本轮预算，只是界面上要多说一句「当前生效」。
+	Applied bool `json:"applied"`
 }
 
 // HostOutcome 是一个主机名在本轮的结果。解析失败只影响它自己那几个候选，
@@ -107,9 +111,13 @@ type ProbeFunc func(ctx context.Context, t detector.Target) (detector.Result, er
 
 // Input 是一轮检测的输入。Hostnames 可以重复、可以带大写和尾随点，
 // 本包先规范化再去重，同一轮里一个主机名只解析一次。
+// Applied 是「这个主机名当前写在系统 Hosts 上的是哪些地址」，键按主机名规范化后对上，
+// 由调用方读出来；给 nil 就是没有已知地址。这些地址不进解析结果，但会作为候选列进这一轮，
+// 和解析出来的同等对待。
 type Input struct {
 	ItemID    string
 	Hostnames []string
+	Applied   map[string][]string
 }
 
 // Result 是一轮检测的结论。数组字段宁可给空切片也不给 nil，前端直接读不用判空。
@@ -213,6 +221,7 @@ func (r *Runner) Run(ctx context.Context, in Input, budget Budget) (*Result, err
 		itemID:    itemID,
 		budget:    budget,
 		hostnames: hostnames,
+		applied:   normalizeApplied(in.Applied),
 		started:   r.now().UTC(),
 	}
 	d.hosts = make([]*HostOutcome, len(hostnames))
@@ -232,7 +241,9 @@ type detection struct {
 	itemID    string
 	budget    Budget
 	hostnames []string
-	started   time.Time
+	// applied 是规范化后的「主机名 → 当时已写在系统里的地址」，只在本轮开始时填一次，读的时候不再加锁。
+	applied map[string][]string
+	started time.Time
 
 	mu         sync.Mutex
 	seq        int
@@ -273,15 +284,28 @@ func (d *detection) resolveAll() {
 func (d *detection) resolveOne(i int) {
 	hostname := d.hostnames[i]
 
+	// 已经写在系统里的那条地址先占好名额：它不进解析结果，但这一轮照样探测它、照样扣预算，
+	// 这样「现在用的那个地址还灵不灵」在界面上永远有一行实测结论，不会因为 DNS 不再返回它就消失。
+	// 最多占每域名名额里的 PerHostname-1 个，至少给解析结果留一格：当前生效不许把新候选挤光。
+	seeds := d.appliedSeeds(i, hostname)
+	seen := make(map[string]bool, len(seeds)+d.budget.PerHostname)
+	for _, row := range seeds {
+		seen[row.IP] = true
+	}
+
 	d.mu.Lock()
 	ho := &HostOutcome{Hostname: hostname}
 	d.hosts[i] = ho
 	d.dnsQueries++
 	d.emitLocked(ho, nil, PhaseResolving, "")
+	for _, row := range seeds {
+		d.hostRows[i] = append(d.hostRows[i], row)
+		d.emitLocked(ho, row, "", StatusQueued)
+	}
 	d.mu.Unlock()
 
 	release := d.runner.acquire()
-	out, err := d.runner.lookup(d.runCtx, strategies.Input{Hostname: hostname, Max: d.budget.PerHostname})
+	out, err := d.runner.lookup(d.runCtx, strategies.Input{Hostname: hostname, Max: d.budget.PerHostname - len(seeds)})
 	release()
 
 	d.mu.Lock()
@@ -292,8 +316,13 @@ func (d *detection) resolveOne(i int) {
 	}
 	ho.Resolved = true
 	ho.Truncated = out.Truncated
-	rows := make([]*Candidate, 0, len(out.Candidates))
 	for _, c := range out.Candidates {
+		// 解析又给出同一个地址时只留一行：同一个 IP 在一个主机名下出现两次，
+		// 界面上会出现两条状态各自更新的重复行。
+		if seen[c.IP] || len(d.hostRows[i]) >= d.budget.PerHostname {
+			continue
+		}
+		seen[c.IP] = true
 		row := &Candidate{
 			ID:       candidateID(d.itemID, hostname, c.IP),
 			Hostname: hostname,
@@ -301,11 +330,34 @@ func (d *detection) resolveOne(i int) {
 			IPv6:     c.IPv6,
 			Status:   StatusQueued,
 		}
-		rows = append(rows, row)
+		d.hostRows[i] = append(d.hostRows[i], row)
 		// 解析一出结果就立刻把候选列成「排队中」，不等整批解析完再一次性画出来。
 		d.emitLocked(ho, row, "", StatusQueued)
 	}
-	d.hostRows[i] = rows
+}
+
+// appliedSeeds 把这个主机名已知写在系统里的地址换成候选行，按本轮名额裁掉超出的部分。
+// 行在解析之前就能定下来，所以不占解析那次锁。
+func (d *detection) appliedSeeds(i int, hostname string) []*Candidate {
+	limit := d.budget.PerHostname - 1
+	if limit < 0 {
+		limit = 0
+	}
+	seeds := make([]*Candidate, 0, limit)
+	for _, raw := range d.applied[hostname] {
+		if len(seeds) >= limit {
+			break
+		}
+		seeds = append(seeds, &Candidate{
+			ID:       candidateID(d.itemID, hostname, raw),
+			Hostname: hostname,
+			IP:       raw,
+			IPv6:     isIPv6(raw),
+			Status:   StatusQueued,
+			Applied:  true,
+		})
+	}
+	return seeds
 }
 
 // assembleRows 把各主机名的候选按主机名顺序拼成一条稳定的待探测队列。
@@ -510,8 +562,7 @@ func candidateID(itemID, hostname, ip string) string {
 	return itemID + "|" + hostname + "|" + ip
 }
 
-// uniqueHostnames 规范化再去重，保持输入顺序。
-// 合法性判定留给加速方法（它会返回「域名不合法」且根本不发查询），这里不重复一套判定。
+// uniqueHostnames 规范化再去重，保持输入顺序。// 合法性判定留给加速方法（它会返回「域名不合法」且根本不发查询），这里不重复一套判定。
 func uniqueHostnames(raw []string) []string {
 	seen := make(map[string]bool, len(raw))
 	out := make([]string, 0, len(raw))
@@ -524,6 +575,59 @@ func uniqueHostnames(raw []string) []string {
 		out = append(out, n)
 	}
 	return out
+}
+
+// normalizeApplied 把调用方给的「主机名 → 已知写在系统里的地址」收成比较用的形状：
+// 主机名规范化、地址收成标准写法、同一个主机名下的重复地址去掉。
+// 收不进标准写法的（不是 IP 的垃圾串）直接丢掉：那类地址探测层连门都摸不到，
+// 列进候选只会多一行永远失败的噪音。
+func normalizeApplied(raw map[string][]string) map[string][]string {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(raw))
+	for host, ips := range raw {
+		name := hosts.NormalizeHostname(host)
+		if name == "" {
+			continue
+		}
+		seen := make(map[string]bool, len(ips))
+		list := make([]string, 0, len(ips))
+		for _, ip := range ips {
+			canonical := canonicalIP(ip)
+			if canonical == "" || seen[canonical] {
+				continue
+			}
+			seen[canonical] = true
+			list = append(list, canonical)
+		}
+		if len(list) == 0 {
+			continue
+		}
+		out[name] = list
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// canonicalIP 把地址收成标准写法，不是 IP 就返回空串。
+func canonicalIP(ip string) string {
+	parsed := net.ParseIP(strings.TrimSpace(ip))
+	if parsed == nil {
+		return ""
+	}
+	return parsed.String()
+}
+
+// isIPv6 判这一条是不是 v6：v4 和 v4 映射地址都算 v4，和探测层挑地址族的路子一致。
+func isIPv6(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	return parsed.To4() == nil
 }
 
 // lookupFailureText 把解析失败换成一句说明。

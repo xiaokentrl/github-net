@@ -706,6 +706,171 @@ func TestRunWithoutObserver(t *testing.T) {
 	}
 }
 
+// 已经写在系统里的地址照样列成候选、照样探测、照样占本轮名额：
+// 界面上「现在用的那个地址灵不灵」永远有一行实测结论，不会因为 DNS 不再返回它就消失。
+func TestRunIncludesAppliedIPsAsCandidates(t *testing.T) {
+	s := newStub()
+	s.candidates["a.test"] = v4host(2)
+	rec := &recorder{}
+
+	res, err := NewRunner(s.lookup, s.probe, rec).Run(context.Background(),
+		Input{ItemID: "item-ap", Hostnames: []string{"a.test"}, Applied: map[string][]string{" A.TEST. ": {"192.0.2.9"}}},
+		budget(3, 1, 10))
+	if err != nil {
+		t.Fatalf("跑不起来：%v", err)
+	}
+	if len(res.Candidates) != 3 {
+		t.Fatalf("已知地址 1 条 + 解析 2 条 = 3 行，实得 %d（%+v）", len(res.Candidates), res.Candidates)
+	}
+	first := res.Candidates[0]
+	if first.IP != "192.0.2.9" || !first.Applied {
+		t.Errorf("第一条该是那个已生效的地址并带上标记，实得 %+v", first)
+	}
+	if first.ID != "item-ap|a.test|192.0.2.9" {
+		t.Errorf("已知地址的行标识同规则（项目|主机名|地址），实得 %q", first.ID)
+	}
+	for _, row := range res.Candidates[1:] {
+		if row.Applied {
+			t.Errorf("解析出来的候选不该带「当前生效」标记：%+v", row)
+		}
+	}
+	if res.ProbesUsed != 3 {
+		t.Errorf("3 条候选都该探到（含已生效那条），实得 %d", res.ProbesUsed)
+	}
+	var probed bool
+	for _, ip := range s.probeCalls {
+		if ip == "192.0.2.9" {
+			probed = true
+		}
+	}
+	if !probed {
+		t.Error("已生效的地址没被探测，界面上那一行永远定格不了")
+	}
+	// 名额：已生效那条占掉一格，传给方法的候选上限相应少 1，别把整档名额吃光。
+	if got := s.hostnames(); len(got) != 1 || got[0] != "a.test#2" {
+		t.Errorf("传给方法的候选上限应是 3-1=2，实得 %v", got)
+	}
+	if ho := res.Hostnames[0]; ho.Candidates != 3 || ho.Available != 3 {
+		t.Errorf("按主机名归集的计数要把这一行算进去，实得 %+v", ho)
+	}
+	// 已知地址在解析之前就列成排队中，界面立刻有这一行。
+	if got := finalStatusEvents(rec, StatusQueued); got != 3 {
+		t.Errorf("3 条候选该有 3 次排队中事件，实得 %d", got)
+	}
+}
+
+// 解析又返回同一个地址时只留一行：两条同 IP 的候选在界面上会各自更新、互相顶不掉。
+func TestRunDedupesAppliedAgainstLookup(t *testing.T) {
+	s := newStub()
+	s.candidates["a.test"] = v4host(3)
+
+	res, err := NewRunner(s.lookup, s.probe, nil).Run(context.Background(),
+		Input{ItemID: "item-dd", Hostnames: []string{"a.test"},
+			Applied: map[string][]string{"a.test": {" 192.0.2.2 ", "192.0.2.2"}}},
+		budget(4, 1, 10))
+	if err != nil {
+		t.Fatalf("跑不起来：%v", err)
+	}
+	seen := map[string]int{}
+	for _, row := range res.Candidates {
+		seen[row.IP]++
+	}
+	for ip, n := range seen {
+		if n != 1 {
+			t.Errorf("地址 %s 出现 %d 行，同一个主机名下不该有重复行", ip, n)
+		}
+	}
+	if len(res.Candidates) != 3 {
+		t.Fatalf("重复地址收成一行后应是 3 行（192.0.2.2 + 192.0.2.1 + 192.0.2.3），实得 %+v", res.Candidates)
+	}
+	if !res.Candidates[0].Applied || res.Candidates[0].IP != "192.0.2.2" {
+		t.Errorf("去重后保留的那一行要用已生效那条（带标记、写法已规范化），实得 %+v", res.Candidates[0])
+	}
+}
+
+// 已生效的地址不许把新候选挤光：最多占档位名额里的 PerHostname-1 个，至少给解析结果留一格。
+func TestRunAppliedSeedsLeaveRoomForLookup(t *testing.T) {
+	s := newStub()
+	s.candidates["a.test"] = v4host(2)
+
+	res, err := NewRunner(s.lookup, s.probe, nil).Run(context.Background(),
+		Input{ItemID: "item-lim", Hostnames: []string{"a.test"},
+			Applied: map[string][]string{"a.test": {"198.51.100.1", "198.51.100.2", "198.51.100.3"}},
+		}, budget(2, 1, 10))
+	if err != nil {
+		t.Fatalf("跑不起来：%v", err)
+	}
+	if len(res.Candidates) != 2 {
+		t.Fatalf("每主机名最多 2 行，实得 %+v", res.Candidates)
+	}
+	var applied, fresh int
+	for _, row := range res.Candidates {
+		if row.Applied {
+			applied++
+		} else {
+			fresh++
+		}
+	}
+	if applied != 1 || fresh != 1 {
+		t.Errorf("已生效的最多占 1 格、解析结果至少留 1 格，实得已生效 %d、解析 %d（%+v）", applied, fresh, res.Candidates)
+	}
+	if got := s.hostnames(); len(got) != 1 || got[0] != "a.test#1" {
+		t.Errorf("名额被占掉 1 个后传给方法的上限应是 1，实得 %v", got)
+	}
+}
+
+// 解析失败不该顺手把已知地址那行抹掉：这一行恰恰是「现在用的地址还灵不灵」唯一的答案。
+func TestRunKeepsAppliedSeedWhenLookupFails(t *testing.T) {
+	s := newStub()
+	s.lookupErr["a.test"] = &strategies.LookupError{Kind: strategies.KindNotFound, Detail: "域名不存在"}
+
+	res, err := NewRunner(s.lookup, s.probe, nil).Run(context.Background(),
+		Input{ItemID: "item-lf", Hostnames: []string{"a.test"},
+			Applied: map[string][]string{"a.test": {"192.0.2.9"}}},
+		budget(2, 1, 10))
+	if err != nil {
+		t.Fatalf("跑不起来：%v", err)
+	}
+	if len(res.Candidates) != 1 || !res.Candidates[0].Applied {
+		t.Fatalf("解析查不到也要保留已生效那一行，实得 %+v", res.Candidates)
+	}
+	if !res.Candidates[0].Status.final() {
+		t.Errorf("这一行照样要定过格，实得 %s", res.Candidates[0].Status)
+	}
+	ho := res.Hostnames[0]
+	if ho.Resolved || ho.Detail != "域名不存在" || ho.Candidates != 1 {
+		t.Errorf("解析失败的说明照旧按主机名记，且候选数要把这一行算上，实得 %+v", ho)
+	}
+}
+
+// 已知地址里的垃圾写法（不是 IP）丢掉：探测层连门都摸不到，列进去只会多一行永远失败的噪音。
+// 本轮没查的主机名给的地址也不参与；v6 地址要带上 v6 标记。
+func TestRunAppliedFiltersGarbageAndUnknownHostnames(t *testing.T) {
+	s := newStub()
+	s.candidates["a.test"] = v4host(1)
+
+	res, err := NewRunner(s.lookup, s.probe, nil).Run(context.Background(),
+		Input{ItemID: "item-g", Hostnames: []string{"a.test"},
+			Applied: map[string][]string{
+				"a.test": {"not-an-ip", "  ", "2001:db8::1"},
+				"z.test": {"198.51.100.7"},
+			}}, budget(3, 1, 10))
+	if err != nil {
+		t.Fatalf("跑不起来：%v", err)
+	}
+	if len(res.Candidates) != 2 {
+		t.Fatalf("非法地址丢掉、别的主机名的地址不掺进来，应剩 2 行，实得 %+v", res.Candidates)
+	}
+	if res.Candidates[0].IP != "2001:db8::1" || !res.Candidates[0].IPv6 || !res.Candidates[0].Applied {
+		t.Errorf("v6 的已生效地址要带 v6 标记，实得 %+v", res.Candidates[0])
+	}
+	for _, row := range res.Candidates {
+		if row.IP == "198.51.100.7" || row.IP == "not-an-ip" {
+			t.Errorf("不该出现的候选行：%+v", row)
+		}
+	}
+}
+
 // 每主机名的计数：可用、未检测、候选数三样都要对得上，界面按主机名汇总显示。
 func TestRunHostOutcomeCounters(t *testing.T) {
 	s := newStub()

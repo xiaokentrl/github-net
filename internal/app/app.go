@@ -112,7 +112,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	if err == nil {
 		s.settings, s.settingsErr = newSettingsStore(c)
 		if s.settings != nil {
-			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit), probeGate, rounds)
+			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit), probeGate, rounds, s.appliedIPsFor)
 			s.detectReady = true
 		}
 	}
@@ -169,6 +169,16 @@ func (s *Service) GetItems() (ItemsSnapshot, error) {
 		Categories: CatalogToCategories(s.productCatalog),
 		Hosts:      HostsStates(s.productCatalog, snapshot, s.hostsReads.Add(1)),
 	}, nil
+}
+
+// appliedIPsFor 读一轮检测开局时这些主机名已经写在管理区段上的地址，交给检测执行器当已知候选。
+// 和 GetItems 一样是现读一次，不复用别处的缓存：一轮检测要的是「按下检测那一刻在用的地址」。
+func (s *Service) appliedIPsFor(hostnames []string) map[string][]string {
+	snapshot := hosts.Read(s.hostsPath)
+	if !snapshot.OK() {
+		return nil
+	}
+	return appliedFor(snapshot.Block, hostnames)
 }
 
 // GetAppStatus 返回平台、Hosts 写权限探测结果、DNS 解析选型和应用版本，
