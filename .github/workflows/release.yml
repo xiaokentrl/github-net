@@ -148,13 +148,19 @@ jobs:
           printf '%s' "$NET_SIGNING_KEY" > /tmp/github-net-sign.pem
           chmod 600 /tmp/github-net-sign.pem
           bash scripts/verify-signing-guard.sh /tmp/github-net-sign.pem internal/updater/signing/public.key
-      - name: 签名与校验清单
+      - name: 重命名为带版本的资产名并签名
         env:
-          NET_SIGNING_KEY: /tmp/github-net-sign.pem
+          GITHUB_NET_SIGNING_KEY: /tmp/github-net-sign.pem
         run: |
-          bash scripts/sign-release.sh sign bin/github-net.deb
+          # 应用内更新器按「github-net_<版本>_<架构>.deb」挑包（internal/updater/download.go），
+          # 发布资产必须用这个名字；签名和校验清单跟着改名后的文件走。
+          version="${GITHUB_REF_NAME#v}"
+          arch="$(uname -m)"
+          case "$arch" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; esac
+          mv bin/github-net.deb "bin/github-net_${version}_${arch}.deb"
+          bash scripts/sign-release.sh sign "bin/github-net_${version}_${arch}.deb"
           cd bin
-          sha256sum github-net.deb > checksums.txt
+          sha256sum github-net_${version}_${arch}.deb > checksums.txt
           cat checksums.txt
       - name: release-notes.md 必须在场（缺失即红）
         run: |
@@ -166,8 +172,8 @@ jobs:
           tag_name: ${{ github.ref_name }}
           body_path: release-notes.md
           files: |
-            bin/github-net.deb
-            bin/github-net.deb.sig
+            bin/github-net_*_amd64.deb
+            bin/github-net_*_amd64.deb.sig
             bin/checksums.txt
           fail_on_unmatched_files: true
       - name: 清理私钥
