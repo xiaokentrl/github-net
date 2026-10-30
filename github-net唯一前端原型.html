@@ -131,10 +131,10 @@
   .sf-btn:hover{background:#f5f6f8;border-color:var(--primary);color:var(--primary)}
   .sf-btn .ico{font-size:13px;line-height:1}
 
-  .sidebar-resizer{width:6px;flex:none;background:var(--border);cursor:col-resize;position:relative;transition:background .12s;user-select:none}
-  .sidebar-resizer:hover,.sidebar-resizer.dragging{background:var(--primary)}
-  .sidebar-resizer::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:2px;height:34px;border-radius:1px;background:var(--text-3);transition:background .12s}
-  .sidebar-resizer:hover::before,.sidebar-resizer.dragging::before{background:#fff}
+  .sidebar-resizer,.queue-col-resizer{width:6px;flex:none;background:var(--border);cursor:col-resize;position:relative;transition:background .12s;user-select:none}
+  .sidebar-resizer:hover,.sidebar-resizer.dragging,.queue-col-resizer:hover,.queue-col-resizer.dragging{background:var(--primary)}
+  .sidebar-resizer::before,.queue-col-resizer::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:2px;height:34px;border-radius:1px;background:var(--text-3);transition:background .12s}
+  .sidebar-resizer:hover::before,.sidebar-resizer.dragging::before,.queue-col-resizer:hover::before,.queue-col-resizer.dragging::before{background:#fff}
 
   .node{
     display:flex;
@@ -307,7 +307,7 @@
   .queue .qrow{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:12.5px;border-bottom:1px solid #f4f5f7}
   .queue .qrow:hover{background:var(--bg)}
   .queue .qrow.sel{background:var(--primary-soft)}
-  .queue .qrow-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .queue .qrow-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .queue .qd-page{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}
   .queue .qd-arrow{width:24px;height:22px;padding:0;font-size:11px;color:var(--text-2);background:var(--panel);border:1px solid var(--border);border-radius:4px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
   .queue .qd-arrow:hover:not(:disabled){color:var(--primary);border-color:var(--primary)}
@@ -335,6 +335,7 @@
   .queue .ndot-cancelled{background:transparent;box-shadow:inset 0 0 0 1.5px var(--text-3)}
   @keyframes spin-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.82)}}
   .queue.collapsed{height:45px !important;min-height:45px !important}
+  .queue.collapsed .queue-body{display:none}
   .queue.collapsed .queue-list{display:none}
 
   .queue-head{display:flex;align-items:center;gap:8px;padding:0 16px;height:44px;flex:none;border-bottom:1px solid var(--border)}
@@ -360,14 +361,14 @@
   .queue-empty .small{font-size:11.5px}
 
   .queue-body{display:flex;flex:1;min-height:0}
-  .queue-left{flex:0 0 auto;width:min-content;min-width:150px;max-width:45%;border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .queue-left{flex:0 0 auto;width:220px;min-width:150px;max-width:45%;display:flex;flex-direction:column;min-height:0;overflow:hidden}
   .queue-detail{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;min-height:0;background:var(--bg)}
   .qd-body{flex:1;min-height:0;overflow-y:auto}
   .qd-empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:12px;text-align:center;padding:0 12px}
   .queue .qrow{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:12.5px;border-bottom:1px solid #f4f5f7}
   .queue .qrow:hover{background:var(--bg)}
   .queue .qrow.sel{background:var(--primary-soft)}
-  .queue .qrow-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .queue .qrow-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .queue .qd-arrow{width:22px;height:20px;padding:0;font-size:11px;color:var(--text-2);background:var(--panel);border:1px solid var(--border);border-radius:4px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:4px}
   .queue .qd-arrow:hover:not(:disabled){color:var(--primary);border-color:var(--primary)}
   .queue .qd-arrow:disabled{opacity:.4;cursor:not-allowed}
@@ -850,8 +851,9 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
           <button class="btn" id="btnRetryFailed" disabled>重试失败</button>
           <button class="btn toggle-btn" id="btnToggleQueue" title="收起/展开队列">▾</button>
         </div>
-        <div class="queue-body">
-          <div class="queue-left"><div class="queue-list" id="queueList"></div></div>
+        <div class="queue-body" id="queueBody">
+          <div class="queue-left" id="queueLeft"><div class="queue-list" id="queueList"></div></div>
+          <div class="queue-col-resizer" id="queueColResizer" title="拖动调整任务列表宽度"></div>
           <aside class="queue-detail"><div class="qd-body" id="queueDetail"></div></aside>
         </div>
       </div>
@@ -974,6 +976,21 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
                 <button data-h="360">大</button>
               </div>
               <span class="update-status" id="queueHeightLabel">252 px</span>
+            </div>
+          </div>
+          <div class="set-card">
+            <div class="set-card-title"><span class="ico">▦</span>任务列表宽度</div>
+            <p class="set-card-desc">
+              队列里左侧任务列表的宽度，最少 150 px，最多到队列宽度的 45%（右边明细至少留过半）。
+              拖动任务列表与明细之间的竖条也可以调整。
+            </p>
+            <div class="set-row">
+              <div class="seg" id="segQueueList">
+                <button data-w="180">窄</button>
+                <button data-w="220">标准</button>
+                <button data-w="300">宽</button>
+              </div>
+              <span class="update-status" id="queueListWidthLabel">220 px</span>
             </div>
           </div>
 
@@ -1345,6 +1362,7 @@ const state = {
   settings: {
     sidebarWidth: 240,
     queueHeight: 252,
+    queueListWidth: 220,
     zoom: 1,
     language: 'zh-CN',
     theme: 'light',
@@ -1599,6 +1617,58 @@ window.addEventListener('resize', () => {
   if (curH < QUEUE_MIN_H) queuePanel.style.height = QUEUE_MIN_H + 'px';
 });
 
+/* ============ 队列左右宽度拖动（任务列表 ↔ 明细） ============ */
+const queueBody = document.getElementById('queueBody');
+const queueLeft = document.getElementById('queueLeft');
+const queueColResizer = document.getElementById('queueColResizer');
+let colDragState = null;
+let queueColRafPending = false;
+const QUEUE_LIST_MIN_W = 150;
+// 上限按队列区宽度的 45% 算：右边明细要留过半，否则明细会被挤成一列没法看。
+function calcQueueListMaxW() { return Math.max(QUEUE_LIST_MIN_W, Math.floor(queueBody.clientWidth * 0.45)); }
+function clampQueueListWidth(w) { return Math.max(QUEUE_LIST_MIN_W, Math.min(calcQueueListMaxW(), w)); }
+
+queueColResizer.addEventListener('mousedown', e => {
+  if (state.queueCollapsed) return;
+  e.preventDefault();
+  colDragState = { startX: e.clientX, startWidth: queueLeft.offsetWidth, lastX: e.clientX };
+  queueColResizer.classList.add('dragging');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+});
+document.addEventListener('mousemove', e => {
+  if (!colDragState) return;
+  colDragState.lastX = e.clientX;
+  if (queueColRafPending) return;
+  queueColRafPending = true;
+  requestAnimationFrame(() => {
+    queueColRafPending = false;
+    if (!colDragState) return;
+    const delta = colDragState.lastX - colDragState.startX;
+    queueLeft.style.width = clampQueueListWidth(colDragState.startWidth + delta) + 'px';
+  });
+});
+function endQueueColDrag() {
+  if (!colDragState) return;
+  colDragState = null;
+  queueColRafPending = false;
+  queueColResizer.classList.remove('dragging');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  if (!state.queueCollapsed) {
+    state.settings.queueListWidth = queueLeft.offsetWidth;
+    persistSettings();
+    syncLayoutLabels();
+    syncLayoutSegButtons();
+  }
+}
+document.addEventListener('mouseup', endQueueColDrag);
+window.addEventListener('blur', endQueueColDrag);
+window.addEventListener('resize', () => {
+  if (state.queueCollapsed) return;
+  queueLeft.style.width = clampQueueListWidth(queueLeft.offsetWidth) + 'px';
+});
+
 /* ============ 队列折叠 ============ */
 const btnToggleQueue = document.getElementById('btnToggleQueue');
 function toggleQueueCollapsed() {
@@ -1690,10 +1760,14 @@ function loadSettings() {
   if (!Number.isInteger(state.settings.maxCandidatesPerRun) || state.settings.maxCandidatesPerRun < 1 || state.settings.maxCandidatesPerRun > 108) {
     state.settings.maxCandidatesPerRun = 108;
   }
+  if (!Number.isInteger(state.settings.queueListWidth) || state.settings.queueListWidth < 150 || state.settings.queueListWidth > 1200) {
+    state.settings.queueListWidth = 220;
+  }
   if (!state.settings.autoDetectOnStartup) state.settings.autoApplyOnStartup = false;
 }
 function applyLayoutFromSettings() {
   sidebarEl.style.width = state.settings.sidebarWidth + 'px';
+  queueLeft.style.width = clampQueueListWidth(state.settings.queueListWidth) + 'px';
   if (!state.queueCollapsed) {
     queuePanel.style.height = state.settings.queueHeight + 'px';
   }
@@ -1845,14 +1919,17 @@ window.addEventListener('scroll', () => closeCustomSelect(), true);
 function syncLayoutLabels() {
   const sl = document.getElementById('sidebarWidthLabel');
   const ql = document.getElementById('queueHeightLabel');
+  const ll = document.getElementById('queueListWidthLabel');
   const zl = document.getElementById('zoomLabel');
   if (sl) sl.textContent = state.settings.sidebarWidth + ' px';
   if (ql) ql.textContent = state.settings.queueHeight + ' px';
+  if (ll) ll.textContent = state.settings.queueListWidth + ' px';
   if (zl) zl.textContent = Math.round(state.settings.zoom * 100) + '%';
 }
 function syncLayoutSegButtons() {
   document.querySelectorAll('#segSidebar button').forEach(b => b.classList.toggle('active', +b.dataset.w === state.settings.sidebarWidth));
   document.querySelectorAll('#segQueue button').forEach(b => b.classList.toggle('active', +b.dataset.h === state.settings.queueHeight));
+  document.querySelectorAll('#segQueueList button').forEach(b => b.classList.toggle('active', +b.dataset.w === state.settings.queueListWidth));
   document.querySelectorAll('#segZoom button').forEach(b => b.classList.toggle('active', +b.dataset.z === state.settings.zoom));
 }
 
@@ -2018,6 +2095,16 @@ document.getElementById('segQueue').addEventListener('click', e => {
   const h = +btn.dataset.h;
   queuePanel.style.height = h + 'px';
   state.settings.queueHeight = h;
+  syncLayoutLabels();
+  syncLayoutSegButtons();
+  persistSettings();
+});
+document.getElementById('segQueueList').addEventListener('click', e => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  if (state.queueCollapsed) toggleQueueCollapsed();
+  const w = clampQueueListWidth(+btn.dataset.w);
+  queueLeft.style.width = w + 'px';
+  state.settings.queueListWidth = w;
   syncLayoutLabels();
   syncLayoutSegButtons();
   persistSettings();
