@@ -41,18 +41,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: 校验嵌入公钥与签名私钥配对
-        if: env.NET_SIGNING_KEY != ''
+        if: env.GITHUB_NET_SIGNING_KEY != ''
         env:
-          NET_SIGNING_KEY: ${{ secrets.NET_SIGNING_KEY }}
+          GITHUB_NET_SIGNING_KEY: ${{ secrets.NET_SIGNING_KEY }}
         run: |
-          printf '%s' "$NET_SIGNING_KEY" > /tmp/github-net-sign.pem
+          printf '%s' "$GITHUB_NET_SIGNING_KEY" > /tmp/github-net-sign.pem
           chmod 600 /tmp/github-net-sign.pem
           bash scripts/verify-signing-guard.sh /tmp/github-net-sign.pem internal/updater/signing/public.key
           rm -f /tmp/github-net-sign.pem
       - name: 未配置签名钥
-        if: env.NET_SIGNING_KEY == ''
+        if: env.GITHUB_NET_SIGNING_KEY == ''
         run: |
-          echo "::warning::未配置 NET_SIGNING_KEY，真实发布会因签不出 .sig 而失败"
+          echo "::warning::未配置 NET_SIGNING_KEY Secret，真实发布会因签不出 .sig 而失败"
 
   build:
     name: Build Linux x64（Ubuntu 26.04 容器）
@@ -142,10 +142,10 @@ jobs:
           path: bin
       - name: 写私钥并过签名钥守卫
         env:
-          NET_SIGNING_KEY: ${{ secrets.NET_SIGNING_KEY }}
+          GITHUB_NET_SIGNING_KEY: ${{ secrets.NET_SIGNING_KEY }}
         run: |
-          [ -n "$NET_SIGNING_KEY" ] || { echo "::error::未配置 NET_SIGNING_KEY，无法签名"; exit 1; }
-          printf '%s' "$NET_SIGNING_KEY" > /tmp/github-net-sign.pem
+          [ -n "$GITHUB_NET_SIGNING_KEY" ] || { echo "::error::未配置 GITHUB_NET_SIGNING_KEY（Secret 名 NET_SIGNING_KEY），无法签名"; exit 1; }
+          printf '%s' "$GITHUB_NET_SIGNING_KEY" > /tmp/github-net-sign.pem
           chmod 600 /tmp/github-net-sign.pem
           bash scripts/verify-signing-guard.sh /tmp/github-net-sign.pem internal/updater/signing/public.key
       - name: 重命名为带版本的资产名并签名
