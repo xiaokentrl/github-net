@@ -44,6 +44,9 @@ export function CategoryNode({
   needle,
   expanded,
   selectedId,
+  checkedIds,
+  onToggleChecked,
+  onManualBrowse,
   onToggle,
   onSelect,
   onRestoreItems,
@@ -58,6 +61,9 @@ export function CategoryNode({
   selectedId: string
   onToggle: (categoryID: string) => void
   onSelect: (itemID: string) => void
+  checkedIds: ReadonlySet<string>
+  onToggleChecked: (itemID: string, checked: boolean) => void
+  onManualBrowse?: () => void
   onRestoreItems: (itemIDs: string[]) => void
 }) {
   // 全量项：搜索时 items 只剩命中行，但分类总数、整行高亮和 ↺ 的范围都按全量算（原型第 2334-2339、2370 行用的都是 cat.items）。
@@ -82,6 +88,20 @@ export function CategoryNode({
           onToggle(category.id)
         }}
       >
+        <input
+          type="checkbox"
+          className={styles.check}
+          checked={all.every((item) => checkedIds.has(item.id)) && all.length > 0}
+          ref={(el) => {
+            if (el) el.indeterminate = all.length > 0 && !all.every((item) => checkedIds.has(item.id)) && all.some((item) => checkedIds.has(item.id))
+          }}
+          aria-label={category.name}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            const catChecked = all.length > 0 && all.every((item) => checkedIds.has(item.id))
+            for (const it of all) onToggleChecked(it.id, !catChecked)
+          }}
+        />
         <span className={`${styles.caret} ${expanded ? '' : styles.collapsed}`} aria-hidden="true">
           ▼
         </span>
@@ -121,17 +141,29 @@ export function CategoryNode({
                 <div
                   role="treeitem"
                   tabIndex={0}
+                  data-item-id={item.id}
                   aria-selected={active}
                   className={`${styles.node} ${styles.item} ${active ? styles.active : ''} ${
                     liveKind === 'detecting' ? styles.detecting : liveKind === 'applying' || liveKind === 'restoring' ? styles.applying : ''
                   }`}
-                  onClick={() => onSelect(item.id)}
+                  onClick={() => {
+                    onManualBrowse?.()
+                    onSelect(item.id)
+                  }}
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter' && event.key !== ' ') return
                     event.preventDefault()
                     onSelect(item.id)
                   }}
                 >
+                  <input
+                    type="checkbox"
+                    className={styles.check}
+                    checked={checkedIds.has(item.id)}
+                    aria-label={item.name}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => onToggleChecked(item.id, e.target.checked)}
+                  />
                   <span className={styles.caretSlot} aria-hidden="true" />
                   <span className={styles.name} title={(item.hostnames ?? []).join(', ')}>
                     <Highlight text={item.name} needle={needle} />

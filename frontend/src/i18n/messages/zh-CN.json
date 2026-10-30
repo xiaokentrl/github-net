@@ -10,6 +10,10 @@
   "topbar.update.hint": "打开设置中心的检测升级屏查看详情",
   "topbar.statusError": "状态读取失败：{reason}",
 
+  "toolbar.checkAll": "全选",
+  "toolbar.invertChecked": "反选",
+  "toolbar.detectChecked": "检测全部",
+  "toolbar.applyChecked": "应用队列",
   "toolbar.profile.label": "流量档位",
   "toolbar.profile.low": "省流",
   "toolbar.profile.standard": "标准",

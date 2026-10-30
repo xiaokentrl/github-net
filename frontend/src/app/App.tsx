@@ -47,6 +47,11 @@ export function App() {
   const [catalogLoad, setCatalogLoad] = useState<Load>('loading')
   const [catalogError, setCatalogError] = useState('')
 
+  // 勾选模型：批量检测/应用的参与范围，内存态（规划明确勾选不持久化）。
+  // 首次拿到目录时默认勾选 GitHub 和 Steam（用户拍板的默认值）。
+  const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(new Set())
+  const checkedInitialized = useRef(false)
+
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [selectedId, setSelectedId] = useState('')
@@ -183,6 +188,48 @@ export function App() {
   const queue = useTaskQueue()
   const liveOf = useMemo(() => liveByItem(queue.tasks), [queue.tasks])
 
+  // 默认勾选：第一次拿到目录时勾上 GitHub 和 Steam（已拍板）；此后不再自动改。
+  useEffect(() => {
+    if (checkedInitialized.current || catalogLoad !== 'ready') return
+    checkedInitialized.current = true
+    if (checkedIds.size > 0) return
+    const defaults = new Set<string>()
+    for (const cat of snapshot?.categories ?? []) {
+      if (cat.id === 'github' || cat.id === 'steam') for (const it of cat.items ?? []) defaults.add(it.id)
+    }
+    setCheckedIds(defaults)
+  }, [catalogLoad, snapshot, checkedIds.size])
+
+  const toggleChecked = useCallback((itemId: string, checked: boolean) => {
+    setCheckedIds((current) => {
+      const next = new Set(current)
+      if (checked) next.add(itemId)
+      else next.delete(itemId)
+      return next
+    })
+  }, [])
+
+  const checkAll = useCallback(
+    (checked: boolean) => {
+      const all = new Set<string>()
+      if (checked) for (const cat of snapshot?.categories ?? []) for (const it of cat.items ?? []) all.add(it.id)
+      setCheckedIds(all)
+    },
+    [snapshot],
+  )
+
+  const invertChecked = useCallback(() => {
+    setCheckedIds((current) => {
+      const next = new Set<string>()
+      for (const cat of snapshot?.categories ?? []) {
+        for (const it of cat.items ?? []) {
+          if (!current.has(it.id)) next.add(it.id)
+        }
+      }
+      return next
+    })
+  }, [snapshot])
+
   const counts = useMemo(() => {
     const categories = snapshot?.categories ?? []
     const hostnames = new Set<string>()
@@ -308,6 +355,47 @@ export function App() {
 
   // 检测入口：后端整批校验，被拒的原因显示在检测按钮旁边，不弹 Toast。
   // 成功的反馈不在这一层——任务排进队列后，进度由 task:progress 事件推给队列面板和详情页。
+  // 批量检测：按一级菜单分组逐类目发起——后端每类目一轮（轮名=分类名，匹配原型）。
+  const startDetectChecked = useCallback(
+    (checked: ReadonlySet<string>) => {
+      const groups = new Map<string, string[]>()
+      for (const cat of snapshot?.categories ?? []) {
+        for (const it of cat.items ?? []) {
+          if (!checked.has(it.id)) continue
+          const list = groups.get(cat.id) ?? []
+          list.push(it.id)
+          groups.set(cat.id, list)
+        }
+      }
+      setDetectError('')
+      for (const ids of groups.values()) {
+        detectItems(ids).catch((err: unknown) => {
+          setDetectError(getErrorMessage(err))
+        })
+      }
+    },
+    [snapshot],
+  )
+
+  // 批量应用：勾选项里已检测且有可用候选的，交给后端建应用轮。
+  const startApplyChecked = useCallback(
+    (checked: ReadonlySet<string>) => {
+      setHostsError('')
+      const ids = [...checked].filter((id) => {
+        const view = queue.results[id]
+        return (view?.hosts ?? []).some((h) => (h.candidates ?? []).some((c) => c.status === 'available'))
+      })
+      if (ids.length === 0) {
+        setHostsError(t('queue.detail.none'))
+        return
+      }
+      applyItems(ids).catch((err: unknown) => {
+        setHostsError(getErrorMessage(err))
+      })
+    },
+    [queue.results],
+  )
+
   const startDetect = useCallback((itemId: string) => {
     setDetectError('')
     detectItems([itemId]).catch((err: unknown) => {
@@ -344,6 +432,32 @@ export function App() {
     })
   }, [])
 
+  // 树侧焦点跟随：正在跑的子项自动展开所属类目并滚动到可见（原型 scrollTreeToItem 同款）。
+  // 用户点过树 = 手动浏览，焦点再变时重新跟随（和队列面板的翻页语义一致）。
+  const focusManualRef = useRef(false)
+  const runningItemId = useMemo(() => {
+    for (const task of queue.tasks) {
+      if (task.status === 'running' || task.status === 'restoring') return task.itemId
+    }
+    return null
+  }, [queue.tasks])
+  useEffect(() => {
+    if (focusManualRef.current) return
+    if (!runningItemId) return
+    const cat = (snapshot?.categories ?? []).find((c) => (c.items ?? []).some((it) => it.id === runningItemId))
+    if (cat) setExpanded((current) => {
+      if (!current.has(cat.id)) {
+        const next = new Set(current)
+        next.delete(cat.id)
+        return next
+      }
+      return current
+    })
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-item-id="${runningItemId}"]`)?.scrollIntoView({ block: 'nearest' })
+    })
+  }, [runningItemId, snapshot])
+
   // 一条还原链路，详情页的「还原此项」和树上的 ↺（单项或整类）都走这里；
   // 落定后由上面的任务订阅重读目录，树上的状态字、色点和 ↺ 是否还在都会跟着变。
   const startRestoreItems = useCallback((itemIds: string[]) => {
@@ -375,6 +489,9 @@ export function App() {
         query={debouncedQuery}
         expanded={expanded}
         selectedId={selectedId}
+        checkedIds={checkedIds}
+        onToggleChecked={toggleChecked}
+        onManualBrowse={() => { focusManualRef.current = true }}
         load={catalogLoad}
         error={catalogError}
         onRetry={loadCatalog}
@@ -404,6 +521,10 @@ export function App() {
             busy={save.kind === 'pending'}
             onProfileChange={changeProfile}
             onOpenNetwork={() => openSettings('network')}
+            onCheckAll={checkAll}
+            onInvertChecked={invertChecked}
+            onDetectChecked={() => startDetectChecked(checkedIds)}
+            onApplyChecked={() => startApplyChecked(checkedIds)}
           />
         }
         sidebar={sidebar}

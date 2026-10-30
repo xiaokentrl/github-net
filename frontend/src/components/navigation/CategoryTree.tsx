@@ -29,6 +29,9 @@ export function CategoryTree({
   query,
   expanded,
   selectedId,
+  checkedIds,
+  onToggleChecked,
+  onManualBrowse,
   load,
   error,
   onRetry,
@@ -48,6 +51,9 @@ export function CategoryTree({
   onRetry: () => void
   onToggle: (categoryID: string) => void
   onSelect: (itemID: string) => void
+  checkedIds: ReadonlySet<string>
+  onToggleChecked: (itemID: string, checked: boolean) => void
+  onManualBrowse?: () => void
   onRestoreItems: (itemIDs: string[]) => void
 }) {
   if (load === 'loading') return <EmptyState message={t('tree.loading')} />
@@ -77,6 +83,9 @@ export function CategoryTree({
           selectedId={selectedId}
           onToggle={onToggle}
           onSelect={onSelect}
+          checkedIds={checkedIds}
+          onToggleChecked={onToggleChecked}
+          onManualBrowse={onManualBrowse}
           onRestoreItems={onRestoreItems}
         />
       ))}

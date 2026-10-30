@@ -409,3 +409,9 @@
 .search input::-webkit-search-cancel-button {
   display: none;
 }
+
+.check {
+  flex: none;
+  accent-color: var(--primary);
+  cursor: pointer;
+}

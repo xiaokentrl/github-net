@@ -18,6 +18,10 @@ export function Toolbar({
   busy,
   onProfileChange,
   onOpenNetwork,
+  onCheckAll,
+  onInvertChecked,
+  onDetectChecked,
+  onApplyChecked,
 }: {
   settings: Config | null
   error: string
@@ -26,6 +30,10 @@ export function Toolbar({
   busy: boolean
   onProfileChange: (profile: NetworkProfile) => void
   onOpenNetwork: () => void
+  onCheckAll: (checked: boolean) => void
+  onInvertChecked: () => void
+  onDetectChecked: () => void
+  onApplyChecked: () => void
 }) {
   if (error) return <span className={styles.text}>{t('settings.error', { reason: error })}</span>
   if (!settings) return <span className={styles.text}>{t('detail.loading')}</span>
@@ -34,6 +42,18 @@ export function Toolbar({
 
   return (
     <>
+      <button type="button" className={styles.action} disabled={busy} onClick={() => onCheckAll(true)}>
+        {t('toolbar.checkAll')}
+      </button>
+      <button type="button" className={styles.action} disabled={busy} onClick={onInvertChecked}>
+        {t('toolbar.invertChecked')}
+      </button>
+      <button type="button" className={styles.action} disabled={busy} onClick={onDetectChecked}>
+        {t('toolbar.detectChecked')}
+      </button>
+      <button type="button" className={`${styles.action} ${styles.primary}`} disabled={busy} onClick={onApplyChecked}>
+        {t('toolbar.applyChecked')}
+      </button>
       <Select
         label={t('toolbar.profile.label')}
         value={profile}
