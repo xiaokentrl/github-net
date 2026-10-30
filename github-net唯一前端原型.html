@@ -825,8 +825,8 @@ html[data-theme]:not([data-theme="light"]) .skeleton{background:linear-gradient(
       </div>
       <div class="tree-scroll" id="tree"></div>
       <div class="sidebar-footer">
-        <button class="sf-btn" id="btnSyncState" title="根据当前演示数据重新计算状态；不会读取系统 Hosts 或后端">
-          <span class="ico">⟳</span>重算演示状态
+        <button class="sf-btn" id="btnSyncState" title="把界面状态和当前演示数据重新对齐；不会读取系统 Hosts 或后端">
+          <span class="ico">⟳</span>同步状态
         </button>
         <button class="sf-btn" id="btnSettings" title="打开设置中心">
           <span class="ico">⚙</span>设置中心
@@ -2269,13 +2269,13 @@ document.getElementById('btnCheckUpdate').onclick = () => {
   if (!state.update.checking) checkUpdate();
 };
 
-/* ============ 重算演示状态 ============ */
+/* ============ 同步状态 ============ */
 document.getElementById('btnSyncState').onclick = async () => {
   const btn = document.getElementById('btnSyncState');
   if (btn.dataset.busy) return;
   btn.dataset.busy = '1';
   const original = btn.innerHTML;
-  btn.innerHTML = '<span class="ico" style="animation:spin .8s linear infinite;display:inline-block">⟳</span>重算中…';
+  btn.innerHTML = '<span class="ico" style="animation:spin .8s linear infinite;display:inline-block">⟳</span>同步中…';
   await sleep(600);
   let changed = 0;
   allItems().forEach(item => {
@@ -2290,8 +2290,8 @@ document.getElementById('btnSyncState').onclick = async () => {
   btn.innerHTML = original;
   delete btn.dataset.busy;
   toast(changed > 0
-    ? `演示状态已重算，${changed} 项与当前演示映射不一致（未读取系统 Hosts）`
-    : '演示状态已重算（未读取系统 Hosts 或后端）');
+    ? `界面状态已同步，${changed} 项与当前演示映射不一致（未读取系统 Hosts）`
+    : '界面状态已同步（未读取系统 Hosts 或后端）');
 };
 
 /* ============================================================================
