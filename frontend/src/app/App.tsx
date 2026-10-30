@@ -402,6 +402,15 @@ export function App() {
 
   // 检测入口：后端整批校验，被拒的原因显示在检测按钮旁边，不弹 Toast。
   // 成功的反馈不在这一层——任务排进队列后，进度由 task:progress 事件推给队列面板和详情页。
+  // 同步状态：把目录（含 Hosts 状态）和应用状态一起重新拉一遍——
+  // 两条链路各有请求代次保护，重复点击安全；失败由各自既有的错误槽位显示。
+  const [syncing, setSyncing] = useState(false)
+  const resyncAll = useCallback(() => {
+    setSyncing(true)
+    Promise.all([loadCatalog(), loadStatus()])
+      .finally(() => setSyncing(false))
+  }, [loadCatalog, loadStatus])
+
   // 批量检测：按一级菜单分组逐类目发起——后端每类目一轮（轮名=分类名，匹配原型）。
   const startDetectChecked = useCallback(
     (checked: ReadonlySet<string>) => {
@@ -628,7 +637,7 @@ export function App() {
         }
         sidebarFooter={
           <>
-            <SyncEntry />
+            <SyncEntry syncing={syncing} onSync={resyncAll} />
             <SettingsEntry onOpen={() => openSettings('layout')} />
           </>
         }
