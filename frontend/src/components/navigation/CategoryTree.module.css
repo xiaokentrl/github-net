@@ -351,18 +351,16 @@
   transform: translateY(0.5px);
 }
 
-/* 搜索框照抄原型第 67–71 行的 .search：30px 高、左内边距 30px 留给放大镜，
-   放大镜是两条伪元素（一个圆圈 + 一根 45° 斜柄），聚焦时描边变主色并加一圈主色光晕。
-   原型这个框在工具栏里，宽度写死 210px；本项目放在侧栏顶部，宽度改成跟随侧栏（可拖 200–600px）。
-   图标两条偏移按本仓的 8/12px 内边距整体平移：圆圈 22px/23px、斜柄 31px/27px，相对输入框的位置和原型逐字相同。 */
+/* 搜索框照抄原型第 67–71 行的 .search：它原样站在工具栏里，宽 210px、高 30px，
+   左内边距 30px 留给放大镜；放大镜是两条伪元素（一个圆圈 + 一根 45° 斜柄），
+   聚焦时描边变主色并加一圈主色光晕。 */
 .search {
   position: relative;
   flex: none;
-  padding: 8px 12px;
 }
 
 .search input {
-  width: 100%;
+  width: 210px;
   height: 30px;
   padding: 0 10px 0 30px;
   border: 1px solid var(--border-strong);
@@ -382,8 +380,8 @@
 .search::before {
   content: '';
   position: absolute;
-  left: 22px;
-  top: 23px;
+  left: 10px;
+  top: 50%;
   width: 11px;
   height: 11px;
   transform: translateY(-60%);
@@ -396,8 +394,8 @@
 .search::after {
   content: '';
   position: absolute;
-  left: 31px;
-  top: 27px;
+  left: 19px;
+  top: 19px;
   width: 5px;
   height: 1.6px;
   background: var(--text-3);

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
-import { cancelTask, clearFinishedTasks, clearQueue, getTasks, pauseQueue, restoreAllHosts, retryFailedTasks, resumeQueue } from '../../api/client'
+import { cancelTask, clearFinishedTasks, clearQueue, getTasks, pauseQueue, retryFailedTasks, resumeQueue } from '../../api/client'
 import { getErrorMessage } from '../../api/errors'
 import { useBarResize } from '../../components/layout/useBarResize'
 import { t } from '../../i18n'
 import { clampQueueHeight, QUEUE_HEIGHT_DEFAULT, QUEUE_HEIGHT_MIN } from './queueHeight'
 import { clampQueueListWidth, QUEUE_LIST_DEFAULT_WIDTH } from './queueListWidth'
 import { applyTaskSnapshot, markTaskLoadError, useTaskQueue } from './taskStore'
+import { useRestoreAllTasks } from './useRestoreAll'
 import styles from './TaskPanel.module.css'
 
 // 任务状态到文案键的映射。九档状态来自后端 TaskMeta，界面按状态字符串显示，不自己推断。
@@ -103,18 +104,8 @@ export function TaskPanel({
   }, [state.tasks, handleError])
 
   // 全部还原：要求队列空闲（原型语义）；成功后清空队列记录并刷新 Hosts 状态。
-  const onRestoreAll = useCallback(() => {
-    const busy = state.tasks.some((task) => task.status === 'running' || task.status === 'waiting' || task.status === 'restoring')
-    if (busy) return
-    if (!window.confirm(t('queue.restoreAll.confirm'))) return
-    restoreAllHosts()
-      .then((count) => {
-        if (count > 0) return clearQueue().catch(() => undefined)
-        return undefined
-      })
-      .then(() => getTasks().then(applyTaskSnapshot))
-      .catch(handleError)
-  }, [state.tasks, handleError])
+  // 工具栏那颗「恢复」和这里共用同一条实现（useRestoreAll），规则只写一遍。
+  const { restoreAll: onRestoreAll } = useRestoreAllTasks(handleError)
 
   // ===== 双栏状态 =====
   // 轮次状态由它的任务推出来：有在跑的=执行中，全排队=排队中，有失败=失败，其余=完成。

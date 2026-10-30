@@ -29,23 +29,30 @@ const LIST_PRESETS = (): SegmentOption[] => [
 ]
 
 // 布局：主菜单宽度、队列高度、任务列表宽度都是点一下即写盘并当场反映到界面（也都能拖分隔条取任意值）。
+// 最后两张卡是原型「检测时焦点跟随」「应用时焦点跟随」（第 1002–1030 行）：开着才在任务开跑时自动展开并滚动过去。
 export function LayoutPane({
   settings,
   save,
   onSidebarWidth,
   onQueueHeight,
   onQueueListWidth,
+  onDetectFocusFollow,
+  onApplyFocusFollow,
 }: {
   settings: Config
   save: SaveState
   onSidebarWidth: (width: number) => void
   onQueueHeight: (height: number) => void
   onQueueListWidth: (width: number) => void
+  onDetectFocusFollow: (enabled: boolean) => void
+  onApplyFocusFollow: (enabled: boolean) => void
 }) {
-  // 一屏三张能改的卡：状态条各认各的改动，「禁用」仍看全局是否有请求在路上。
+  // 一屏五张能改的卡：状态条各认各的改动，「禁用」仍看全局是否有请求在路上。
   const sidebarSave = saveStateFor(save, 'sidebar')
   const queueSave = saveStateFor(save, 'queueHeight')
   const listSave = saveStateFor(save, 'queueList')
+  const detectFollowSave = saveStateFor(save, 'detectFocusFollow')
+  const applyFollowSave = saveStateFor(save, 'applyFocusFollow')
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.layout.title')}</h3>
@@ -109,6 +116,46 @@ export function LayoutPane({
           />
           <InlineStatus kind={listSave.kind} text={listSave.text} />
         </div>
+      </div>
+
+      <div className={styles.card}>
+        <div className={styles.cardTitle}>
+          <span className={styles.ico} aria-hidden="true">
+            ◎
+          </span>
+          {t('settings.layout.detectFocusTitle')}
+        </div>
+        <p className={styles.cardDesc}>{t('settings.layout.detectFocusDesc')}</p>
+        <label className={styles.checkRow}>
+          <input
+            type="checkbox"
+            checked={settings.treeBehavior.detectFocusFollow}
+            disabled={save.kind === 'pending'}
+            onChange={(event) => onDetectFocusFollow(event.target.checked)}
+          />
+          {t('settings.layout.detectFocusToggle')}
+        </label>
+        <InlineStatus kind={detectFollowSave.kind} text={detectFollowSave.text} />
+      </div>
+
+      <div className={styles.card}>
+        <div className={styles.cardTitle}>
+          <span className={styles.ico} aria-hidden="true">
+            ◎
+          </span>
+          {t('settings.layout.applyFocusTitle')}
+        </div>
+        <p className={styles.cardDesc}>{t('settings.layout.applyFocusDesc')}</p>
+        <label className={styles.checkRow}>
+          <input
+            type="checkbox"
+            checked={settings.treeBehavior.applyFocusFollow}
+            disabled={save.kind === 'pending'}
+            onChange={(event) => onApplyFocusFollow(event.target.checked)}
+          />
+          {t('settings.layout.applyFocusToggle')}
+        </label>
+        <InlineStatus kind={applyFollowSave.kind} text={applyFollowSave.text} />
       </div>
     </>
   )

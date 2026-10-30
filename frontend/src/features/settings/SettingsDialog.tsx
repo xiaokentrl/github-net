@@ -57,6 +57,8 @@ export function SettingsDialog({
   onCloseToTray,
   onStartMinimized,
   onAutoStart,
+  onDetectFocusFollow,
+  onApplyFocusFollow,
 }: {
   pane: SettingsPaneID
   settings: Config
@@ -75,6 +77,8 @@ export function SettingsDialog({
   onCloseToTray: (enabled: boolean) => void
   onStartMinimized: (enabled: boolean) => void
   onAutoStart: (enabled: boolean) => void
+  onDetectFocusFollow: (enabled: boolean) => void
+  onApplyFocusFollow: (enabled: boolean) => void
 }) {
   const closeRef = useRef<HTMLButtonElement>(null)
 
@@ -133,7 +137,17 @@ export function SettingsDialog({
             {pane === 'network' && (
               <NetworkPane settings={settings} hostnames={hostnames} save={save} onProfile={onProfile} onBudget={onBudget} />
             )}
-            {pane === 'layout' && <LayoutPane settings={settings} save={save} onSidebarWidth={onSidebarWidth} onQueueHeight={onQueueHeight} onQueueListWidth={onQueueListWidth} />}
+            {pane === 'layout' && (
+              <LayoutPane
+                settings={settings}
+                save={save}
+                onSidebarWidth={onSidebarWidth}
+                onQueueHeight={onQueueHeight}
+                onQueueListWidth={onQueueListWidth}
+                onDetectFocusFollow={onDetectFocusFollow}
+                onApplyFocusFollow={onApplyFocusFollow}
+              />
+            )}
             {pane === 'zoom' && <ZoomPane settings={settings} save={save} onZoom={onZoom} />}
             {pane === 'appearance' && <AppearancePane settings={settings} save={save} onTheme={onTheme} />}
             {pane === 'tray' && <TrayPane settings={settings} save={save} onCloseToTray={onCloseToTray} onStartMinimized={onStartMinimized} />}

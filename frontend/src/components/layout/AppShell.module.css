@@ -281,20 +281,32 @@
   cursor: pointer;
 }
 
+/* 工具栏按钮抄原型 .btn（第 52–59 行）：30px 高、12px 内边距、6px 圆角、描边；
+   底色取 --ctl（浅色下就是原型的 #fff，其余五套由主题令牌给深色底），悬停只换底色。 */
 .action {
   height: 30px;
   padding: 0 12px;
   border-radius: 6px;
   border: 1px solid var(--border-strong);
-  background: var(--panel);
+  background: var(--ctl);
   color: var(--text);
   font-size: 12.5px;
   cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 
 .action:hover:not(:disabled) {
-  border-color: var(--primary);
-  color: var(--primary);
+  background: var(--hov);
+}
+
+.action:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+.action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .action.primary {
@@ -306,4 +318,36 @@
 .action.primary:hover:not(:disabled) {
   background: var(--primary);
   opacity: 0.9;
+}
+
+/* 「恢复」是危险动作：只把字染红，悬停才铺一层淡红（原型 .btn.danger 第 58–59 行）。 */
+.action.danger {
+  color: var(--red);
+}
+
+.action.danger:hover:not(:disabled) {
+  background: var(--red-soft);
+}
+
+/* 工具栏里分组用的竖线（原型 .divider-v 第 60 行）。 */
+.divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+/* 模式选择框（原型 select.mode 第 73 行）：本工具只会写系统 Hosts，另两项按原型置灰。 */
+.mode {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--ctl);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
 }

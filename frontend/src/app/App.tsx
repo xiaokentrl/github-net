@@ -10,12 +10,12 @@ import { Toolbar } from '../components/layout/Toolbar'
 import { CategoryTree } from '../components/navigation/CategoryTree'
 import type { HostsLookup } from '../components/navigation/CategoryNode'
 import { liveByItem } from '../components/navigation/treeStatus'
-import { SearchBox } from '../components/navigation/SearchBox'
 import { SettingsDialog, type SettingsPaneID } from '../features/settings/SettingsDialog'
 import { ItemDetail } from '../features/items/ItemDetail'
 import { TaskPanel } from '../features/tasks/TaskPanel'
 import { subscribeTaskEvents } from '../features/tasks/taskEvents'
 import { useTaskQueue } from '../features/tasks/taskStore'
+import { useRestoreAllTasks } from '../features/tasks/useRestoreAll'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
@@ -53,7 +53,9 @@ export function App() {
   const checkedInitialized = useRef(false)
 
   const [query, setQuery] = useState('')
+  // 展开状态。原型一进来是全部展开（collapsed 是空集合，第 1342 行），所以拿到目录后补一次全展开。
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
+  const expandedInitialized = useRef(false)
   const [selectedId, setSelectedId] = useState('')
 
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -230,6 +232,31 @@ export function App() {
     })
   }, [snapshot])
 
+  // 默认展开：第一次拿到目录就全部展开（原型 collapsed 初始为空），此后不再自动改。
+  useEffect(() => {
+    if (expandedInitialized.current || catalogLoad !== 'ready') return
+    expandedInitialized.current = true
+    setExpanded((current) => {
+      if (current.size > 0) return current
+      return new Set((snapshot?.categories ?? []).map((cat) => cat.id))
+    })
+  }, [catalogLoad, snapshot])
+
+  // 工具栏「折叠」：全展开时一键全折叠，否则一键全展开（原型第 3599–3610 行同一条规则）。
+  const foldAll = useCallback(() => {
+    const categories = snapshot?.categories ?? []
+    setExpanded((current) => {
+      if (categories.length > 0 && categories.every((cat) => current.has(cat.id))) return new Set()
+      return new Set(categories.map((cat) => cat.id))
+    })
+  }, [snapshot])
+
+  // 工具栏「全选」按钮在两种说法之间切换：已经全勾上时显示「全不选」（原型第 3586–3591 行）。
+  const allChecked = useMemo(() => {
+    const ids = (snapshot?.categories ?? []).flatMap((cat) => (cat.items ?? []).map((it) => it.id))
+    return ids.length > 0 && ids.every((id) => checkedIds.has(id))
+  }, [snapshot, checkedIds])
+
   const counts = useMemo(() => {
     const categories = snapshot?.categories ?? []
     const hostnames = new Set<string>()
@@ -348,6 +375,24 @@ export function App() {
     [settings, submit],
   )
 
+  // 两个焦点跟随开关（原型「检测时焦点跟随」「应用时焦点跟随」两张卡）：
+  // 开着才在任务开跑时自动展开所在类目并滚动过去；关着时树的折叠状态一律不动，只靠高亮提示。
+  const changeDetectFocusFollow = useCallback(
+    (enabled: boolean) => {
+      if (!settings || settings.treeBehavior.detectFocusFollow === enabled) return
+      submit({ detectFocusFollow: enabled }, t('settings.subject.detectFocusFollow'), 'detectFocusFollow')
+    },
+    [settings, submit],
+  )
+
+  const changeApplyFocusFollow = useCallback(
+    (enabled: boolean) => {
+      if (!settings || settings.treeBehavior.applyFocusFollow === enabled) return
+      submit({ applyFocusFollow: enabled }, t('settings.subject.applyFocusFollow'), 'applyFocusFollow')
+    },
+    [settings, submit],
+  )
+
   const openSettings = useCallback((pane: SettingsPaneID) => {
     setDialogPane(pane)
     setDialogOpen(true)
@@ -368,6 +413,10 @@ export function App() {
         }
       }
       setDetectError('')
+      if (groups.size === 0) {
+        setDetectError(t('toolbar.detectChecked.none'))
+        return
+      }
       for (const ids of groups.values()) {
         detectItems(ids).catch((err: unknown) => {
           setDetectError(getErrorMessage(err))
@@ -381,12 +430,16 @@ export function App() {
   const startApplyChecked = useCallback(
     (checked: ReadonlySet<string>) => {
       setHostsError('')
+      if (checked.size === 0) {
+        setHostsError(t('toolbar.applyChecked.none'))
+        return
+      }
       const ids = [...checked].filter((id) => {
         const view = queue.results[id]
         return (view?.hosts ?? []).some((h) => (h.candidates ?? []).some((c) => c.status === 'available'))
       })
       if (ids.length === 0) {
-        setHostsError(t('queue.detail.none'))
+        setHostsError(t('toolbar.applyChecked.unavailable'))
         return
       }
       applyItems(ids).catch((err: unknown) => {
@@ -432,31 +485,56 @@ export function App() {
     })
   }, [])
 
-  // 树侧焦点跟随：正在跑的子项自动展开所属类目并滚动到可见（原型 scrollTreeToItem 同款）。
-  // 用户点过树 = 手动浏览，焦点再变时重新跟随（和队列面板的翻页语义一致）。
+  // 树侧焦点跟随（原型 followItem，第 2676–2689 行 + 开关说明第 1002–1030 行）：
+  // 开启时临时收起其他类目、只展开当前项所属类目，跑完恢复开跑前的展开状态；
+  // 关闭时只让状态高亮走，不动展开状态。用户点树 = 手动浏览，当前这项不再抢焦点，
+  // 下一项开跑时恢复跟随；这轮里用户手动动过展开状态，结束时就不拿开跑前的快照盖回去。
   const focusManualRef = useRef(false)
-  const runningItemId = useMemo(() => {
+  const userTouchedRef = useRef(false)
+  const lastItemRef = useRef<string | null>(null)
+  const runExpandedRef = useRef<ReadonlySet<string> | null>(null)
+  const runningTask = useMemo(() => {
     for (const task of queue.tasks) {
-      if (task.status === 'running' || task.status === 'restoring') return task.itemId
+      if (task.status === 'running' || task.status === 'restoring') return task
     }
     return null
   }, [queue.tasks])
+  const runningItemId = runningTask?.itemId || null
+  const followEnabled =
+    runningTask?.kind === 'detect'
+      ? (settings?.treeBehavior.detectFocusFollow ?? false)
+      : (settings?.treeBehavior.applyFocusFollow ?? false)
+
   useEffect(() => {
-    if (focusManualRef.current) return
-    if (!runningItemId) return
+    if (!runningItemId) {
+      const saved = runExpandedRef.current
+      const touched = userTouchedRef.current
+      runExpandedRef.current = null
+      focusManualRef.current = false
+      userTouchedRef.current = false
+      lastItemRef.current = null
+      if (saved && !touched) setExpanded(new Set(saved))
+      return
+    }
+    if (lastItemRef.current !== runningItemId) {
+      lastItemRef.current = runningItemId
+      focusManualRef.current = false
+    }
+    if (!followEnabled || focusManualRef.current) return
     const cat = (snapshot?.categories ?? []).find((c) => (c.items ?? []).some((it) => it.id === runningItemId))
-    if (cat) setExpanded((current) => {
-      if (!current.has(cat.id)) {
-        const next = new Set(current)
-        next.delete(cat.id)
-        return next
-      }
-      return current
+    if (!cat) return
+    setExpanded((current) => {
+      if (runExpandedRef.current === null) runExpandedRef.current = new Set(current)
+      return new Set([cat.id])
     })
-    requestAnimationFrame(() => {
-      document.querySelector(`[data-item-id="${runningItemId}"]`)?.scrollIntoView({ block: 'nearest' })
-    })
-  }, [runningItemId, snapshot])
+    setSelectedId(runningItemId)
+  }, [runningItemId, followEnabled, snapshot])
+
+  // 目标行要等上面展开那一轮渲染完才在 DOM 里，所以滚动单独放一条效应，跟着 expanded 再跑一次。
+  useEffect(() => {
+    if (!runningItemId || !followEnabled || focusManualRef.current) return
+    document.querySelector(`[data-item-id="${runningItemId}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [runningItemId, followEnabled, expanded])
 
   // 一条还原链路，详情页的「还原此项」和树上的 ↺（单项或整类）都走这里；
   // 落定后由上面的任务订阅重读目录，树上的状态字、色点和 ↺ 是否还在都会跟着变。
@@ -476,30 +554,36 @@ export function App() {
     })
   }, [])
 
+  // 工具栏「恢复」和队列面板那颗共用同一条实现（useRestoreAll）；失败挂在详情页的 hostsError 上。
+  const handleRestoreError = useCallback((err: unknown) => setHostsError(getErrorMessage(err)), [])
+  const { busy: restoreBusy, restoreAll } = useRestoreAllTasks(handleRestoreError)
+
   const debouncedQuery = useDebouncedValue(query, 150)
 
   const sidebar = (
-    <>
-      {catalogLoad === 'ready' && <SearchBox value={query} onChange={setQuery} />}
-      <CategoryTree
-        categories={snapshot?.categories ?? []}
-        hostsOf={hostsOf}
-        liveOf={liveOf}
-        results={queue.results}
-        query={debouncedQuery}
-        expanded={expanded}
-        selectedId={selectedId}
-        checkedIds={checkedIds}
-        onToggleChecked={toggleChecked}
-        onManualBrowse={() => { focusManualRef.current = true }}
-        load={catalogLoad}
-        error={catalogError}
-        onRetry={loadCatalog}
-        onToggle={toggleCategory}
-        onSelect={setSelectedId}
-        onRestoreItems={startRestoreItems}
-      />
-    </>
+    <CategoryTree
+      categories={snapshot?.categories ?? []}
+      hostsOf={hostsOf}
+      liveOf={liveOf}
+      results={queue.results}
+      query={debouncedQuery}
+      expanded={expanded}
+      selectedId={selectedId}
+      checkedIds={checkedIds}
+      onToggleChecked={toggleChecked}
+      onManualBrowse={() => {
+        focusManualRef.current = true
+      }}
+      load={catalogLoad}
+      error={catalogError}
+      onRetry={loadCatalog}
+      onToggle={(categoryID) => {
+        toggleCategory(categoryID)
+        userTouchedRef.current = true
+      }}
+      onSelect={setSelectedId}
+      onRestoreItems={startRestoreItems}
+    />
   )
 
   return (
@@ -519,12 +603,19 @@ export function App() {
             saveKind={save.kind}
             saveText={save.text}
             busy={save.kind === 'pending'}
+            allChecked={allChecked}
+            query={query}
+            onQueryChange={setQuery}
             onProfileChange={changeProfile}
             onOpenNetwork={() => openSettings('network')}
             onCheckAll={checkAll}
             onInvertChecked={invertChecked}
+            onFoldAll={foldAll}
             onDetectChecked={() => startDetectChecked(checkedIds)}
             onApplyChecked={() => startApplyChecked(checkedIds)}
+            onOpenHosts={openHostsFile}
+            restoreBusy={restoreBusy}
+            onRestoreAll={restoreAll}
           />
         }
         sidebar={sidebar}
@@ -552,7 +643,10 @@ export function App() {
             listWidth={settings?.layout.queueListWidth ?? null}
             onListWidthChange={changeQueueListWidth}
             activeItemId={selectedId}
-            onPickItem={(itemId) => setSelectedId(itemId)}
+            onPickItem={(itemId) => {
+              setSelectedId(itemId)
+              focusManualRef.current = true
+            }}
           />
         }
         updateLatest={updateLatest}
@@ -586,6 +680,8 @@ export function App() {
           onCloseToTray={changeCloseToTray}
           onStartMinimized={changeStartMinimized}
           onAutoStart={changeAutoStart}
+          onDetectFocusFollow={changeDetectFocusFollow}
+          onApplyFocusFollow={changeApplyFocusFollow}
         />
       )}
     </>

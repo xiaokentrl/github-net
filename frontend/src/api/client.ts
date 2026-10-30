@@ -34,8 +34,8 @@ import type { UpdateDownloadResult } from '../../bindings/github.com/xiaokentrl/
 
 export type NetworkProfile = 'low' | 'standard' | 'full'
 
-// 设置对话框那几屏会改的值：档位、每轮候选上限、侧栏宽度、队列高度、任务列表宽度、缩放、主题。
-// 没列出来的字段（语言、开机自启等）后端已接但界面还没有能真正改的控件，这里不加。
+// 设置对话框那几屏会改的值：档位、每轮候选上限、侧栏宽度、队列高度、任务列表宽度、缩放、主题、
+// 两个焦点跟随开关。
 export type SettingsPatch = {
   networkProfile?: NetworkProfile
   maxCandidateProbesPerRun?: number
@@ -47,6 +47,8 @@ export type SettingsPatch = {
   closeToTray?: boolean
   startMinimized?: boolean
   autoStart?: boolean
+  detectFocusFollow?: boolean
+  applyFocusFollow?: boolean
 }
 
 export function getAppStatus(): Promise<AppStatus> {
@@ -78,8 +80,8 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     closeToTray: patch.closeToTray ?? null,
     startMinimized: patch.startMinimized ?? null,
     autoStart: patch.autoStart ?? null,
-    detectFocusFollow: null,
-    applyFocusFollow: null,
+    detectFocusFollow: patch.detectFocusFollow ?? null,
+    applyFocusFollow: patch.applyFocusFollow ?? null,
     autoDetectOnStartup: null,
     autoApplyOnStartup: null,
   }
