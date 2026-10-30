@@ -8,7 +8,8 @@ import (
 	"testing"
 )
 
-// 计数基线来自 2026-10-27 对唯一正式原型 CATEGORY_DEFS（第 1131–1208 行）的抽取结果。
+// 计数基线来自 2026-10-27 对唯一正式原型 CATEGORY_DEFS 的抽取结果，那份数据到现也没变过项目集合。
+// 这一栏故意不写行号：原型一改，CATEGORY_DEFS 的行号就会整体挪动，能挪的是行号（由 TestProtoLinesPointAtThePrototypeDefinition 逐条回查原文），不能挪的是这几个数。
 const (
 	wantCategories = 11
 	wantItems      = 54
