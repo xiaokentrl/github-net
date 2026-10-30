@@ -5,6 +5,7 @@ import { subscribeRuntimeStatus, subscribeUpdateStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
 import { SettingsEntry } from '../components/layout/SettingsEntry'
+import { SyncEntry } from '../components/layout/SyncEntry'
 import { SidebarTools } from '../components/layout/SidebarTools'
 import { StatusBar } from '../components/layout/StatusBar'
 import { Toolbar } from '../components/layout/Toolbar'
@@ -625,7 +626,12 @@ export function App() {
             onFoldAll={foldAll}
           />
         }
-        sidebarFooter={<SettingsEntry onOpen={() => openSettings('layout')} />}
+        sidebarFooter={
+          <>
+            <SyncEntry />
+            <SettingsEntry onOpen={() => openSettings('layout')} />
+          </>
+        }
         detail={
           <ItemDetail
             item={selected.item}
