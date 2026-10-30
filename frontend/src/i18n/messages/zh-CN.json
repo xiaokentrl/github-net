@@ -6,6 +6,8 @@
   "topbar.perm.hint.readOnly": "权限不足，打不开系统 Hosts 写。应用和还原需要提权或辅助服务，本工具当前不写 Hosts。",
   "topbar.perm.hint.unknown": "探测本身失败（文件不存在或平台不支持），不能当成可写或不可写的结论。",
   "topbar.perm.prefix": "Hosts：{access}",
+  "topbar.update.check": "检查更新",
+  "topbar.update.checkHint": "打开设置中心的检测升级屏并检查更新",
   "topbar.update.badge": "有新版本 {version}",
   "topbar.update.hint": "打开设置中心的检测升级屏查看详情",
   "topbar.statusError": "状态读取失败：{reason}",
