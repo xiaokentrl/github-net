@@ -2,9 +2,11 @@
 .panel {
   border-top: 1px solid var(--border);
   background: var(--panel);
-  padding: 0.25rem 0.75rem 0.5rem;
-  max-height: 30vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  max-height: 420px;
+  overflow: hidden;
 }
 
 .head {
@@ -150,8 +152,9 @@
 
 .roundsPane {
   flex: 0 0 auto;
-  width: min-content;
-  min-width: 160px;
+  /* 左栏宽 = 菜单栏宽（--sidebar-w 由 AppShell 挂在应用根上）：两根分隔线垂直对齐 */
+  width: var(--sidebar-w, 240px);
+  min-width: 150px;
   max-width: 45%;
   border-right: 1px solid var(--border);
   display: flex;
@@ -210,7 +213,7 @@
 .detailPane {
   flex: 1 1 auto;
   min-width: 0;
-  overflow-y: auto;
+  overflow: auto;
   background: var(--bg);
 }
 

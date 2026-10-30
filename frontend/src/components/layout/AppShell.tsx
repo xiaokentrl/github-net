@@ -61,14 +61,17 @@ export function AppShell({
   // 可拖范围的唯一前端来源是 useSidebarResize 那两个常量，这里当场写成变量给 CSS 用，
   // 免得同一对数字在 CSS 里再抄一遍（抄了就会漂；漂了由后端的相等断言拦）。
   // 后端没给宽度时不写 --sidebar-w，让 tokens.css 的默认值生效，避免第二份「默认 240」。
-  const sidebarStyle = {
+  // 宽度变量挂在应用根上：左树和下方任务队列的左栏共用同一个 --sidebar-w，
+  // 两根分隔线永远垂直对齐（否则队列左栏和菜单错位）。
+  const appStyle = {
     '--sidebar-min-w': `${SIDEBAR_MIN_WIDTH}px`,
     '--sidebar-max-w': `${SIDEBAR_MAX_WIDTH}px`,
   } as CSSProperties
-  if (shownWidth !== null) (sidebarStyle as Record<string, string>)['--sidebar-w'] = `${shownWidth}px`
+  if (shownWidth !== null) (appStyle as Record<string, string>)['--sidebar-w'] = `${shownWidth}px`
+  const sidebarStyle = {} as CSSProperties
 
   return (
-    <div className={styles.app}>
+    <div className={styles.app} style={appStyle}>
       <header className={styles.topbar}>
         <span className={styles.logo} aria-hidden="true">
           GN
