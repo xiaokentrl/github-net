@@ -32,11 +32,16 @@ export interface Config {
 }
 
 /**
- * LayoutConfig 是用户可调整的两个布局尺寸，单位像素。
+ * LayoutConfig 是用户可调整的三个布局尺寸，单位像素。
  */
 export interface LayoutConfig {
     "sidebarWidth": number;
     "queueHeight": number;
+
+    /**
+     * QueueListWidth 是队列里左栏「任务列表」的宽度；右边任务明细占剩下的全部。
+     */
+    "queueListWidth": number;
 }
 
 /**
@@ -62,6 +67,7 @@ export interface Patch {
     "zoom": number | null;
     "sidebarWidth": number | null;
     "queueHeight": number | null;
+    "queueListWidth": number | null;
     "detectFocusFollow": boolean | null;
     "applyFocusFollow": boolean | null;
     "autoStart": boolean | null;

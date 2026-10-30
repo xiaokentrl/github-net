@@ -5,6 +5,7 @@ import { InlineStatus } from '../../components/ui/InlineStatus'
 import { t } from '../../i18n'
 import { PROFILE_IDS, profileLabel, profileLimitText, profileNote, profileSpec } from './profileOptions'
 import type { SaveState } from '../../hooks/useSettingsSave'
+import { saveStateFor } from '../../hooks/useSettingsSave'
 import styles from './SettingsDialog.module.css'
 
 // 和后端 internal/config 的 MinCandidateProbes / MaxCandidateProbesLimit 一致，
@@ -34,6 +35,8 @@ export function NetworkPane({
   const inputRef = useRef<HTMLInputElement>(null)
   const focusedRef = useRef(false)
   const busy = save.kind === 'pending'
+  // 这一屏只有「每轮候选上限」带状态条（档位那条在顶栏），别把顶栏的改动提示搬进来。
+  const budgetSave = saveStateFor(save, 'budget')
   const spec = profileSpec(settings.network.profile)
   // 一轮全量需要的次数按目录里去重后的主机名数算，和后端「每 hostname 候选上限」同一口径。
   const needed = hostnames * spec.candidates
@@ -126,8 +129,8 @@ export function NetworkPane({
           />
           <span>{t('settings.network.budgetUnit')}</span>
           <InlineStatus
-            kind={invalid ? 'failed' : save.kind}
-            text={invalid ? t('settings.network.budgetRange', { min: CANDIDATE_MIN, max: CANDIDATE_MAX }) : save.text}
+            kind={invalid ? 'failed' : budgetSave.kind}
+            text={invalid ? t('settings.network.budgetRange', { min: CANDIDATE_MIN, max: CANDIDATE_MAX }) : budgetSave.text}
           />
         </div>
         <div className={styles.budgetPreview}>

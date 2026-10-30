@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import type { Round, Snapshot, Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import { getDetectResult } from '../../api/client'
+import { getDetectResult, getTasks } from '../../api/client'
 import type { DetectProgressPayload, TaskProgressPayload } from '../../api/events'
 
 // 队列与检测结果是跨页面共享的状态：详情页和队列面板读同一份，这里就是那唯一一份。
@@ -76,6 +76,27 @@ export function markTaskLoadError() {
   publish({ loaded: true, loadError: true })
 }
 
+// 轮只由后端发号，前端不自己拼一个根节点。事件里出现没见过的新 roundId 就说明队列新开了一轮，
+// 这时补拉一次快照，把那条轮（和同一批的其它任务）一起拿回来——否则任务行挂在队列里、
+// 界面上却没有它们的根节点，任务列表整块显示成空队列。
+// 一次开轮会有多条事件，所以同一时刻只拉一次；拉到的水位比手上的旧就丢掉，不让界面退回旧状态。
+let roundRefreshRunning = false
+
+function refreshRounds() {
+  if (roundRefreshRunning) return
+  roundRefreshRunning = true
+  getTasks()
+    .then((snap) => {
+      if (snap.sequence >= state.sequence) applyTaskSnapshot(snap)
+    })
+    .catch(() => {
+      /* 补拉失败就在这里不叠错误：队列面板自己有快照失败的显示与重试入口 */
+    })
+    .finally(() => {
+      roundRefreshRunning = false
+    })
+}
+
 // applyTaskEvent 按水位收任务事件：旧序号丢弃（快照里已包含），新任务按 ID 覆盖。
 // 检测任务开跑（进入 running）意味着新一轮开始：把该项目上一轮的候选和计数清掉，
 // 免得上一轮的行和这一轮的行混在一张表里。
@@ -85,6 +106,7 @@ export function applyTaskEvent(payload: TaskProgressPayload) {
     ? state.tasks.map((t) => (t.id === payload.task.id ? payload.task : t))
     : [...state.tasks, payload.task]
   const next: Partial<TaskState> = { sequence: payload.sequence, tasks }
+  if (payload.task.roundId && !state.rounds.some((round) => round.id === payload.task.roundId)) refreshRounds()
   if (payload.task.kind === 'detect' && payload.task.status === 'running') {
     const results = { ...state.results }
     const live = { ...state.live }

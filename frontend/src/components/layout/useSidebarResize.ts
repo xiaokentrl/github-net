@@ -1,5 +1,5 @@
-import { useColumnResize } from './useColumnResize'
-import type { ColumnResize } from './useColumnResize'
+import { useBarResize } from './useBarResize'
+import type { BarResize } from './useBarResize'
 
 // 侧栏可拖范围与后端 internal/config 的 SidebarWidthMin/SidebarWidthMax 必须逐个相等，
 // 这条相等断言在 internal/config/layout_bounds_parity_test.go。改这里不改后端会被门拦下。
@@ -11,6 +11,6 @@ export function clampSidebarWidth(value: number): number {
 }
 
 // 侧栏 = 通用拖动条 + 这一对固定上下限。
-export function useSidebarResize(width: number | null, onCommit: (width: number) => void): ColumnResize {
-  return useColumnResize(width, onCommit, clampSidebarWidth, SIDEBAR_MIN_WIDTH)
+export function useSidebarResize(width: number | null, onCommit: (width: number) => void): BarResize {
+  return useBarResize(width, onCommit, clampSidebarWidth, SIDEBAR_MIN_WIDTH)
 }

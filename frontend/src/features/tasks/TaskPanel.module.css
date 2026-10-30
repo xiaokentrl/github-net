@@ -1,18 +1,72 @@
-/* 队列面板：固定在主区下方的窄条，颜色和间距全部引用令牌，不另写一套。 */
+/* 队列面板：在侧栏右侧、详情下面（原型 .queue 在第 302 行）。
+   高度和它的下限都由 TaskPanel 按配置里的 queueHeight 写进行内样式——数字的唯一来源是
+   features/tasks/queueHeight.ts，这里不重复写死，免得两份数字各漂各的。 */
 .panel {
+  flex: none;
   border-top: 1px solid var(--border);
   background: var(--panel);
   display: flex;
   flex-direction: column;
   padding: 0;
-  max-height: 420px;
   overflow: hidden;
+  /* 原型同一条 transition：点预设和拖手柄时高度平滑过去，不是瞬间跳。 */
+  transition: height 0.18s ease;
+}
+
+/* 收起：只留队列头那一条（原型 .queue.collapsed 第 338–340 行）。
+   45px = 队列头 44px + 那 1px 下边框；正文整块藏掉，但节点留在原地，展开后滚动位置不丢。 */
+.panelCollapsed {
+  height: 45px !important;
+  min-height: 45px !important;
+}
+
+.panelCollapsed .body {
+  display: none;
+}
+
+/* 详情与队列之间那条横向手柄，抄原型 .resizer(232–235)：6px 高、上下拖、把手上那道小横条。 */
+.rowResizer {
+  position: relative;
+  flex: none;
+  height: 6px;
+  background: var(--border);
+  cursor: row-resize;
+  touch-action: none;
+  user-select: none;
+  transition: background 0.12s;
+}
+
+.rowResizer:hover,
+.rowResizerDragging {
+  background: var(--primary);
+}
+
+.rowResizer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-3);
+  transform: translate(-50%, -50%);
+  transition: background 0.12s;
+}
+
+.rowResizer:hover::before,
+.rowResizerDragging::before {
+  background: var(--on-primary);
 }
 
 .head {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
+  flex: none;
+  height: 44px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .title {
@@ -46,6 +100,15 @@
 .row button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 队列头最后那颗收起/展开按钮，抄原型 .toggle-btn(358)：方的一格，里面只有一个箭头。 */
+.toggleBtn {
+  width: 26px;
+  padding: 0;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-2);
 }
 
 .list {
@@ -152,15 +215,50 @@
 
 .roundsPane {
   flex: 0 0 auto;
-  /* 左栏宽 = 菜单栏宽（--sidebar-w 由 AppShell 挂在应用根上）：两根分隔线垂直对齐 */
-  width: var(--sidebar-w, 240px);
+  /* 默认宽 = 后端配置的默认值（220）。用户拖过之后由 TaskPanel 写进行内样式，
+     上下限和 45% 比例由 queueListWidth.ts 现算，这里的 min/max 只是兜底。 */
+  width: 220px;
   min-width: 150px;
   max-width: 45%;
-  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* 任务列表 ↔ 任务明细之间的分隔条，抄原型 .queue-col-resizer(134–137)，和侧栏那条同款。 */
+.colResizer {
+  position: relative;
+  flex: none;
+  width: 6px;
+  background: var(--border);
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  transition: background 0.12s;
+}
+
+.colResizer:hover,
+.colResizerDragging {
+  background: var(--primary);
+}
+
+.colResizer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 34px;
+  border-radius: 1px;
+  background: var(--text-3);
+  transform: translate(-50%, -50%);
+  transition: background 0.12s;
+}
+
+.colResizer:hover::before,
+.colResizerDragging::before {
+  background: var(--on-primary);
 }
 
 .paneHead {
@@ -197,6 +295,7 @@
 }
 
 .qrowName {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

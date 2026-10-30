@@ -2,6 +2,7 @@ import type { Config } from '../../../bindings/github.com/xiaokentrl/github-net/
 import { InlineStatus } from '../../components/ui/InlineStatus'
 import { t } from '../../i18n'
 import type { SaveState } from '../../hooks/useSettingsSave'
+import { saveStateFor } from '../../hooks/useSettingsSave'
 import styles from './SettingsDialog.module.css'
 
 // 托盘屏：关窗行为和启动后最小化。行为本体在 main.go（关窗钩子、Hidden 启动），
@@ -18,6 +19,9 @@ export function TrayPane({
   onStartMinimized: (enabled: boolean) => void
 }) {
   const busy = save.kind === 'pending'
+  // 两个开关两张卡：状态条只跟被自己改的那次走。
+  const closeSave = saveStateFor(save, 'closeToTray')
+  const startMinSave = saveStateFor(save, 'startMinimized')
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.tray.title')}</h3>
@@ -40,7 +44,7 @@ export function TrayPane({
           />
           {t('settings.tray.closeToggle')}
         </label>
-        <InlineStatus kind={save.kind} text={save.text} />
+        <InlineStatus kind={closeSave.kind} text={closeSave.text} />
       </div>
 
       <div className={styles.card}>
@@ -60,7 +64,7 @@ export function TrayPane({
           />
           {t('settings.tray.startMinToggle')}
         </label>
-        <InlineStatus kind={save.kind} text={save.text} />
+        <InlineStatus kind={startMinSave.kind} text={startMinSave.text} />
       </div>
     </>
   )

@@ -1,6 +1,6 @@
 /* 骨架尺寸逐条抄原型：.app(22) .topbar(24) .toolbar(51) .main(124) .sidebar(126) .tree-scroll(127)
-   .sidebar-footer(130) .sf-btn(131–133) .detail(230) .statusbar(376)。
-   可拖拽的分栏（.sidebar-resizer/.resizer）属布局那一屏，这里先不放假的手柄。
+   .sidebar-footer(130) .sf-btn(131–133) .right(229) .detail(230) .statusbar(376)。
+   队列高度那条横向手柄（原型 .resizer 232–235）在队列面板自己身上，不在这里。
    .logo 那两个色值不换成令牌：原型第 25 行的品牌标识在六套主题里都没被覆盖，换肤不该把它一起换掉。 */
 .app {
   display: flex;
@@ -233,9 +233,20 @@
   line-height: 1;
 }
 
+/* 侧栏右侧那一整列：详情在上、队列面板在下（原型 .right(229)）。
+   min-width/min-height 都要 0，否则这一列会被内容顶宽顶高，两条分隔条都拖不动。 */
+.right {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .detail {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding: var(--pad) 18px;
   overflow-y: auto;
 }

@@ -4,6 +4,7 @@ import { t } from '../../i18n'
 import { formatDateTime, formatInteger } from '../../i18n/formatters'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
 import { useTaskQueue } from '../tasks/taskStore'
 import styles from './ItemDetail.module.css'
 import detectStyles from './DetectResult.module.css'
@@ -51,6 +52,7 @@ export function ItemDetail({
   onApply,
   onRestore,
   onOpenHosts,
+  onStrategySaved,
 }: {
   item: CatalogItem | null
   category: CatalogCategory | null
@@ -63,6 +65,7 @@ export function ItemDetail({
   onApply: (itemId: string) => void
   onRestore: (itemId: string) => void
   onOpenHosts: () => void
+  onStrategySaved: () => void
 }) {
   const state = useTaskQueue()
   if (!item || !category) return <EmptyState message={t('detail.empty')} />
@@ -78,7 +81,10 @@ export function ItemDetail({
 
   return (
     <div className={styles.wrap}>
-      <h2 className={styles.title}>{item.name}</h2>
+      <div className={styles.head}>
+        <h2 className={styles.title}>{item.name}</h2>
+        <ServiceStrategySelector scopeId={category.scopeId} scopeName={category.name} onSaved={onStrategySaved} />
+      </div>
       <dl className={styles.fields}>
         <div>
           <dt>{t('detail.field.id')}</dt>

@@ -8,9 +8,16 @@ import { toAppError } from '../api/errors'
 import { t } from '../i18n'
 import type { SaveKind } from '../components/ui/InlineStatus'
 
-export type SaveState = { kind: SaveKind; text: string }
+// subject 是这次改动的主人（和 save 的 seed 同一个键）：一屏里有多张卡时，
+// 状态条只挂在被改的那张卡上，不然「任务列表宽度」的已保存提示会同时出现在别的卡里。
+export type SaveState = { kind: SaveKind; text: string; subject: string }
 
-export const IDLE_SAVE: SaveState = { kind: 'idle', text: '' }
+export const IDLE_SAVE: SaveState = { kind: 'idle', text: '', subject: '' }
+
+// 只把状态交给对应的那张卡；不是它改的就当没发生（保存中/失败提示也一样，避免串台）。
+export function saveStateFor(save: SaveState, subject: string): SaveState {
+  return save.subject === subject ? save : IDLE_SAVE
+}
 
 export function useSettingsSave(settings: Config | null, apply: (next: Config) => void, reload: () => void) {
   const [state, setState] = useState<SaveState>(IDLE_SAVE)
@@ -22,18 +29,18 @@ export function useSettingsSave(settings: Config | null, apply: (next: Config) =
       if (!settings) return
       const request = requestRef.current + 1
       requestRef.current = request
-      setState({ kind: 'pending', text: t('settings.save.pending') })
+      setState({ kind: 'pending', text: t('settings.save.pending'), subject: seed })
       // 每次点击是一个独立改动，所以幂等键每次新建；界面不自动重发同一个请求。
       saveSettings(patch, settings.revision, `${seed}-${Date.now()}`)
         .then((next) => {
           if (requestRef.current !== request) return
           // 保存成功返回的就是最新快照，界面直接采用，省掉一次读。
           apply(next)
-          setState({ kind: 'ok', text: t('settings.save.ok', { revision: next.revision, label }) })
+          setState({ kind: 'ok', text: t('settings.save.ok', { revision: next.revision, label }), subject: seed })
         })
         .catch((err: unknown) => {
           if (requestRef.current !== request) return
-          setState({ kind: 'failed', text: t('settings.save.failed', { label, reason: toAppError(err).message }) })
+          setState({ kind: 'failed', text: t('settings.save.failed', { label, reason: toAppError(err).message }), subject: seed })
           reload()
         })
     },

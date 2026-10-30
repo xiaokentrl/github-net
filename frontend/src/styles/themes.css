@@ -2,8 +2,9 @@
    晨光白（light）不用写在这里：它就是 tokens.css 里那一份，原型自己也没给它任何覆盖。
    规则只有一条——换肤只改这批变量，页面组件不许各写一套主题色。
 
-   下面没抄的四组是原型里为还没迁进界面的东西准备的变量，留着空值等于撒谎，等那一屏一起来：
-   --line-a/--line-w/--line-d 给队列头部，--toast 给提示条，--gold 给搜索命中高亮，
+   --gold 这一组已经在 2026-10-31 抄进六套配色：目录行的「检测中」高亮和搜索命中高亮用到了它（原型第 15、611、619、627、635、643 行）。
+   下面没抄的三组仍是原型里为还没迁进界面的东西准备的变量，留着空值等于撒谎，等那一屏一起来：
+   --line-a/--line-w/--line-d 给队列头部，--toast 给提示条，
    --on-green 给原型第 291 行那个绿底白字的小 tag（正式工程的状态徽章走 -soft 底 + 彩色字，没有这种块）。 */
 
 html[data-theme='midnight'] {
@@ -23,6 +24,10 @@ html[data-theme='midnight'] {
   --amber-soft: rgba(245, 166, 35, 0.13);
   --red: #ff5c5c;
   --red-soft: rgba(255, 92, 92, 0.13);
+  --gold: #f5b642;
+  --gold-soft: #2a2213;
+  --gold-soft-2: #241d10;
+  --gold-text: #f0c674;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.45);
 
   --ctl: #171b24;
@@ -51,6 +56,10 @@ html[data-theme='oled'] {
   --amber-soft: rgba(251, 191, 36, 0.14);
   --red: #f87171;
   --red-soft: rgba(248, 113, 113, 0.14);
+  --gold: #fbbf24;
+  --gold-soft: #241d08;
+  --gold-soft-2: #1b1606;
+  --gold-text: #fcd34d;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 1px 3px rgba(0, 0, 0, 0.6);
 
   --ctl: #0f1115;
@@ -79,6 +88,10 @@ html[data-theme='forest'] {
   --amber-soft: rgba(250, 204, 21, 0.14);
   --red: #f87171;
   --red-soft: rgba(248, 113, 113, 0.14);
+  --gold: #facc15;
+  --gold-soft: #232a12;
+  --gold-soft-2: #1d230f;
+  --gold-text: #e7d78f;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.5);
 
   --ctl: #15241e;
@@ -107,6 +120,10 @@ html[data-theme='ocean'] {
   --amber-soft: rgba(251, 191, 36, 0.14);
   --red: #fb7185;
   --red-soft: rgba(251, 113, 133, 0.14);
+  --gold: #fbbf24;
+  --gold-soft: #2a2517;
+  --gold-soft-2: #232013;
+  --gold-text: #f0d494;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.5);
 
   --ctl: #122035;
@@ -136,6 +153,10 @@ html[data-theme='sakura'] {
   --amber-soft: rgba(217, 119, 6, 0.12);
   --red: #e11d48;
   --red-soft: rgba(225, 29, 72, 0.1);
+  --gold: #d97706;
+  --gold-soft: #fdf1e0;
+  --gold-soft-2: #fef7ec;
+  --gold-text: #92400e;
   --shadow: 0 1px 2px rgba(190, 120, 150, 0.1), 0 1px 3px rgba(190, 120, 150, 0.14);
 
   --ctl: #fff;

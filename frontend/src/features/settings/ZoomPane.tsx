@@ -3,6 +3,7 @@ import { InlineStatus } from '../../components/ui/InlineStatus'
 import { Segmented, type SegmentOption } from '../../components/ui/Segmented'
 import { t } from '../../i18n'
 import type { SaveState } from '../../hooks/useSettingsSave'
+import { saveStateFor } from '../../hooks/useSettingsSave'
 import styles from './SettingsDialog.module.css'
 
 // 配置里存的是倍数（0.9 / 1 / 1.1 / 1.25，后端 internal/config 的 allowedZooms 只收这四个），
@@ -24,6 +25,8 @@ export function ZoomPane({
   save: SaveState
   onZoom: (factor: number) => void
 }) {
+  // 状态条只认「界面缩放」这一条改动，别屏的提示不往这儿串。
+  const zoomSave = saveStateFor(save, 'zoom')
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.zoom.title')}</h3>
@@ -46,7 +49,7 @@ export function ZoomPane({
             disabled={save.kind === 'pending'}
             onChange={(percent) => onZoom(percent / 100)}
           />
-          <InlineStatus kind={save.kind} text={save.text} />
+          <InlineStatus kind={zoomSave.kind} text={zoomSave.text} />
         </div>
       </div>
     </>

@@ -1,6 +1,6 @@
 // 组件不直接调用 Wails 绑定，只走这一层；这里也不写业务规则。
-// 后端已接 13 个命令：4 个读/设命令、检测 2 条、队列 7 条；绑定都已生成入库。
-// 这一层只登记界面用得上的命令；应用、还原、打开 Hosts、检查更新在后端仍是契约，不为它们写空壳。
+// 后端 22 条命令这层已全部登记（绑定另有 Ping、RuntimeInfo 两条界面没用到）。
+// 登记不等于界面都在用：加速方法这 2 条从本轮起由详情页的选择区调用。
 import {
   ApplyItems,
   CancelTask,
@@ -12,6 +12,7 @@ import {
   GetDetectResult,
   GetItems,
   GetSettings,
+  GetStrategies,
   GetTasks,
   CheckForUpdates,
   DownloadUpdate,
@@ -22,9 +23,10 @@ import {
   RestoreItems,
   ResumeQueue,
   SaveSettings,
+  SelectStrategy,
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/service'
 import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
-import type { AppStatus, DetectBudgetPreview, DetectResultView, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { AppStatus, DetectBudgetPreview, DetectResultView, ItemsSnapshot, StrategySnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { RetryResult, Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { Info as UpdateInfo } from '../../bindings/github.com/xiaokentrl/github-net/internal/updater/models'
@@ -32,13 +34,14 @@ import type { UpdateDownloadResult } from '../../bindings/github.com/xiaokentrl/
 
 export type NetworkProfile = 'low' | 'standard' | 'full'
 
-// 设置对话框那几屏会改的值：档位、每轮候选上限、侧栏宽度、队列高度、缩放、主题。
+// 设置对话框那几屏会改的值：档位、每轮候选上限、侧栏宽度、队列高度、任务列表宽度、缩放、主题。
 // 没列出来的字段（语言、开机自启等）后端已接但界面还没有能真正改的控件，这里不加。
 export type SettingsPatch = {
   networkProfile?: NetworkProfile
   maxCandidateProbesPerRun?: number
   sidebarWidth?: number
   queueHeight?: number
+  queueListWidth?: number
   zoom?: number
   theme?: string
   closeToTray?: boolean
@@ -71,6 +74,7 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     zoom: patch.zoom ?? null,
     sidebarWidth: patch.sidebarWidth ?? null,
     queueHeight: patch.queueHeight ?? null,
+    queueListWidth: patch.queueListWidth ?? null,
     closeToTray: patch.closeToTray ?? null,
     startMinimized: patch.startMinimized ?? null,
     autoStart: patch.autoStart ?? null,
@@ -80,6 +84,19 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     autoApplyOnStartup: null,
   }
   return SaveSettings(body, expectedRevision, mutationID)
+}
+
+// ===== 加速方法选择 =====
+// 两条都只是记账：列这个范围注册表里真有的方法、把用户选的存进配置服务。
+// 都不启动检测、不写 Hosts、不碰系统代理；保存沿用设置的并发规则（版本 + 幂等键）。
+
+export function getStrategies(scopeId: string): Promise<StrategySnapshot> {
+  return GetStrategies(scopeId)
+}
+
+// expectedRevision 用上一次快照带回的版本号（它来自同一份配置），保存成功返回的就是最新快照。
+export function selectStrategy(scopeId: string, strategyId: string, expectedRevision: number, mutationID: string): Promise<StrategySnapshot> {
+  return SelectStrategy(scopeId, strategyId, expectedRevision, mutationID)
 }
 
 // ===== 检测与队列 =====

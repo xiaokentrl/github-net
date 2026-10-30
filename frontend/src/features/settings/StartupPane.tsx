@@ -2,6 +2,7 @@ import type { Config } from '../../../bindings/github.com/xiaokentrl/github-net/
 import { InlineStatus } from '../../components/ui/InlineStatus'
 import { t } from '../../i18n'
 import type { SaveState } from '../../hooks/useSettingsSave'
+import { saveStateFor } from '../../hooks/useSettingsSave'
 import styles from './SettingsDialog.module.css'
 
 // 开机自启动屏：开关改配置，真正的桌面入口由后端平台层写/删。
@@ -16,6 +17,8 @@ export function StartupPane({
   onAutoStart: (enabled: boolean) => void
 }) {
   const busy = save.kind === 'pending'
+  // 状态条只认「开机自启」这一条改动，别屏的提示不往这儿串。
+  const autoStartSave = saveStateFor(save, 'autoStart')
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.startup.title')}</h3>
@@ -38,7 +41,7 @@ export function StartupPane({
           />
           {t('settings.startup.autoToggle')}
         </label>
-        <InlineStatus kind={save.kind} text={save.text} />
+        <InlineStatus kind={autoStartSave.kind} text={autoStartSave.text} />
       </div>
     </>
   )

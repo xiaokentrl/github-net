@@ -2,6 +2,28 @@
   max-width: 760px;
 }
 
+/* 详情标题行：项目名在左、这个服务的加速方法居中（原型 .service-card-head 第 243 行、DOM 第 2533–2535 行
+   就是这三列：1fr / auto / 1fr，操作那一列本项目还没搬过来，空着也让方法块保持居中）。 */
+.head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .head {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  /* 窄屏时标题仍靠左占满一行（原型第 245 行同一条）。 */
+  .head .title {
+    justify-self: start;
+    width: 100%;
+  }
+}
+
 .title {
   margin: 0;
   font-size: 16px;

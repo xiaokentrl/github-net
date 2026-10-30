@@ -9,11 +9,13 @@ import { StatusBar } from '../components/layout/StatusBar'
 import { Toolbar } from '../components/layout/Toolbar'
 import { CategoryTree } from '../components/navigation/CategoryTree'
 import type { HostsLookup } from '../components/navigation/CategoryNode'
+import { liveByItem } from '../components/navigation/treeStatus'
 import { SearchBox } from '../components/navigation/SearchBox'
 import { SettingsDialog, type SettingsPaneID } from '../features/settings/SettingsDialog'
 import { ItemDetail } from '../features/items/ItemDetail'
 import { TaskPanel } from '../features/tasks/TaskPanel'
 import { subscribeTaskEvents } from '../features/tasks/taskEvents'
+import { useTaskQueue } from '../features/tasks/taskStore'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
@@ -176,6 +178,11 @@ export function App() {
     return map
   }, [snapshot])
 
+  // 树上那一行的状态字和色点要跟着队列走：正在检测、正在写 Hosts、正在还原的项目，原型是整行变色。
+  // 队列只有 taskStore 这一份，TaskPanel 和树读的是同一个快照，不存在两份真相。
+  const queue = useTaskQueue()
+  const liveOf = useMemo(() => liveByItem(queue.tasks), [queue.tasks])
+
   const counts = useMemo(() => {
     const categories = snapshot?.categories ?? []
     const hostnames = new Set<string>()
@@ -232,6 +239,24 @@ export function App() {
     (width: number) => {
       if (!settings || settings.layout.sidebarWidth === width) return
       submit({ sidebarWidth: width }, t('settings.subject.sidebar'), 'sidebar')
+    },
+    [settings, submit],
+  )
+
+  // 队列面板的高度：上方那条横向手柄和布局屏三档预设都走这一条，和后端一致时不写盘。
+  const changeQueueHeight = useCallback(
+    (height: number) => {
+      if (!settings || settings.layout.queueHeight === height) return
+      submit({ queueHeight: height }, t('settings.subject.queueHeight'), 'queueHeight')
+    },
+    [settings, submit],
+  )
+
+  // 队列里「任务列表」的列宽：拖动条和布局屏预设卡都走这一条，和后端一致时不写盘。
+  const changeQueueListWidth = useCallback(
+    (width: number) => {
+      if (!settings || settings.layout.queueListWidth === width) return
+      submit({ queueListWidth: width }, t('settings.subject.queueList'), 'queueList')
     },
     [settings, submit],
   )
@@ -319,12 +344,16 @@ export function App() {
     })
   }, [])
 
-  const startRestore = useCallback((itemId: string) => {
+  // 一条还原链路，详情页的「还原此项」和树上的 ↺（单项或整类）都走这里；
+  // 落定后由上面的任务订阅重读目录，树上的状态字、色点和 ↺ 是否还在都会跟着变。
+  const startRestoreItems = useCallback((itemIds: string[]) => {
     setHostsError('')
-    restoreItems([itemId]).catch((err: unknown) => {
+    restoreItems(itemIds).catch((err: unknown) => {
       setHostsError(getErrorMessage(err))
     })
   }, [])
+
+  const startRestore = useCallback((itemId: string) => startRestoreItems([itemId]), [startRestoreItems])
 
   const openHostsFile = useCallback(() => {
     setHostsError('')
@@ -341,6 +370,8 @@ export function App() {
       <CategoryTree
         categories={snapshot?.categories ?? []}
         hostsOf={hostsOf}
+        liveOf={liveOf}
+        results={queue.results}
         query={debouncedQuery}
         expanded={expanded}
         selectedId={selectedId}
@@ -349,6 +380,7 @@ export function App() {
         onRetry={loadCatalog}
         onToggle={toggleCategory}
         onSelect={setSelectedId}
+        onRestoreItems={startRestoreItems}
       />
     </>
   )
@@ -389,11 +421,15 @@ export function App() {
             onApply={startApply}
             onRestore={startRestore}
             onOpenHosts={openHostsFile}
+            onStrategySaved={loadSettings}
           />
         }
         queue={
           <TaskPanel
             height={settings?.layout.queueHeight ?? null}
+            onHeightChange={changeQueueHeight}
+            listWidth={settings?.layout.queueListWidth ?? null}
+            onListWidthChange={changeQueueListWidth}
             activeItemId={selectedId}
             onPickItem={(itemId) => setSelectedId(itemId)}
           />
@@ -422,6 +458,8 @@ export function App() {
           onProfile={changeProfile}
           onBudget={changeBudget}
           onSidebarWidth={changeSidebarWidth}
+          onQueueHeight={changeQueueHeight}
+          onQueueListWidth={changeQueueListWidth}
           onZoom={changeZoom}
           onTheme={changeTheme}
           onCloseToTray={changeCloseToTray}

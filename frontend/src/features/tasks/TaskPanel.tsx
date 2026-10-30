@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import { cancelTask, clearFinishedTasks, clearQueue, getTasks, pauseQueue, restoreAllHosts, retryFailedTasks, resumeQueue } from '../../api/client'
 import { getErrorMessage } from '../../api/errors'
+import { useBarResize } from '../../components/layout/useBarResize'
 import { t } from '../../i18n'
+import { clampQueueHeight, QUEUE_HEIGHT_DEFAULT, QUEUE_HEIGHT_MIN } from './queueHeight'
+import { clampQueueListWidth, QUEUE_LIST_DEFAULT_WIDTH } from './queueListWidth'
 import { applyTaskSnapshot, markTaskLoadError, useTaskQueue } from './taskStore'
 import styles from './TaskPanel.module.css'
 
@@ -33,15 +36,23 @@ function qdFocusIndex(kids: Task[]): number {
 
 // 队列面板：双栏——左「任务列表」（轮，对应原型包裹任务），右「任务明细」（轮下的项目任务，
 // 三列：名称 / 当前阶段结果 / 进度耗时）。切页面不丢进度——状态住 taskStore，不在这里。
-// height 来自配置里的队列高度（LayoutPane 可调；null 用默认）。
+// height 来自配置里的队列高度（布局屏预设和面板上方那条横向手柄都写这一个字段；null 用默认）。
+// 收起是界面自己的事：原型也没把它落进配置，重开窗口还是展开的。
+// listWidth + onListWidthChange：两栏之间那条分隔条可拖，宽度落在配置里（原型同一条规则）。
 // activeItemId + onPickItem 承担双向联动：点明细行 → 主详情显示该子菜单的候选 IP；
 // 主详情/左树选中子菜单 → 明细行高亮并翻到所在页。
 export function TaskPanel({
   height,
+  onHeightChange,
+  listWidth,
+  onListWidthChange,
   activeItemId,
   onPickItem,
 }: {
   height: number | null
+  onHeightChange: (height: number) => void
+  listWidth: number | null
+  onListWidthChange: (width: number) => void
   activeItemId: string
   onPickItem: (itemId: string) => void
 }) {
@@ -139,6 +150,8 @@ export function TaskPanel({
   const focus = qdFocusIndex(kids)
 
   // 翻页：每页行数按明细面板高度现算；焦点跨页自动跟随，箭头手动翻后保持。
+  // 收起/展开只藏正文（原型 .queue.collapsed），也不落配置——重开窗口还是展开的。
+  const [collapsed, setCollapsed] = useState(false)
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const [perPage, setPerPage] = useState(6)
   const [page, setPage] = useState(0)
@@ -150,7 +163,7 @@ export function TaskPanel({
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
-  }, [selectedRoundId])
+  }, [selectedRoundId, collapsed])
   const pages = Math.max(1, Math.ceil(kids.length / perPage))
   const focusPage = Math.floor(focus / perPage)
   useEffect(() => {
@@ -162,6 +175,51 @@ export function TaskPanel({
   const sliceStart = safePage * perPage
   const slice = kids.slice(sliceStart, sliceStart + perPage)
 
+  // 两栏之间的分隔条：拖动期间只有本地预览，松手提交一次给配置（和侧栏同一套实现）。
+  // 上限当场算——按队列区实测宽度取一份比例，右边明细必须留过半才看得清三列。
+  const clampList = useCallback((value: number) => clampQueueListWidth(value, bodyRef.current?.clientWidth ?? 0), [])
+  const listResize = useBarResize(listWidth, onListWidthChange, clampList, QUEUE_LIST_DEFAULT_WIDTH)
+  const shownListWidth = listResize.liveValue ?? listWidth
+
+  // 详情与队列之间那条横向手柄：拖的是队列高度，时序和两条竖栏共用同一份实现。
+  // 方向取反——手柄往上拖队列才变高；天花板按窗口高度现算（原型 calcQueueMaxH）。
+  const clampHeight = useCallback((value: number) => clampQueueHeight(value, window.innerHeight), [])
+  const heightResize = useBarResize(height, onHeightChange, clampHeight, QUEUE_HEIGHT_DEFAULT, { axis: 'y', invert: true })
+  // 配置还没读回来那一下也用默认高度顶着，不留「按内容撑开」这一种第三态。
+  const shownHeight = heightResize.liveValue ?? height ?? QUEUE_HEIGHT_DEFAULT
+
+
+  // 窗口变窄或变矮后，配置里的宽度、高度可能已经超过当前天花板：
+  // CSS 只是压着显示，配置里仍留着超界值，布局屏会显示一个界面拿不到的数字。
+  // 这里在尺寸稳定 300ms 后把合法值写回去；和后端一致时 App 那层直接吞掉，不会白涨 revision。
+  // 拖动期间与收起状态都不插手：松手那一下提交的本就是夹好的值，再叠一条写盘会打架。
+  const draggingList = listResize.dragging
+  const draggingHeight = heightResize.dragging
+  useEffect(() => {
+    if (draggingList || draggingHeight || collapsed) return
+    let timer = 0
+    const heal = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        const bodyWidth = bodyRef.current?.clientWidth ?? 0
+        if (listWidth !== null && bodyWidth > 0) {
+          const healed = clampQueueListWidth(listWidth, bodyWidth)
+          if (healed !== listWidth) onListWidthChange(healed)
+        }
+        if (height !== null) {
+          const healedHeight = clampQueueHeight(height, window.innerHeight)
+          if (healedHeight !== height) onHeightChange(healedHeight)
+        }
+      }, 300)
+    }
+    heal()
+    window.addEventListener('resize', heal)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('resize', heal)
+    }
+  }, [collapsed, draggingList, draggingHeight, listWidth, height, onListWidthChange, onHeightChange])
+
   const pickItem = useCallback(
     (itemId: string) => {
       if (itemId) onPickItem(itemId)
@@ -172,142 +230,184 @@ export function TaskPanel({
   const activeCount = state.tasks.filter((task) => task.status === 'running' || task.status === 'waiting').length
 
   return (
-    <section className={styles.panel} style={height !== null ? { maxHeight: height } : undefined} aria-label={t('queue.title')}>
-      <header className={styles.head}>
-        <h2 className={styles.title}>{t('queue.title')}</h2>
-        <span className={styles.summary}>
-          {t('queue.summary', { active: activeCount, total: state.tasks.length })}
-          {state.paused ? ` · ${t('queue.pausedBadge')}` : ''}
-        </span>
-        <span className={styles.spacer} />
-        {state.paused ? (
-          <button type="button" onClick={onResume}>
-            {t('queue.resume')}
-          </button>
-        ) : (
-          <button type="button" onClick={onPause} disabled={!state.loaded || state.loadError}>
-            {t('queue.pause')}
-          </button>
-        )}
-        <button type="button" onClick={onCancelWaiting} disabled={!state.loaded || state.loadError || !state.tasks.some((task) => task.status === 'waiting')}>
-          {t('queue.cancelWaiting')}
-        </button>
-        <button
-          type="button"
-          onClick={onRetryFailed}
-          disabled={!state.loaded || state.loadError || !state.tasks.some((task) => task.kind === 'apply' && (task.status === 'failed' || task.status === 'rolledback'))}
-        >
-          {t('queue.retryFailed')}
-        </button>
-        <button type="button" onClick={onClearFinished} disabled={!state.loaded || state.loadError}>
-          {t('queue.clearFinished')}
-        </button>
-        <button type="button" onClick={onClearAll} disabled={!state.loaded || state.loadError || activeCount > 0}>
-          {t('queue.clearAll')}
-        </button>
-        <button type="button" onClick={onRestoreAll} disabled={!state.loaded || state.loadError || activeCount > 0}>
-          {t('queue.restoreAll')}
-        </button>
-      </header>
-
-      {state.loadError ? (
-        <p className={styles.error}>
-          {t('queue.loadError')}
-          <button type="button" onClick={onRetryLoad}>
-            {t('common.retry')}
-          </button>
-        </p>
-      ) : (
-        <div className={styles.body} ref={bodyRef}>
-          <aside className={styles.roundsPane}>
-            <div className={styles.paneHead}>{t('queue.roundsTitle')}</div>
-            {roundRows.length === 0 ? (
-              <div className={styles.paneEmpty}>{state.loaded ? t('queue.empty') : t('detail.loading')}</div>
-            ) : (
-              roundRows.map((r) => (
-                <div
-                  key={r.round.id}
-                  className={`${styles.qrow} ${selected?.round.id === r.round.id ? styles.qrowSel : ''}`}
-                  onClick={() => {
-                    manualRef.current = true
-                    setSelectedRoundId(r.round.id)
-                                }}
-                  title={`${r.round.name} · ${t(statusKeyOf(r.status))}`}
-                >
-                  <span className={`${styles.dot} ${styles['dot-' + r.status]}`} />
-                  <span className={styles.qrowName} title={r.round.name}>
-                    {r.round.name}
-                  </span>
-                  <span className={styles.qrowCount}>
-                    {r.done}/{r.total}
-                  </span>
-                </div>
-              ))
-            )}
-          </aside>
-          <section className={styles.detailPane}>
-            {selected === null ? (
-              <div className={styles.paneEmpty}>{t('queue.detail.pick')}</div>
-            ) : (
-              <table className={styles.qtable2}>
-                <thead>
-                  <tr>
-                    <th>{t('queue.detail.name')}</th>
-                    <th>{t('queue.detail.stage')}</th>
-                    <th>{t('queue.detail.progress')}</th>
-                    <th className={styles.qdCtl}>
-                      <span className={styles.qdPage}>
-                        {pages > 1 ? `${safePage + 1}/${pages} 页` : ''}
-                      </span>
-                      <button type="button" className={styles.qdArrow} id="qdPrev" title="上一页" disabled={safePage <= 0} onClick={() => setPage(Math.max(0, safePage - 1))}>
-                        ↑
-                      </button>
-                      <button type="button" className={styles.qdArrow} id="qdNext" title="下一页" disabled={safePage >= pages - 1} onClick={() => setPage(Math.min(pages - 1, safePage + 1))}>
-                        ↓
-                      </button>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {slice.map((task) => {
-                    const stageResult = task.status === 'running' || task.status === 'restoring'
-                      ? task.phaseText || t('queue.detail.running')
-                      : task.status === 'failed' || task.status === 'rolledback'
-                        ? task.errorMsg || t('queue.status.failed')
-                        : task.status === 'skipped'
-                          ? task.errorMsg || t('queue.status.skipped')
-                          : '—'
-                    const prog = task.progress > 0 || task.status === 'running'
-                      ? `${task.progress}%${task.duration ? ' · ' + task.duration : ''}`
-                      : task.duration || '—'
-                    return (
-                      <tr
-                        key={task.id}
-                        className={`${task.id === kids[focus]?.id ? styles.focus : ''} ${task.itemId && task.itemId === activeItemId ? styles.sel : ''}`}
-                        onClick={() => pickItem(task.itemId)}
-                      >
-                        <td>
-                          <span className={`${styles.dot} ${styles['dot-' + task.status]}`} />
-                          <span title={task.name}>{task.name}</span>
-                        </td>
-                        <td className={task.status === 'failed' ? styles.err : ''}>{stageResult}</td>
-                        <td className={styles.dim}>{prog}</td>
-                      </tr>
-                    )
-                  })}
-                  {slice.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className={styles.dim}>
-                        {t('queue.detail.none')}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            )}
-          </section>
-        </div>
+    <>
+      {/* 手柄在面板外面，是详情与队列之间的兄弟节点——原型 .right 里就是这个顺序（第 840 行）。
+          收起时跟着藏起来（原型 toggleQueueCollapsed 里 display:none），不然拖着改一个看不见的高度。 */}
+      {!collapsed && height !== null && (
+        <div
+          className={`${styles.rowResizer} ${heightResize.dragging ? styles.rowResizerDragging : ''}`}
+          role="separator"
+          aria-orientation="horizontal"
+          title={t('queue.heightResizer.title')}
+          onPointerDown={heightResize.onPointerDown}
+          onPointerMove={heightResize.onPointerMove}
+          onPointerUp={heightResize.onPointerUp}
+          onPointerCancel={heightResize.onPointerUp}
+        />
       )}
-    </section>
+      <section
+        ref={heightResize.targetRef}
+        className={`${styles.panel} ${collapsed ? styles.panelCollapsed : ''}`}
+        style={{ height: `${shownHeight}px`, minHeight: `${QUEUE_HEIGHT_MIN}px` }}
+        aria-label={t('queue.title')}
+      >
+        <header className={styles.head}>
+          <h2 className={styles.title}>{t('queue.title')}</h2>
+          <span className={styles.summary}>
+            {t('queue.summary', { active: activeCount, total: state.tasks.length })}
+            {state.paused ? ` · ${t('queue.pausedBadge')}` : ''}
+          </span>
+          <span className={styles.spacer} />
+          {state.paused ? (
+            <button type="button" onClick={onResume}>
+              {t('queue.resume')}
+            </button>
+          ) : (
+            <button type="button" onClick={onPause} disabled={!state.loaded || state.loadError}>
+              {t('queue.pause')}
+            </button>
+          )}
+          <button type="button" onClick={onCancelWaiting} disabled={!state.loaded || state.loadError || !state.tasks.some((task) => task.status === 'waiting')}>
+            {t('queue.cancelWaiting')}
+          </button>
+          <button
+            type="button"
+            onClick={onRetryFailed}
+            disabled={!state.loaded || state.loadError || !state.tasks.some((task) => task.kind === 'apply' && (task.status === 'failed' || task.status === 'rolledback'))}
+          >
+            {t('queue.retryFailed')}
+          </button>
+          <button type="button" onClick={onClearFinished} disabled={!state.loaded || state.loadError}>
+            {t('queue.clearFinished')}
+          </button>
+          <button type="button" onClick={onClearAll} disabled={!state.loaded || state.loadError || activeCount > 0}>
+            {t('queue.clearAll')}
+          </button>
+          <button type="button" onClick={onRestoreAll} disabled={!state.loaded || state.loadError || activeCount > 0}>
+            {t('queue.restoreAll')}
+          </button>
+          {/* 收起/展开：原型队列头最后那颗 toggle-btn。只改界面，不写配置。 */}
+          <button
+            type="button"
+            className={styles.toggleBtn}
+            aria-expanded={!collapsed}
+            title={collapsed ? t('queue.expand') : t('queue.collapse')}
+            aria-label={collapsed ? t('queue.expand') : t('queue.collapse')}
+            onClick={() => setCollapsed((value) => !value)}
+          >
+            {collapsed ? '▴' : '▾'}
+          </button>
+        </header>
+
+        {state.loadError ? (
+          <p className={styles.error}>
+            {t('queue.loadError')}
+            <button type="button" onClick={onRetryLoad}>
+              {t('common.retry')}
+            </button>
+          </p>
+        ) : (
+          <div className={styles.body} ref={bodyRef}>
+            <aside className={styles.roundsPane} ref={listResize.targetRef} style={shownListWidth !== null ? { width: shownListWidth } : undefined}>
+              <div className={styles.paneHead}>{t('queue.roundsTitle')}</div>
+              {roundRows.length === 0 ? (
+                <div className={styles.paneEmpty}>{state.loaded ? t('queue.empty') : t('detail.loading')}</div>
+              ) : (
+                roundRows.map((r) => (
+                  <div
+                    key={r.round.id}
+                    className={`${styles.qrow} ${selected?.round.id === r.round.id ? styles.qrowSel : ''}`}
+                    onClick={() => {
+                      manualRef.current = true
+                      setSelectedRoundId(r.round.id)
+                                  }}
+                    title={`${r.round.name} · ${t(statusKeyOf(r.status))}`}
+                  >
+                    <span className={`${styles.dot} ${styles['dot-' + r.status]}`} />
+                    <span className={styles.qrowName} title={r.round.name}>
+                      {r.round.name}
+                    </span>
+                    <span className={styles.qrowCount}>
+                      {r.done}/{r.total}
+                    </span>
+                  </div>
+                ))
+              )}
+            </aside>
+            <div
+              className={`${styles.colResizer} ${listResize.dragging ? styles.colResizerDragging : ''}`}
+              role="separator"
+              aria-orientation="vertical"
+              title={t('layout.queueListResizer.title')}
+              onPointerDown={listResize.onPointerDown}
+              onPointerMove={listResize.onPointerMove}
+              onPointerUp={listResize.onPointerUp}
+              onPointerCancel={listResize.onPointerUp}
+            />
+            <section className={styles.detailPane}>
+              {selected === null ? (
+                <div className={styles.paneEmpty}>{t('queue.detail.pick')}</div>
+              ) : (
+                <table className={styles.qtable2}>
+                  <thead>
+                    <tr>
+                      <th>{t('queue.detail.name')}</th>
+                      <th>{t('queue.detail.stage')}</th>
+                      <th>{t('queue.detail.progress')}</th>
+                      <th className={styles.qdCtl}>
+                        <span className={styles.qdPage}>
+                          {pages > 1 ? `${safePage + 1}/${pages} 页` : ''}
+                        </span>
+                        <button type="button" className={styles.qdArrow} id="qdPrev" title="上一页" disabled={safePage <= 0} onClick={() => setPage(Math.max(0, safePage - 1))}>
+                          ↑
+                        </button>
+                        <button type="button" className={styles.qdArrow} id="qdNext" title="下一页" disabled={safePage >= pages - 1} onClick={() => setPage(Math.min(pages - 1, safePage + 1))}>
+                          ↓
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {slice.map((task) => {
+                      const stageResult = task.status === 'running' || task.status === 'restoring'
+                        ? task.phaseText || t('queue.detail.running')
+                        : task.status === 'failed' || task.status === 'rolledback'
+                          ? task.errorMsg || t('queue.status.failed')
+                          : task.status === 'skipped'
+                            ? task.errorMsg || t('queue.status.skipped')
+                            : '—'
+                      const prog = task.progress > 0 || task.status === 'running'
+                        ? `${task.progress}%${task.duration ? ' · ' + task.duration : ''}`
+                        : task.duration || '—'
+                      return (
+                        <tr
+                          key={task.id}
+                          className={`${task.id === kids[focus]?.id ? styles.focus : ''} ${task.itemId && task.itemId === activeItemId ? styles.sel : ''}`}
+                          onClick={() => pickItem(task.itemId)}
+                        >
+                          <td>
+                            <span className={`${styles.dot} ${styles['dot-' + task.status]}`} />
+                            <span title={task.name}>{task.name}</span>
+                          </td>
+                          <td className={task.status === 'failed' ? styles.err : ''}>{stageResult}</td>
+                          <td className={styles.dim}>{prog}</td>
+                        </tr>
+                      )
+                    })}
+                    {slice.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className={styles.dim}>
+                          {t('queue.detail.none')}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </section>
+          </div>
+        )}
+      </section>
+    </>
   )
 }

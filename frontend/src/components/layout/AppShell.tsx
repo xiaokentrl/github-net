@@ -57,12 +57,13 @@ export function AppShell({
 }) {
   const resize = useSidebarResize(sidebarWidth, onSidebarResize)
   // 拖动期间用本地预览值，松手提交后由配置快照接管。
-  const shownWidth = resize.liveWidth ?? sidebarWidth
+  const shownWidth = resize.liveValue ?? sidebarWidth
   // 可拖范围的唯一前端来源是 useSidebarResize 那两个常量，这里当场写成变量给 CSS 用，
   // 免得同一对数字在 CSS 里再抄一遍（抄了就会漂；漂了由后端的相等断言拦）。
   // 后端没给宽度时不写 --sidebar-w，让 tokens.css 的默认值生效，避免第二份「默认 240」。
-  // 宽度变量挂在应用根上：左树和下方任务队列的左栏共用同一个 --sidebar-w，
-  // 两根分隔线永远垂直对齐（否则队列左栏和菜单错位）。
+  // 宽度变量挂在应用根上：只给左侧类目树用。
+  // 队列面板里「任务列表」那一栏另有自己的配置宽度（queueListWidth，TaskPanel 内部拖），
+  // 两者不再共用，所以这两根分隔线不保证垂直对齐——原型也是这样分的（.queue-left 按队列区宽度算上限）。
   const appStyle = {
     '--sidebar-min-w': `${SIDEBAR_MIN_WIDTH}px`,
     '--sidebar-max-w': `${SIDEBAR_MAX_WIDTH}px`,
@@ -122,10 +123,14 @@ export function AppShell({
             onPointerCancel={resize.onPointerUp}
           />
         )}
-        <section className={styles.detail}>{detail}</section>
+        <div className={styles.right}>
+          <section className={styles.detail}>{detail}</section>
+          {/* 队列槽就在详情下面、侧栏右侧——原型 .right(229) 的竖向顺序：详情、高度分隔条、队列。
+              分隔条和收起是队列面板自己的事，所以由 queue 这一份内容自己渲染，这里不套多余的盒子。 */}
+          {queue}
+        </div>
       </main>
 
-      {queue}
       <footer className={styles.statusbar}>{statusbar}</footer>
     </div>
   )

@@ -12,6 +12,7 @@ export function Select({
   options,
   disabled,
   disabledHint,
+  placeholder,
   onChange,
 }: {
   label: string
@@ -19,6 +20,9 @@ export function Select({
   options: SelectOption[]
   disabled?: boolean
   disabledHint?: string
+  // 「还没选」要能被显示出来：不给占位项时，浏览器会把没有匹配值的选择框显示成第一项，
+  // 那等于把没保存过的状态画成已经选了第一个方法。占位项禁用、不可选，只负责把空状态说清。
+  placeholder?: string
   // 整组不可用时没有可改的值，所以这里允许不传（与 Segmented 同一形状）。
   onChange?: (value: string) => void
 }) {
@@ -31,6 +35,7 @@ export function Select({
           disabled={disabled}
           onChange={(event: ChangeEvent<HTMLSelectElement>) => onChange?.(event.target.value)}
         >
+          {placeholder !== undefined && <option value="" disabled>{placeholder}</option>}
           {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}

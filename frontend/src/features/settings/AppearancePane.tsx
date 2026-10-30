@@ -5,6 +5,7 @@ import { ThemeGrid } from '../theme/ThemeGrid'
 import { themeName } from '../theme/themes'
 import { t } from '../../i18n'
 import type { SaveState } from '../../hooks/useSettingsSave'
+import { saveStateFor } from '../../hooks/useSettingsSave'
 import styles from './SettingsDialog.module.css'
 
 // 外观：主题点一下就换肤并写盘；语言这一项整组禁用，因为后端只收 zh-CN，
@@ -18,6 +19,8 @@ export function AppearancePane({
   save: SaveState
   onTheme: (id: string) => void
 }) {
+  // 状态条只认「主题」这一条改动，别屏的提示不往这儿串。
+  const themeSave = saveStateFor(save, 'theme')
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.appearance.title')}</h3>
@@ -54,7 +57,7 @@ export function AppearancePane({
           <span className={styles.currentTheme}>
             {t('settings.appearance.themeCurrent', { name: themeName(settings.appearance.theme) })}
           </span>
-          <InlineStatus kind={save.kind} text={save.text} />
+          <InlineStatus kind={themeSave.kind} text={themeSave.text} />
         </div>
         <ThemeGrid
           current={settings.appearance.theme}

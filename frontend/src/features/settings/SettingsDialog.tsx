@@ -50,6 +50,8 @@ export function SettingsDialog({
   onProfile,
   onBudget,
   onSidebarWidth,
+  onQueueHeight,
+  onQueueListWidth,
   onZoom,
   onTheme,
   onCloseToTray,
@@ -66,6 +68,8 @@ export function SettingsDialog({
   onProfile: (profile: NetworkProfile) => void
   onBudget: (value: number) => void
   onSidebarWidth: (width: number) => void
+  onQueueHeight: (height: number) => void
+  onQueueListWidth: (width: number) => void
   onZoom: (factor: number) => void
   onTheme: (id: string) => void
   onCloseToTray: (enabled: boolean) => void
@@ -129,7 +133,7 @@ export function SettingsDialog({
             {pane === 'network' && (
               <NetworkPane settings={settings} hostnames={hostnames} save={save} onProfile={onProfile} onBudget={onBudget} />
             )}
-            {pane === 'layout' && <LayoutPane settings={settings} save={save} onSidebarWidth={onSidebarWidth} />}
+            {pane === 'layout' && <LayoutPane settings={settings} save={save} onSidebarWidth={onSidebarWidth} onQueueHeight={onQueueHeight} onQueueListWidth={onQueueListWidth} />}
             {pane === 'zoom' && <ZoomPane settings={settings} save={save} onZoom={onZoom} />}
             {pane === 'appearance' && <AppearancePane settings={settings} save={save} onTheme={onTheme} />}
             {pane === 'tray' && <TrayPane settings={settings} save={save} onCloseToTray={onCloseToTray} onStartMinimized={onStartMinimized} />}

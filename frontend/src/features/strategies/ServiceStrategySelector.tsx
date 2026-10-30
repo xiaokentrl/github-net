@@ -1,0 +1,122 @@
+import { useEffect, useRef, useState } from 'react'
+import type { StrategySnapshot } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import { getStrategies, selectStrategy } from '../../api/client'
+import { toAppError } from '../../api/errors'
+import { t } from '../../i18n'
+import { InlineStatus, type SaveKind } from '../../components/ui/InlineStatus'
+import { Select } from '../../components/ui/Select'
+import styles from './ServiceStrategySelector.module.css'
+
+type Load = 'loading' | 'ready' | 'error'
+
+// 当前服务用哪个加速方法：列表只来自后端注册表，选完立刻存进配置服务。
+// 切换本身不启动检测、不写 Hosts，也绝不替用户挑一个——没保存过就显示「还没选」，
+// 因为「显示成第一个方法」会让人以为已经在用这个方法（后端同一条规则：不静默换方法）。
+export function ServiceStrategySelector({
+  scopeId,
+  scopeName,
+  onSaved,
+}: {
+  scopeId: string
+  scopeName: string
+  onSaved: () => void
+}) {
+  const [snap, setSnap] = useState<StrategySnapshot | null>(null)
+  const [load, setLoad] = useState<Load>('loading')
+  const [reason, setReason] = useState('')
+  const [kind, setKind] = useState<SaveKind>('idle')
+  const [text, setText] = useState('')
+  // 只认最后一次请求：换分类点得快时，旧范围回来的快照不能盖掉新范围的。
+  const requestRef = useRef(0)
+
+  const label = t('strategy.label', { name: scopeName })
+
+  useEffect(() => {
+    const request = requestRef.current + 1
+    requestRef.current = request
+    setLoad('loading')
+    setSnap(null)
+    setReason('')
+    setKind('idle')
+    setText('')
+    getStrategies(scopeId).then(
+      (next) => {
+        if (requestRef.current !== request) return
+        setSnap(next)
+        setLoad('ready')
+      },
+      (err: unknown) => {
+        if (requestRef.current !== request) return
+        setReason(toAppError(err).message)
+        setLoad('error')
+      },
+    )
+  }, [scopeId])
+
+  const choose = (strategyId: string) => {
+    if (!snap) return
+    const request = requestRef.current + 1
+    requestRef.current = request
+    setKind('pending')
+    setText(t('settings.save.pending'))
+    selectStrategy(scopeId, strategyId, snap.revision, `strategy-${scopeId}-${Date.now()}`).then(
+      (next) => {
+        if (requestRef.current !== request) return
+        setSnap(next)
+        setKind('ok')
+        setText(t('settings.save.ok', { revision: next.revision, label }))
+        // 这次保存把配置版本号抬了一格：让手里也有一份配置的地方重读，不然它下一次保存必撞版本冲突。
+        onSaved()
+      },
+      (err: unknown) => {
+        if (requestRef.current !== request) return
+        const failed = toAppError(err)
+        setKind('failed')
+        setText(t('settings.save.failed', { label, reason: failed.message }))
+        // 失败最可能是手上这份版本旧了，回读一次让选择框回到后端真实保存的状态；读不到就保留原话。
+        getStrategies(scopeId).then(
+          (next) => {
+            if (requestRef.current !== request) return
+            setSnap(next)
+            setLoad('ready')
+          },
+          () => {
+            /* 回读也失败：失败原因已经显示在状态条上，这里不再叠第二条 */
+          },
+        )
+      },
+    )
+  }
+
+  if (load === 'loading') return <p className={styles.note}>{t('strategy.loading')}</p>
+  if (load === 'error') return <p className={styles.warn}>{t('strategy.error', { name: scopeName, reason })}</p>
+
+  const options = snap?.options ?? []
+  if (options.length === 0) {
+    return <p className={styles.warn}>{t('strategy.empty', { name: scopeName })}</p>
+  }
+
+  // 后端说这个选择已经不能用了（方法消失了、或它不声明本范围）：选择框回到「还没选」，
+  // 并把那句原因显示出来——不能把失效的选择画成生效中，也不能自作主张换成别的。
+  const current = snap?.savedId && snap.savedUsable ? snap.savedId : ''
+  const notices = snap?.notices ?? []
+
+  return (
+    <div className={styles.stack}>
+      <div className={styles.panel} title={t('strategy.hint')}>
+        <Select
+          label={label}
+          value={current}
+          placeholder={t('strategy.pickOne')}
+          disabled={kind === 'pending'}
+          options={options.map((option) => ({ value: option.id, label: option.name }))}
+          onChange={choose}
+        />
+        <InlineStatus kind={kind} text={text} />
+      </div>
+      {snap?.savedNote ? <p className={styles.warn}>{t('strategy.stale', { note: snap.savedNote })}</p> : null}
+      {current === '' && !snap?.savedNote ? <p className={styles.note}>{t('strategy.unsaved')}</p> : null}
+      {notices.length > 0 ? <p className={styles.warn}>{t('strategy.notice', { reason: notices.join('；') })}</p> : null}
+    </div>
+  )
+}
