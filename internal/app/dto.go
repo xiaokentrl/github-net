@@ -156,10 +156,29 @@ func HostsStates(c *catalog.Catalog, snap hosts.Snapshot, revision int64) []Host
 				state.Status = HostsNone
 				state.Message = ""
 			}
+			// 拍板 1b（区段外同名行照实写入、只提示）：区段之前的手写行里如果有同名的
+			// 主机名，写入的映射会被它挡住、实际不生效——状态仍是「已应用」，但把事实说清。
+			if partialVerdict && itemShadowsOutside(snap, item.Hostnames) {
+				state.Message = "区段外有同名的手写行，这条映射被它挡住、暂不生效"
+			}
 			out = append(out, state)
 		}
 	}
 	return out
+}
+
+// itemShadowsOutside 判断这个项目的域名里有没有被区段外手写行挡住的。
+// 只在区段可判读时有意义；Shadowed 为空时 O(1) 返回。
+func itemShadowsOutside(snap hosts.Snapshot, hostnames []string) bool {
+	if len(snap.Shadowed) == 0 {
+		return false
+	}
+	for _, h := range hostnames {
+		if snap.Shadowed[hosts.NormalizeHostname(h)] {
+			return true
+		}
+	}
+	return false
 }
 
 // hostsVerdict 给出这一份 Hosts 的整体结论。

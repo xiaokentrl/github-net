@@ -30,6 +30,10 @@ func TestDefaultIsValidAndUnsaved(t *testing.T) {
 	if c.Network.Profile != ProfileLow || c.Network.MaxCandidateProbesPerRun != 130 {
 		t.Errorf("首次安装必须是省流档、总上限 130，得到 %+v", c.Network)
 	}
+	// 队列三个尺寸各有默认值：左栏 220 是原型定稿的标准宽度。
+	if c.Layout.SidebarWidth != 240 || c.Layout.QueueHeight != 252 || c.Layout.QueueListWidth != 220 {
+		t.Errorf("布局默认值不对: %+v", c.Layout)
+	}
 }
 
 func TestSnapshotWritesNothingWhenFileMissing(t *testing.T) {
@@ -169,6 +173,8 @@ func TestInvalidValuesRejected(t *testing.T) {
 		{"侧栏过窄", Patch{SidebarWidth: num(120)}},
 		{"侧栏过宽", Patch{SidebarWidth: num(900)}},
 		{"队列过矮", Patch{QueueHeight: num(60)}},
+		{"任务列表过窄", Patch{QueueListWidth: num(149)}},
+		{"任务列表过宽", Patch{QueueListWidth: num(1201)}},
 		{"自动应用没开检测", Patch{AutoApplyOnStartup: flag(true)}},
 		{"范围不在目录里", Patch{DefaultStrategyByScope: &map[string]string{"nope": "dns-hosts"}}},
 		{"方法还没注册", Patch{DefaultStrategyByScope: &map[string]string{"github": "dns-hosts"}}},
@@ -197,6 +203,45 @@ func TestCandidateBudgetBoundaryValuesAreAccepted(t *testing.T) {
 		if got.Network.MaxCandidateProbesPerRun != value {
 			t.Errorf("总上限 = %d，期望 %d", got.Network.MaxCandidateProbesPerRun, value)
 		}
+	}
+}
+
+// 队列左栏「任务列表」的宽度：界面拖拽和布局屏预设都往这里写。
+// 下限 150 与上限 1200 本身必须能用——界面按「队列区宽的 45%」再收一道，
+// 但存储这层只认这两个死数，越界就整批拒，不能悄悄夹成边界值。
+func TestQueueListWidthBoundsAndRoundTrip(t *testing.T) {
+	for _, value := range []int{QueueListWidthMin, 220, QueueListWidthMax} {
+		path := newPath(t)
+		s := NewStore(path, nil, nil)
+		got, err := s.Save(Patch{QueueListWidth: num(value)}, 0, "m-width")
+		if err != nil {
+			t.Fatalf("任务列表宽度 %d 应能保存: %v", value, err)
+		}
+		if got.Layout.QueueListWidth != value {
+			t.Errorf("保存回包里的宽度 = %d，期望 %d", got.Layout.QueueListWidth, value)
+		}
+		// 重新打开一份 store 读同一份盘：宽度必须还在，不能只活在内存里。
+		reopened := NewStore(path, nil, nil)
+		again, err := reopened.Snapshot()
+		if err != nil {
+			t.Fatalf("重读配置失败: %v", err)
+		}
+		if again.Layout.QueueListWidth != value {
+			t.Errorf("落盘再读回的宽度 = %d，期望 %d", again.Layout.QueueListWidth, value)
+		}
+	}
+	// 没提交这个字段时不许多写一刀：宽度保持上一次保存的值。
+	path := newPath(t)
+	s := NewStore(path, nil, nil)
+	if _, err := s.Save(Patch{QueueListWidth: num(300)}, 0, "m1"); err != nil {
+		t.Fatalf("先存一个宽度: %v", err)
+	}
+	got, err := s.Save(Patch{Theme: str("oled")}, 1, "m2")
+	if err != nil {
+		t.Fatalf("只改主题的保存应成功: %v", err)
+	}
+	if got.Layout.QueueListWidth != 300 {
+		t.Errorf("只改主题不该动宽度，实际 %d", got.Layout.QueueListWidth)
 	}
 }
 

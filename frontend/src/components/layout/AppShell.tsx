@@ -106,7 +106,7 @@ export function AppShell({
       <div className={styles.toolbar}>{toolbar}</div>
 
       <main className={styles.main}>
-        <aside ref={resize.sidebarRef} className={styles.sidebar} style={sidebarStyle}>
+        <aside ref={resize.targetRef} className={styles.sidebar} style={sidebarStyle}>
           <div className={styles.treeScroll}>{sidebar}</div>
           <div className={styles.sideFoot}>{sidebarFooter}</div>
         </aside>

@@ -40,6 +40,10 @@ const (
 	SidebarWidthMax           = 600
 	QueueHeightMin            = 120
 	QueueHeightMax            = 2000
+	// 任务列表列宽：下限 150 是「轮名加计数还看得清」的实测值，上限 1200 只是存储兜底，
+	// 界面上真正的上限跟着队列区宽度走（最多占 45%，右边明细必须留过半），两边同值由门钉住。
+	QueueListWidthMin = 150
+	QueueListWidthMax = 1200
 )
 
 var (
@@ -81,10 +85,12 @@ type AppearanceConfig struct {
 	Zoom     float64 `json:"zoom"`
 }
 
-// LayoutConfig 是用户可调整的两个布局尺寸，单位像素。
+// LayoutConfig 是用户可调整的三个布局尺寸，单位像素。
 type LayoutConfig struct {
 	SidebarWidth int `json:"sidebarWidth"`
 	QueueHeight  int `json:"queueHeight"`
+	// QueueListWidth 是队列里左栏「任务列表」的宽度；右边任务明细占剩下的全部。
+	QueueListWidth int `json:"queueListWidth"`
 }
 
 // TreeBehaviorConfig 是两个独立的分类树展开开关。
@@ -127,6 +133,7 @@ type Patch struct {
 	Zoom                           *float64           `json:"zoom"`
 	SidebarWidth                   *int               `json:"sidebarWidth"`
 	QueueHeight                    *int               `json:"queueHeight"`
+	QueueListWidth                 *int               `json:"queueListWidth"`
 	DetectFocusFollow              *bool              `json:"detectFocusFollow"`
 	ApplyFocusFollow               *bool              `json:"applyFocusFollow"`
 	AutoStart                      *bool              `json:"autoStart"`
@@ -147,7 +154,7 @@ func Default() Config {
 		},
 		Accelerator: AcceleratorConfig{DefaultStrategyByScope: map[string]string{}},
 		Appearance:  AppearanceConfig{Language: "zh-CN", Theme: "light", Zoom: 1},
-		Layout:      LayoutConfig{SidebarWidth: 240, QueueHeight: 252},
+		Layout:      LayoutConfig{SidebarWidth: 240, QueueHeight: 252, QueueListWidth: 220},
 	}
 }
 
@@ -205,6 +212,9 @@ func (c Config) Validate(scopeIDs map[string]bool, strategies map[string]bool) e
 	}
 	if c.Layout.QueueHeight < QueueHeightMin || c.Layout.QueueHeight > QueueHeightMax {
 		return fmt.Errorf("%w: 队列高度要在 %d 到 %d 像素之间", ErrInvalid, QueueHeightMin, QueueHeightMax)
+	}
+	if c.Layout.QueueListWidth < QueueListWidthMin || c.Layout.QueueListWidth > QueueListWidthMax {
+		return fmt.Errorf("%w: 任务列表宽度要在 %d 到 %d 像素之间", ErrInvalid, QueueListWidthMin, QueueListWidthMax)
 	}
 	if c.Startup.AutoApplyOnStartup && !c.Startup.AutoDetectOnStartup {
 		return fmt.Errorf("%w: 启动自动应用依赖启动自动检测，请先开启后者", ErrInvalid)
@@ -458,6 +468,9 @@ func applyPatch(c *Config, p Patch) {
 	}
 	if p.QueueHeight != nil {
 		c.Layout.QueueHeight = *p.QueueHeight
+	}
+	if p.QueueListWidth != nil {
+		c.Layout.QueueListWidth = *p.QueueListWidth
 	}
 	if p.DetectFocusFollow != nil {
 		c.TreeBehavior.DetectFocusFollow = *p.DetectFocusFollow
