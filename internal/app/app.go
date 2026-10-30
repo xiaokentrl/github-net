@@ -3,7 +3,6 @@ package app
 import (
 	"crypto/ed25519"
 	"errors"
-	"fmt"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -225,26 +224,10 @@ func (s *Service) GetAppStatus() (AppStatus, error) {
 	return status, nil
 }
 
-// SetTheme 托盘菜单切主题：后端内部调用，拿不到前端的 revision，
-// 用当前快照的 revision 走同一条保存链（校验→原子落盘→递增），冲突或失败如实返回。
-// 同主题直接返回现状，不写盘。
-func (s *Service) SetTheme(themeID string) (config.Config, error) {
-	if s.settings == nil {
-		return config.Config{}, s.settingsFailure()
-	}
-	cfg, err := s.settings.Snapshot()
-	if err != nil {
-		return config.Config{}, ToPublicError(err)
-	}
-	if cfg.Appearance.Theme == themeID {
-		return cfg, nil
-	}
-	patch := config.Patch{Theme: &themeID}
-	out, err := s.settings.Save(patch, cfg.Revision, "tray-theme-"+themeID+"-"+fmt.Sprint(time.Now().UnixNano()))
-	if err != nil {
-		return config.Config{}, ToPublicError(err)
-	}
-	return out, nil
+// SettingsStore 把配置 store 交给托盘的 ThemeController 用（main.go 装配层）。
+// 只暴露 store 本身，不给前端——ThemeController 不注册为 Wails 服务，界面无法调用。
+func (s *Service) SettingsStore() *config.Store {
+	return s.settings
 }
 
 // settingsFailure 保证「没有配置服务」这件事一定带回一个错误，绝不返回 (空配置, nil)。

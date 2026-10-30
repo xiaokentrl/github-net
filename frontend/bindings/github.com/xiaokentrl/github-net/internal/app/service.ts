@@ -229,3 +229,11 @@ export function SaveSettings(patch: config$0.Patch, expectedRevision: number, mu
 export function SelectStrategy(scopeID: string, strategyID: string, expectedRevision: number, mutationID: string): $CancellablePromise<$models.StrategySnapshot> {
     return $Call.ByID(3592968659, scopeID, strategyID, expectedRevision, mutationID);
 }
+
+/**
+ * SettingsStore 把配置 store 交给托盘的 ThemeController 用（main.go 装配层）。
+ * 只暴露 store 本身，不给前端——ThemeController 不注册为 Wails 服务，界面无法调用。
+ */
+export function SettingsStore(): $CancellablePromise<config$0.Store | null> {
+    return $Call.ByID(697815488);
+}

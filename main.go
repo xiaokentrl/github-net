@@ -157,6 +157,8 @@ func main() {
 		}
 	}()
 
+	themeCtl := appsvc.NewThemeController(service.SettingsStore())
+
 	tray := platformApp.SystemTray.New()
 	tray.SetIcon(trayIcon)
 	tray.SetTooltip(appName)
@@ -178,7 +180,7 @@ func main() {
 			id, name := th.id, th.name
 			item := themeMenu.AddCheckbox(name, id == current)
 			item.OnClick(func(*application.Context) {
-				cfg, err := service.SetTheme(id)
+				cfg, err := themeCtl.Set(id)
 				if err != nil {
 					platformApp.Logger.Error("托盘切主题失败", "theme", id, "err", err)
 					return

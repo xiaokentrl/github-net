@@ -9,5 +9,6 @@ export type {
     NetworkConfig,
     Patch,
     StartupConfig,
+    Store,
     TreeBehaviorConfig
 } from "./models.js";

@@ -90,6 +90,12 @@ export interface StartupConfig {
 }
 
 /**
+ * Store 负责一个配置文件的读写，所有写入都在锁里串行执行。
+ */
+export interface Store {
+}
+
+/**
  * TreeBehaviorConfig 是两个独立的分类树展开开关。
  */
 export interface TreeBehaviorConfig {
