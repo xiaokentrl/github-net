@@ -9,6 +9,9 @@
   "topbar.update.badge": "有新版本 {version}",
   "topbar.update.hint": "打开设置中心的检测升级屏查看详情",
   "topbar.statusError": "状态读取失败：{reason}",
+  "topbar.window.minimise": "最小化",
+  "topbar.window.maximise": "最大化或还原",
+  "topbar.window.close": "关闭窗口",
 
   "toolbar.checkAll": "全选",
   "toolbar.uncheckAll": "全不选",

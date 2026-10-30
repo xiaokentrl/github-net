@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { Window } from '@wailsio/runtime'
 import { HostsAccess } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { AppStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
@@ -20,8 +21,14 @@ const PERM_HINT_KEY: Record<HostsAccess, string> = {
   [HostsAccess.HostsAccessUnknown]: 'topbar.perm.hint.unknown',
 }
 
-// 骨架：顶栏 + 工具栏槽 + 左树右详情 + 队列槽 + 底部状态栏槽。
-// 「检查更新」按钮和自定义窗口按钮要等 CheckForUpdates 接好才出现，这里不放假入口。
+// 浏览器预览里没有 Wails 运行时，窗口操作会失败；安静接住。原生窗口里这是正常路径。
+function runWindowAction(action: () => Promise<void>) {
+  action().catch(() => {})
+}
+
+// 骨架：自绘标题栏 + 工具栏槽 + 左树右详情 + 队列槽 + 底部状态栏槽。
+// 窗口去掉了系统标题栏（main.go 的 Frameless），顶栏右侧这三颗按钮就是真的最小化／最大化／关闭；
+// 「检查更新」按钮要等 CheckForUpdates 接好才出现，这里不放假入口。
 export function AppShell({
   appName,
   status,
@@ -75,7 +82,13 @@ export function AppShell({
 
   return (
     <div className={styles.app} style={appStyle}>
-      <header className={styles.topbar}>
+      <header
+        className={styles.topbar}
+        onDoubleClick={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return
+          runWindowAction(() => Window.ToggleMaximise())
+        }}
+      >
         <span className={styles.logo} aria-hidden="true">
           GN
         </span>
@@ -104,6 +117,35 @@ export function AppShell({
             {t('topbar.update.badge', { version: updateLatest })}
           </button>
         )}
+        <div className={styles.winBtns}>
+          <button
+            type="button"
+            className={styles.winBtn}
+            title={t('topbar.window.minimise')}
+            aria-label={t('topbar.window.minimise')}
+            onClick={() => runWindowAction(() => Window.Minimise())}
+          >
+            —
+          </button>
+          <button
+            type="button"
+            className={styles.winBtn}
+            title={t('topbar.window.maximise')}
+            aria-label={t('topbar.window.maximise')}
+            onClick={() => runWindowAction(() => Window.ToggleMaximise())}
+          >
+            □
+          </button>
+          <button
+            type="button"
+            className={styles.winBtn}
+            title={t('topbar.window.close')}
+            aria-label={t('topbar.window.close')}
+            onClick={() => runWindowAction(() => Window.Close())}
+          >
+            ×
+          </button>
+        </div>
       </header>
 
       <div className={styles.toolbar}>{toolbar}</div>

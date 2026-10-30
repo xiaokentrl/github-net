@@ -114,8 +114,9 @@ export function GetDetectResult(itemID: string): $CancellablePromise<$models.Det
 
 /**
  * GetItems 返回产品目录和每个项目当前的 Hosts 状态，是目录的唯一来源；前端不再自己存一份列表。
- * Hosts 状态是每次调用现读的：只读打开系统 Hosts，找出本工具的管理区段，按项目逐个判定。
- * 读不到文件报 readFailed、区段判读不了报 conflict，这两种都不会被显示成「未替换」。
+ * Hosts 状态是每次调用现读的：只读打开系统 Hosts，找出本工具的管理区段，再问一次特权服务
+ * 「最后一次成功写入是哪批映射」，两边比对后按项目逐个判定。
+ * 读不到文件报 readFailed、区段判读不了或被改过报 conflict，这两种都不会被显示成「未替换」。
  */
 export function GetItems(): $CancellablePromise<$models.ItemsSnapshot> {
     return $Call.ByID(1316963034);

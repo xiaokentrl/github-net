@@ -18,6 +18,8 @@
   padding: 0 var(--pad);
   border-bottom: 1px solid var(--border);
   background: var(--panel);
+  /* 顶栏就是标题栏：整条可拖动，按钮自己标 no-drag。窗口没有系统标题栏，拖动全靠这一行。 */
+  --wails-draggable: drag;
 }
 
 .logo {
@@ -77,6 +79,7 @@
   background: var(--ctl);
   color: var(--text);
   cursor: pointer;
+  --wails-draggable: no-drag;
 }
 
 .toolbar {
@@ -302,6 +305,47 @@
   background: var(--green-soft);
   color: var(--green);
   cursor: pointer;
+  --wails-draggable: no-drag;
+}
+
+/* 标题栏右侧三颗窗口按钮，抄原型 .win-btns(40–42)：
+   26×26、圆角 6、字色 --text-3；浅色悬停 #eef0f4，其余五套由第 622 行的规则换成 --band。 */
+.winBtns {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  margin-left: 6px;
+}
+
+.winBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  --wails-draggable: no-drag;
+}
+
+.winBtn:hover {
+  background: #eef0f4;
+}
+
+:global(html[data-theme]:not([data-theme='light'])) .winBtn:hover {
+  background: var(--band);
+}
+
+.winBtn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 
 /* 工具栏按钮抄原型 .btn（第 52–59 行）：30px 高、12px 内边距、6px 圆角、描边；

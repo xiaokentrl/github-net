@@ -99,14 +99,29 @@ func main() {
 		URL:              "/",
 		// 启动后最小化：窗口直接以隐藏方式创建，托盘里照样能唤回。
 		Hidden: startMinimized,
+		// 标题栏改成界面自己画（原型顶栏那颗「— □ ×」），系统标题栏不再出现；
+		// 拖动和四边缩放由 Wails 运行时接：顶栏标 --wails-draggable:drag，缩放条自动加在窗口边缘。
+		Frameless: true,
 	})
 
-	// 关窗到托盘：Linux 上 GTK 的 delete-event 先到这个钩子，Cancel 掉默认销毁、改把窗口藏起来，
-	// 应用继续跑（托盘还在）。开关只信配置现读——运行中改设置立即生效，不维护第二份状态。
+	// 关窗到托盘：两条关窗路都要走同一套判断——
+	// 系统发来的 delete-event（窗口管理器快捷键）走 Linux.WindowDeleteEvent；
+	// 自绘标题栏的「×」走 Window.Close()，再到 WindowClosing。
+	// 开关只信配置现读——运行中改设置立即生效，不维护第二份状态。
 	// 读不到配置按「不拦」处理：关窗是用户明说的动作，别因为读不出偏好把它卡住。
-	window.RegisterHook(events.Linux.WindowDeleteEvent, func(e *application.WindowEvent) {
+	shouldHideOnClose := func() bool {
 		cfg, err := service.GetSettings()
-		if err != nil || !cfg.Startup.CloseToTray {
+		return err == nil && cfg.Startup.CloseToTray
+	}
+	window.RegisterHook(events.Linux.WindowDeleteEvent, func(e *application.WindowEvent) {
+		if !shouldHideOnClose() {
+			return
+		}
+		e.Cancel()
+		window.Hide()
+	})
+	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		if !shouldHideOnClose() {
 			return
 		}
 		e.Cancel()

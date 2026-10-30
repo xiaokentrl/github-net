@@ -163,20 +163,18 @@ export enum HostsStatus {
     HostsNone = "none",
 
     /**
-     * HostsPartial 表示已读过，该项目只有部分 hostname 有本工具记录。
-     * 这一档要拿写入摘要比对才能确认，等 Hosts 写入接上才会由后端产出。
+     * HostsPartial 表示已读过，该项目只有部分 hostname 是它自己认领的、且区段摘要对得上的映射。
      */
     HostsPartial = "partial",
 
     /**
-     * HostsApplied 表示已读过，该项目全部 hostname 都有本工具记录且区段摘要校验通过。
-     * 同上：没有写入摘要就没有可比对的东西，这一档目前不由后端产出。
+     * HostsApplied 表示已读过，该项目全部 hostname 都由它认领，且区段摘要与最后一次成功写入一致。
      */
     HostsApplied = "applied",
 
     /**
-     * HostsConflict 表示区段判读不了（标记异常或被外部改过），
-     * 或者区段里有本工具映射却拿不到可比对的写入摘要；后端停在这里，不覆盖、不假装已生效。
+     * HostsConflict 表示没法确认这段映射是不是本工具写的：区段判读不了、被外部改过、
+     * 或拿不到特权服务记录的写入摘要。后端停在这里，不覆盖、不假装已生效。
      */
     HostsConflict = "conflict",
 
