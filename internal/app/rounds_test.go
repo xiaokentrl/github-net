@@ -57,7 +57,8 @@ func TestRoundBudgetTakenAndReleased(t *testing.T) {
 
 func TestRoundBudgetTakeAndReleaseMath(t *testing.T) {
 	r := newRoundBudgets()
-	id := r.newRound(10)
+	// 轮 ID 由队列发号，账本这边只按 ID 登记预算，所以用例直接给一个 ID 进去。
+	id := r.put("r1", 10)
 	if got := r.take(id, 4); got != 4 {
 		t.Fatalf("take(4) 该给 4，实际 %d", got)
 	}
@@ -100,5 +101,101 @@ func TestDetectItemsAssignsSharedRoundID(t *testing.T) {
 	svc.rounds.mu.Unlock()
 	if !ok {
 		t.Fatal("轮账本里没有这一轮")
+	}
+}
+
+// 轮的 ID 只有一个来源（队列发号）：任务带的、账本记的、快照里那一条必须是同一个。
+func TestDetectItemsRoundComesFromQueue(t *testing.T) {
+	svc := newApplyService(t, nil)
+	if _, err := svc.SelectStrategy(detectScopeGitHub, "live.one", 0, "m1"); err != nil {
+		t.Fatalf("先选方法: %v", err)
+	}
+	svc.rounds = newRoundBudgets()
+
+	tasks, err := svc.DetectItems([]string{"api", "bare"})
+	if err != nil {
+		t.Fatalf("批量检测: %v", err)
+	}
+	snap := svc.GetTasks()
+	if len(snap.Rounds) != 1 {
+		t.Fatalf("一次入口调用开一轮，实际 %+v", snap.Rounds)
+	}
+	round := snap.Rounds[0]
+	if round.ID == "" || round.ID != tasks[0].RoundID {
+		t.Fatalf("任务带的轮 ID 就是队列新开的这一个: %q vs %+v", tasks[0].RoundID, round)
+	}
+	if round.Name != "代码与下载" || round.Kind != task.KindDetect || round.ScopeID != detectScopeGitHub {
+		t.Errorf("根节点要显示后端给的分类名: %+v", round)
+	}
+	svc.rounds.mu.Lock()
+	_, ok := svc.rounds.byID[round.ID]
+	svc.rounds.mu.Unlock()
+	if !ok {
+		t.Errorf("预算账本要记在同一个轮 ID 上: %+v", round)
+	}
+}
+
+// 单项检测 = 只有一项的一轮，原型里 detectSingle 就是 detectAll([item])，根节点名同样按分类给。
+func TestDetectSingleItemOpensItsOwnRound(t *testing.T) {
+	svc := newApplyService(t, nil)
+	if _, err := svc.SelectStrategy(detectScopeGitHub, "live.one", 0, "m1"); err != nil {
+		t.Fatalf("先选方法: %v", err)
+	}
+	tasks, err := svc.DetectItems([]string{"api"})
+	if err != nil {
+		t.Fatalf("单项检测: %v", err)
+	}
+	snap := svc.GetTasks()
+	if len(snap.Rounds) != 1 || snap.Rounds[0].Name != "代码与下载" {
+		t.Fatalf("单项也要有根节点，名字按分类: %+v", snap.Rounds)
+	}
+	if snap.Rounds[0].ID != tasks[0].RoundID {
+		t.Errorf("任务归进这一轮: %q vs %+v", tasks[0].RoundID, snap.Rounds[0])
+	}
+}
+
+func TestDetectRoundLabel(t *testing.T) {
+	scopeName := func(id string) string {
+		if id == detectScopeGitHub {
+			return "代码与下载"
+		}
+		return ""
+	}
+	cases := []struct {
+		what      string
+		batch     []detectCandidate
+		wantName  string
+		wantScope string
+	}{
+		{"空批", nil, "批量检测", ""},
+		{"同范围用分类名", []detectCandidate{{id: "api", scopeID: detectScopeGitHub}, {id: "bare", scopeID: detectScopeGitHub}}, "代码与下载", detectScopeGitHub},
+		{"跨范围退成批量检测", []detectCandidate{{id: "api", scopeID: detectScopeGitHub}, {id: "steam", scopeID: detectScopeSteam}}, "批量检测", ""},
+		{"范围查不到名字", []detectCandidate{{id: "x", scopeID: "no-such-scope"}}, "批量检测", "no-such-scope"},
+	}
+	for _, c := range cases {
+		name, scopeID := detectRoundLabel(c.batch, scopeName)
+		if name != c.wantName || scopeID != c.wantScope {
+			t.Errorf("%s: 想要 %q/%q，实际 %q/%q", c.what, c.wantName, c.wantScope, name, scopeID)
+		}
+	}
+}
+
+func TestScopeName(t *testing.T) {
+	svc := newApplyService(t, nil)
+	if got := svc.scopeName(detectScopeGitHub); got != "代码与下载" {
+		t.Errorf("按范围取分类名，实际 %q", got)
+	}
+	if got := svc.scopeName(detectScopeSteam); got != "商店" {
+		t.Errorf("按范围取分类名，实际 %q", got)
+	}
+	if got := svc.scopeName("no-such-scope"); got != "" {
+		t.Errorf("范围不在目录里该给空串由调用方兜底，实际 %q", got)
+	}
+	if got := svc.scopeName(""); got != "" {
+		t.Errorf("空范围不该匹配上任何分类，实际 %q", got)
+	}
+	var noCatalog Service
+	if got := noCatalog.scopeName(detectScopeGitHub); got != "" {
+		t.Errorf("目录都没装时给空串，实际 %q", got)
 	}
 }

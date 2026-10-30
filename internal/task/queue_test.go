@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -768,4 +769,221 @@ func TestSnapshotIsCopyAndAlwaysArray(t *testing.T) {
 	if tk.Status != StatusWaiting {
 		t.Errorf("入队返回的也应是等待状态的副本: %+v", tk)
 	}
+}
+
+/* 轮次（界面里的根节点）：ID 只由队列发号、名字有兜底、空轮不现身、清任务时一并带走。 */
+
+// roundByID 从快照里按 ID 取一轮；没有则返回 false。
+func roundByID(snap Snapshot, id string) (Round, bool) {
+	for _, r := range snap.Rounds {
+		if r.ID == id {
+			return r, true
+		}
+	}
+	return Round{}, false
+}
+
+// roundRegistry 直接看队列内部登记了几轮、顺序表多长。
+// 清理到底有没有干活只能这么看：快照本来就只列有任务的轮，光看快照看不出差别。
+func roundRegistry(q *Queue) (int, int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.rounds), len(q.roundIDs)
+}
+
+func TestBeginRoundIDsUniqueAndSnapshotKeepsOpenOrder(t *testing.T) {
+	q, _ := newEnv(successExecutor())
+	first := q.BeginRound(KindDetect, "github", "代码与下载")
+	second := q.BeginRound(KindApply, "", "应用队列 · 2 项")
+	if first == "" || first == second {
+		t.Fatalf("每轮要有自己的 ID: %q / %q", first, second)
+	}
+
+	// 先往第二轮排任务：快照里轮的顺序仍是开轮先后，不是排队先后。
+	mustEnqueue(t, q, NewRequest{Kind: KindApply, ItemID: "a", RoundID: second})
+	snap := q.Snapshot()
+	if len(snap.Rounds) != 1 || snap.Rounds[0].ID != second {
+		t.Fatalf("只有排了任务的轮进快照: %+v", snap.Rounds)
+	}
+	if snap.Rounds[0].Kind != KindApply || snap.Rounds[0].ScopeID != "" {
+		t.Errorf("轮要带上类型和范围: %+v", snap.Rounds[0])
+	}
+	if _, err := time.Parse(time.RFC3339, snap.Rounds[0].CreatedAt); err != nil {
+		t.Errorf("开轮时间要能被前端解析: %q %v", snap.Rounds[0].CreatedAt, err)
+	}
+
+	mustEnqueue(t, q, NewRequest{Kind: KindDetect, ItemID: "b", RoundID: first})
+	snap = q.Snapshot()
+	if len(snap.Rounds) != 2 || snap.Rounds[0].ID != first || snap.Rounds[1].ID != second {
+		t.Fatalf("轮该按开轮先后列出: %+v", snap.Rounds)
+	}
+	if snap.Rounds[0].Name != "代码与下载" {
+		t.Errorf("轮名要用后端给的那个: %+v", snap.Rounds[0])
+	}
+	drain(t, q)
+}
+
+func TestRoundNameFallsBackToKindLabel(t *testing.T) {
+	q, _ := newEnv(successExecutor())
+	cases := []struct {
+		kind Kind
+		want string
+	}{
+		{KindDetect, "检测"},
+		{KindApply, "应用"},
+		{KindRestore, "恢复"},
+	}
+	for i, c := range cases {
+		id := q.BeginRound(c.kind, " github ", "   ")
+		if id != fmt.Sprintf("r%d", i+1) {
+			t.Errorf("第 %d 次开轮的 ID 应是 r%d, 实际 %q", i+1, i+1, id)
+		}
+		mustEnqueue(t, q, NewRequest{Kind: c.kind, ItemID: fmt.Sprintf("item%d", i), RoundID: id})
+		r, ok := roundByID(q.Snapshot(), id)
+		if !ok {
+			t.Fatalf("%s 这一轮没进快照", c.kind)
+		}
+		if r.Name != c.want {
+			t.Errorf("%s 类型的轮名兜底应是 %q, 实际 %q", c.kind, c.want, r.Name)
+		}
+		if r.ScopeID != "github" {
+			t.Errorf("轮的范围两侧空格要清掉: %q", r.ScopeID)
+		}
+	}
+	drain(t, q)
+}
+
+// 开轮和排第一条任务之间被别的读插进来，也不能把这一轮剪空——
+// 否则整批任务挂在一个已经不存在的轮上，界面上看不见根节点。
+func TestSnapshotReadDoesNotPruneFreshEmptyRound(t *testing.T) {
+	q, _ := newEnv(successExecutor())
+	id := q.BeginRound(KindDetect, "github", "代码与下载")
+	if got := q.Snapshot().Rounds; len(got) != 0 {
+		t.Fatalf("空轮不该进快照: %+v", got)
+	}
+	// 读一次（模拟界面的轮询），再排任务。
+	q.Snapshot()
+	q.Snapshot()
+	mustEnqueue(t, q, NewRequest{Kind: KindDetect, ItemID: "api", RoundID: id})
+	r, ok := roundByID(q.Snapshot(), id)
+	if !ok || r.Name != "代码与下载" {
+		t.Fatalf("被读快照插过的轮该照常现身: %+v", q.Snapshot().Rounds)
+	}
+	drain(t, q)
+}
+
+func TestTaskWithUnknownRoundStillLists(t *testing.T) {
+	q, _ := newEnv(successExecutor())
+	tk := mustEnqueue(t, q, NewRequest{Kind: KindApply, ItemID: "a", RoundID: "r404"})
+	snap := q.Snapshot()
+	if len(snap.Rounds) != 0 {
+		t.Errorf("队列没登记过的轮不该凭空出现: %+v", snap.Rounds)
+	}
+	if tk.RoundID != "r404" {
+		t.Errorf("任务上的轮 ID 要原样带出，前端按它分组: %q", tk.RoundID)
+	}
+	drain(t, q)
+}
+
+func TestClearFinishedPrunesEmptiedRounds(t *testing.T) {
+	q, _ := newEnv(successExecutor())
+	q.Pause()
+
+	first := q.BeginRound(KindDetect, "github", "代码与下载")
+	second := q.BeginRound(KindDetect, "github", "商店")
+	empty := q.BeginRound(KindDetect, "github", "开了没排任务的一轮")
+	a := mustEnqueue(t, q, NewRequest{Kind: KindDetect, ItemID: "a", RoundID: first})
+	b := mustEnqueue(t, q, NewRequest{Kind: KindDetect, ItemID: "b", RoundID: second})
+	if _, err := q.Cancel(a.ID); err != nil {
+		t.Fatalf("取消 %s 失败: %v", a.ID, err)
+	}
+	if _, err := q.Cancel(b.ID); err != nil {
+		t.Fatalf("取消 %s 失败: %v", b.ID, err)
+	}
+	// 两条都进终态了：清理任务的同时把空掉的轮一起带走，界面不会剩空根、内存也不会攒轮。
+	if n := q.ClearFinished(); n != 2 {
+		t.Fatalf("应清掉 2 条, 实际 %d", n)
+	}
+	if got := q.Snapshot().Rounds; len(got) != 0 {
+		t.Errorf("任务清空后轮也该消失: %+v", got)
+	}
+	for _, id := range []string{first, second, empty} {
+		if _, ok := roundByID(q.Snapshot(), id); ok {
+			t.Errorf("%s 这一轮该被清掉", id)
+		}
+	}
+	if rounds, order := roundRegistry(q); rounds != 0 || order != 0 {
+		t.Errorf("清理该把轮登记和顺序表一起腾空，实际 %d / %d", rounds, order)
+	}
+	// 没任务的轮不会再被登记回来：重复清理幂等。
+	if n := q.ClearFinished(); n != 0 {
+		t.Errorf("没有终态时清理应返回 0, 实际 %d", n)
+	}
+}
+
+func TestClearQueueDropsRoundsAndKeepsNumbering(t *testing.T) {
+	q, _ := newEnv(successExecutor())
+	id := q.BeginRound(KindApply, "github", "应用队列 · 1 项")
+	q.BeginRound(KindApply, "github", "开了没排任务的一轮")
+	mustEnqueue(t, q, NewRequest{Kind: KindApply, ItemID: "a", RoundID: id})
+	drain(t, q)
+	if _, err := q.ClearQueue(); err != nil {
+		t.Fatalf("清空失败: %v", err)
+	}
+	snap := q.Snapshot()
+	if len(snap.Tasks) != 0 || len(snap.Rounds) != 0 {
+		t.Errorf("清空后任务和轮都该没了: %+v / %+v", snap.Tasks, snap.Rounds)
+	}
+	if rounds, order := roundRegistry(q); rounds != 0 || order != 0 {
+		t.Errorf("清空该把轮登记和顺序表一起腾空，实际 %d / %d", rounds, order)
+	}
+	// 轮号不回收：复用旧 ID 会把清理前就在跑的任务错并进新轮。
+	if next := q.BeginRound(KindApply, "github", "应用队列 · 1 项"); next == id {
+		t.Errorf("清空后开新轮不该顶用旧 ID: %q", next)
+	}
+}
+
+func TestRetryFailedOpensItsOwnRound(t *testing.T) {
+	byItem := map[string]Outcome{
+		"a": {Status: StatusFailed, Message: "候选失效"},
+		"b": {Status: StatusRolledback, Message: "写入失败已退回"},
+	}
+	f := &fakeExecutor{started: make(chan Task, 4), decide: func(ctx context.Context, tk Task, report Report) Outcome {
+		return byItem[tk.ItemID]
+	}}
+	q, _ := newEnv(f)
+	sourceRound := q.BeginRound(KindApply, "github", "应用队列 · 2 项")
+	failID := mustEnqueue(t, q, NewRequest{Kind: KindApply, ItemID: "a", ScopeID: "github", RoundID: sourceRound}).ID
+	rollID := mustEnqueue(t, q, NewRequest{Kind: KindApply, ItemID: "b", ScopeID: "github", RoundID: sourceRound}).ID
+	drain(t, q)
+
+	got := q.RetryFailed([]string{failID, rollID})
+	if len(got) != 2 {
+		t.Fatalf("两项都该被接受: %+v", got)
+	}
+	snap := q.Snapshot()
+	var retryRoundIDs []string
+	for _, tk := range snap.Tasks {
+		if tk.RetryOf != "" {
+			retryRoundIDs = append(retryRoundIDs, tk.RoundID)
+		}
+	}
+	if len(retryRoundIDs) != 2 || retryRoundIDs[0] == "" || retryRoundIDs[0] != retryRoundIDs[1] {
+		t.Fatalf("一次批量重试的多条任务要归进同一个新轮: %v", retryRoundIDs)
+	}
+	if retryRoundIDs[0] == sourceRound {
+		t.Fatalf("重试要开新轮，不能塞回源轮: %q", retryRoundIDs[0])
+	}
+	r, ok := roundByID(snap, retryRoundIDs[0])
+	if !ok {
+		t.Fatalf("重试轮没进快照: %+v", snap.Rounds)
+	}
+	if r.Name != "重试失败 · 2 项" || r.Kind != KindApply {
+		t.Errorf("重试轮名要照原型给: %+v", r)
+	}
+	// 源轮还挂着两条终态记录，所以它仍在快照里，且开轮在前。
+	if len(snap.Rounds) != 2 || snap.Rounds[0].ID != sourceRound {
+		t.Errorf("源轮和重试轮要按开轮先后都在: %+v", snap.Rounds)
+	}
+	drain(t, q)
 }

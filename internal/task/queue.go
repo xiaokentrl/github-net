@@ -26,6 +26,11 @@ type Queue struct {
 	sequence int64
 	idSeq    int
 	paused   bool
+	// 轮次登记表：ID 只由 BeginRound 生成，是全工程唯一的轮 ID 来源。
+	// 预算账本（internal/app 的 roundBudgets）用的也是这个 ID，两边不再各发一套号。
+	rounds   map[string]*Round
+	roundIDs []string
+	roundSeq int
 	// driving 表示已经有一个驱动协程在领取任务，避免入队时开出第二个执行者。
 	driving bool
 	// 双车道：检测类任务可以并行（上限 detectLane），应用/恢复类严格串行——
@@ -63,6 +68,7 @@ func NewQueueLaned(exec Executor, pub Publisher, detectLane int) *Queue {
 		pub:           pub,
 		now:           time.Now,
 		entries:       make(map[string]*entry),
+		rounds:        make(map[string]*Round),
 		detectRunning: make(map[string]context.CancelFunc),
 		detectLane:    detectLane,
 	}
@@ -71,10 +77,14 @@ func NewQueueLaned(exec Executor, pub Publisher, detectLane int) *Queue {
 // Snapshot 是队列的当前副本：任务按入队顺序排列，Sequence 是水位。
 // 前端先订阅事件再取快照，丢掉水位以内已经包含的事件；水位之后的事件才往界面上应用。
 // Paused 一并带出，因为没有别的地方能读到暂停状态。
+//
+// Rounds 只列「此刻还有任务挂在上面」的轮，按开轮先后排；一个任务都没剩下的轮不出现在快照里，
+// 界面上也就不会出现一个点不开的空根节点。
 type Snapshot struct {
-	Tasks    []Task `json:"tasks"`
-	Sequence int64  `json:"sequence"`
-	Paused   bool   `json:"paused"`
+	Tasks    []Task  `json:"tasks"`
+	Rounds   []Round `json:"rounds"`
+	Sequence int64   `json:"sequence"`
+	Paused   bool    `json:"paused"`
 }
 
 // RetryResult 是批量重试的逐项结果：成功给新任务 ID，被拒给原因。
@@ -110,6 +120,47 @@ func (q *Queue) Enqueue(req NewRequest) (Task, error) {
 		Status:     StatusWaiting,
 	})
 	return t.task, nil
+}
+
+// BeginRound 开一轮，返回轮 ID；接着排进这个 ID 的任务都属于这一轮。
+// 名字给空时按任务类型顶上（检测/应用/恢复），界面不会拿到一个空标题。
+// 开轮本身不算错误：一轮还没有任务时它不进快照，等第一条任务排进来才现身。
+func (q *Queue) BeginRound(kind Kind, scopeID, name string) string {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.beginRoundLocked(kind, scopeID, name)
+}
+
+// beginRoundLocked 假定调用方已持锁。
+func (q *Queue) beginRoundLocked(kind Kind, scopeID, name string) string {
+	q.roundSeq++
+	id := fmt.Sprintf("r%d", q.roundSeq)
+	scopeID = strings.TrimSpace(scopeID)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = kindLabel(kind)
+	}
+	q.rounds[id] = &Round{
+		ID:        id,
+		Name:      name,
+		Kind:      kind,
+		ScopeID:   scopeID,
+		CreatedAt: q.now().UTC().Format(time.RFC3339),
+	}
+	q.roundIDs = append(q.roundIDs, id)
+	return id
+}
+
+// kindLabel 是轮名字兜底用的三种类型名，和原型队列里的三类标签一致。
+func kindLabel(k Kind) string {
+	switch k {
+	case KindDetect:
+		return "检测"
+	case KindRestore:
+		return "恢复"
+	default:
+		return "应用"
+	}
 }
 
 // Pause 停止领取新的等待任务；已经在跑的那条不受影响，会跑完。
@@ -181,6 +232,8 @@ func (q *Queue) ClearFinished() int {
 		kept = append(kept, id)
 	}
 	q.order = kept
+	// 轮里最后一条任务被清掉，这一轮也就从队列里消失了。
+	q.pruneRoundsWithoutTasksLocked()
 	return removed
 }
 
@@ -203,6 +256,9 @@ func (q *Queue) ClearQueue() (int, error) {
 	removed := len(q.order)
 	q.order = nil
 	q.entries = make(map[string]*entry)
+	// 任务全没了，轮也不留。轮号继续往后发，不清零、不复用。
+	q.rounds = make(map[string]*Round)
+	q.roundIDs = nil
 	return removed, nil
 }
 
@@ -210,14 +266,26 @@ func (q *Queue) ClearQueue() (int, error) {
 // 只接受失败或已回滚的应用任务；原记录保持终态不动，新任务用 RetryOf 指回原任务，
 // 这样界面上「第 1 次失败、第 2 次成功」两条都在，不覆盖历史。
 // 逐项给结果，不接受的项返回原因。
+//
+// 这一批被接受的重试一起进一个新轮次，轮名按原型规则是「重试失败 · N 项」，
+// N 是真正排进去的条数——被拒的项不占数，否则界面会看到一个对不上的数量。
 func (q *Queue) RetryFailed(taskIDs []string) []RetryResult {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	results := make([]RetryResult, 0, len(taskIDs))
+	accepted := make([]int, 0, len(taskIDs))
+	sources := make([]Task, 0, len(taskIDs))
+	// 一次请求里同项目只收第一条：新任务要等整批校验完才排进去，
+	// 所以「已有在途」这一条得先拿本次已接受的项比一遍，否则同一条被点两次会排进去两次。
+	pending := make(map[string]bool, len(taskIDs))
 	for _, raw := range taskIDs {
 		id := strings.TrimSpace(raw)
 		result := RetryResult{SourceTaskID: id}
 		e, ok := q.entries[id]
+		key := ""
+		if ok {
+			key = string(e.task.Kind) + "|" + e.task.ItemID
+		}
 		switch {
 		case q.stopped:
 			result.Reason = "任务队列已停止，这次重试没有排队"
@@ -227,42 +295,103 @@ func (q *Queue) RetryFailed(taskIDs []string) []RetryResult {
 			result.Reason = "只有应用任务支持重试，检测任务请直接重新检测"
 		case e.task.Status != StatusFailed && e.task.Status != StatusRolledback:
 			result.Reason = "这条任务不是失败或已回滚状态"
-		case q.findActiveLocked(e.task.Kind, e.task.ItemID) != nil:
+		case pending[key] || q.findActiveLocked(e.task.Kind, e.task.ItemID) != nil:
 			result.Reason = "这个项目已经有在途任务，先等它结束"
 		default:
-			source := e.task
-			nt := q.appendLocked(Task{
-				Kind:       source.Kind,
-				ItemID:     source.ItemID,
-				Name:       source.Name,
-				ScopeID:    source.ScopeID,
-				StrategyID: source.StrategyID,
-				RoundID:    source.RoundID,
-				Status:     StatusWaiting,
-				RetryOf:    source.ID,
-			})
-			result.TaskID = nt.task.ID
+			pending[key] = true
+			accepted = append(accepted, len(results))
+			sources = append(sources, e.task)
 		}
 		results = append(results, result)
+	}
+	if len(sources) == 0 {
+		return results
+	}
+	roundID := q.beginRoundLocked(KindApply, "", fmt.Sprintf("重试失败 · %d 项", len(sources)))
+	for i, source := range sources {
+		nt := q.appendLocked(Task{
+			Kind:       source.Kind,
+			ItemID:     source.ItemID,
+			Name:       source.Name,
+			ScopeID:    source.ScopeID,
+			StrategyID: source.StrategyID,
+			RoundID:    roundID,
+			Status:     StatusWaiting,
+			RetryOf:    source.ID,
+		})
+		results[accepted[i]].TaskID = nt.task.ID
 	}
 	return results
 }
 
-// Snapshot 返回队列副本和当前水位；顺序就是执行顺序。
+// Snapshot 返回队列副本和当前水位；任务顺序就是执行顺序，轮次顺序是开轮先后。
 func (q *Queue) Snapshot() Snapshot {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	snap := Snapshot{
 		Tasks:    make([]Task, 0, len(q.order)),
+		Rounds:   make([]Round, 0, len(q.rounds)),
 		Sequence: q.sequence,
 		Paused:   q.paused,
 	}
+	live := q.liveRoundIDsLocked()
 	for _, id := range q.order {
 		if e, ok := q.entries[id]; ok {
 			snap.Tasks = append(snap.Tasks, e.task)
 		}
 	}
+	for _, r := range q.roundOrderLocked() {
+		if live[r.ID] {
+			snap.Rounds = append(snap.Rounds, *r)
+		}
+	}
 	return snap
+}
+
+// roundOrderLocked 假定调用方已持锁：按开轮先后返回还登记着的轮。
+func (q *Queue) roundOrderLocked() []*Round {
+	out := make([]*Round, 0, len(q.roundIDs))
+	for _, id := range q.roundIDs {
+		if r, ok := q.rounds[id]; ok {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// liveRoundIDsLocked 假定调用方已持锁：哪些轮上还挂着任务。只读，不删登记——
+// 读路径顺手删会让「刚 BeginRound、任务还没排进来」的 microseconds 窗口被一次快照剪空，
+// 那批任务就永久挂在一个已经不存在的轮上，界面上整批看不见根节点。
+// 空轮的清理交给 ClearFinished：用户点「清理已结束」时一并带走。
+func (q *Queue) liveRoundIDsLocked() map[string]bool {
+	live := make(map[string]bool, len(q.rounds))
+	for _, id := range q.order {
+		e, ok := q.entries[id]
+		if !ok || e.task.RoundID == "" {
+			continue
+		}
+		if _, ok := q.rounds[e.task.RoundID]; ok {
+			live[e.task.RoundID] = true
+		}
+	}
+	return live
+}
+
+// pruneRoundsWithoutTasksLocked 假定调用方已持锁：删掉没任务的轮，并压实开轮顺序。
+func (q *Queue) pruneRoundsWithoutTasksLocked() {
+	live := q.liveRoundIDsLocked()
+	if len(q.rounds) == len(live) {
+		return
+	}
+	kept := q.roundIDs[:0]
+	for _, id := range q.roundIDs {
+		if live[id] {
+			kept = append(kept, id)
+			continue
+		}
+		delete(q.rounds, id)
+	}
+	q.roundIDs = kept
 }
 
 // Sequence 返回已发出的最后一个事件序号；还没发过事件时为 0。

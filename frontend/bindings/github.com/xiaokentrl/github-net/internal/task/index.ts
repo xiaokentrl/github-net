@@ -8,6 +8,7 @@ export {
 
 export type {
     RetryResult,
+    Round,
     Snapshot,
     Task
 } from "./models.js";

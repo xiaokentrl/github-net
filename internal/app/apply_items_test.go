@@ -165,6 +165,91 @@ func TestRestoreTaskRunsThroughPrivilege(t *testing.T) {
 	}
 }
 
+// 队列根节点的名字由后端按原型规则给：应用「应用队列 · N 项」、恢复单个「恢复 · 项目名」、
+// 恢复多个「恢复队列 · N 项」。界面上不再自己拼第二套。
+func TestApplyAndRestoreRoundNames(t *testing.T) {
+	cases := []struct {
+		what     string
+		enqueue  func(svc *Service) ([]task.Task, error)
+		wantName string
+		wantKind task.Kind
+		count    int
+	}{
+		{
+			what:     "应用一批",
+			enqueue:  func(svc *Service) ([]task.Task, error) { return svc.ApplyItems([]string{"api", "bare"}) },
+			wantName: "应用队列 · 2 项",
+			wantKind: task.KindApply,
+			count:    2,
+		},
+		{
+			what:     "恢复单个",
+			enqueue:  func(svc *Service) ([]task.Task, error) { return svc.RestoreItems([]string{"api"}) },
+			wantName: "恢复 · API",
+			wantKind: task.KindRestore,
+			count:    1,
+		},
+		{
+			what:     "恢复一批",
+			enqueue:  func(svc *Service) ([]task.Task, error) { return svc.RestoreItems([]string{"api", "bare"}) },
+			wantName: "恢复队列 · 2 项",
+			wantKind: task.KindRestore,
+			count:    2,
+		},
+	}
+	for _, c := range cases {
+		// 每个用例一台新服务：上一批任务还在途时会去重，根节点计数就对不上。
+		svc := newApplyService(t, &fakePriv{})
+		putAvailableResult(svc, "api")
+		putAvailableResult(svc, "bare")
+
+		tasks, err := c.enqueue(svc)
+		if err != nil {
+			t.Fatalf("%s 该排进队列: %v", c.what, err)
+		}
+		snap := svc.GetTasks()
+		if len(snap.Rounds) != 1 {
+			t.Fatalf("%s 该只开一轮: %+v", c.what, snap.Rounds)
+		}
+		round := snap.Rounds[0]
+		if round.Name != c.wantName || round.Kind != c.wantKind {
+			t.Errorf("%s: 根节点该叫 %q（%s），实际 %+v", c.what, c.wantName, c.wantKind, round)
+		}
+		if len(tasks) != c.count {
+			t.Fatalf("%s 该排 %d 条，实际 %d", c.what, c.count, len(tasks))
+		}
+		for _, tk := range snap.Tasks {
+			if tk.RoundID != round.ID {
+				t.Errorf("%s: 这条任务没归进新开的轮: %+v vs %+v", c.what, tk, round)
+			}
+		}
+	}
+}
+
+func TestApplyRoundLabelAcrossScopes(t *testing.T) {
+	// api（github）+ steam（steam）跨范围：整批同属一个范围才记范围，跨了就留空。
+	svc := newApplyService(t, &fakePriv{})
+	putAvailableResult(svc, "api")
+	svc.detectResults.put(detectScopeSteam, "steam-method", &accelerator.Result{
+		ItemID:    "steam",
+		Available: 1,
+		Candidates: []accelerator.Candidate{
+			{ID: "s1", Hostname: detectHostSteam, IP: "203.0.113.30", Status: accelerator.StatusAvailable, LatencyMS: 10},
+		},
+		Hostnames: []accelerator.HostOutcome{{Hostname: detectHostSteam, Resolved: true}},
+	})
+	if _, err := svc.ApplyItems([]string{"api", "steam"}); err != nil {
+		t.Fatalf("跨范围应用该能排: %v", err)
+	}
+	snap := svc.GetTasks()
+	if len(snap.Rounds) != 1 || snap.Rounds[0].ScopeID != "" {
+		t.Fatalf("跨范围的一批不该记上某个范围: %+v", snap.Rounds)
+	}
+	if snap.Rounds[0].Name != "应用队列 · 2 项" {
+		t.Errorf("名字照条数给: %+v", snap.Rounds[0])
+	}
+}
+
 func TestApplyTaskFailsWhenHelperUnavailable(t *testing.T) {
 	priv := &fakePriv{err: privilege.ErrHelperUnavailable}
 	svc := newApplyService(t, priv)

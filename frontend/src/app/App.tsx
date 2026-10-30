@@ -391,7 +391,13 @@ export function App() {
             onOpenHosts={openHostsFile}
           />
         }
-        queue={<TaskPanel height={settings?.layout.queueHeight ?? null} />}
+        queue={
+          <TaskPanel
+            height={settings?.layout.queueHeight ?? null}
+            activeItemId={selectedId}
+            onPickItem={(itemId) => setSelectedId(itemId)}
+          />
+        }
         updateLatest={updateLatest}
         onOpenUpdate={() => openSettings('updates')}
         statusbar={

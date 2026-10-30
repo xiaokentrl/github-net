@@ -133,6 +133,22 @@ type Progress struct {
 	Task     Task  `json:"task"`
 }
 
+// Round 是一轮动作的对外形状，对应原型队列里的根节点：一次批量检测、一次应用队列、
+// 一次恢复各算一轮，轮里的那些项目任务是它的明细行。
+//
+// 名字的唯一主人是后端（入口层按原型规则给：检测用分类名、应用用「应用队列 · N 项」、
+// 恢复用「恢复 · 项目名」、重试另开一轮「重试失败 · N 项」）。界面不再自己拼名字，
+// 否则同一条规则住在两处，改一处就会漂。
+// 轮的状态不在这里：它完全由轮里的任务推出来，后端再存一份就有第二个真相。
+type Round struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Kind    Kind   `json:"kind"`
+	ScopeID string `json:"scopeId,omitempty"`
+	// CreatedAt 是开轮的墙钟时间（RFC3339 UTC），界面按它排序，不靠 map 顺序。
+	CreatedAt string `json:"createdAt,omitempty"`
+}
+
 // Publisher 是队列对事件总线的唯一要求：把一条进度事件投出去。
 // 谁实现它、事件叫什么名字、发到哪条总线，都不归本包决定。
 type Publisher interface {

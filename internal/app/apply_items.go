@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/xiaokentrl/github-net/internal/privilege"
@@ -30,7 +31,7 @@ func (s *Service) ApplyItems(itemIDs []string) ([]task.Task, error) {
 			return nil, NewError(CodeNoDetectResult, "最近一轮检测没有可用的候选地址，先重新检测", nil)
 		}
 	}
-	return s.enqueueAll(task.KindApply, ids)
+	return s.enqueueAll(task.KindApply, ids, applyRoundName(len(ids)))
 }
 
 // RestoreItems 把指定项目排进还原队列：退回它应用前的映射。
@@ -41,7 +42,11 @@ func (s *Service) RestoreItems(itemIDs []string) ([]task.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.enqueueAll(task.KindRestore, ids)
+	singleName := ""
+	if len(ids) == 1 {
+		singleName, _, _ = s.findItem(ids[0])
+	}
+	return s.enqueueAll(task.KindRestore, ids, restoreRoundName(singleName, len(ids)))
 }
 
 // RestoreAllHosts 把全部还由工具管理的项目一次退回应用前状态，返回实际还原的项目数。
@@ -123,19 +128,47 @@ func hasAvailable(view DetectResultView) bool {
 	return false
 }
 
-// enqueueAll 把一批已通过校验的项目按给定类型逐个排进队列，返回任务快照。
+// enqueueAll 把一批已通过校验的项目按给定类型一起排进队列，归进同一个新的轮次，
+// 返回任务快照。轮名由调用方按原型规则给（界面根节点显示它），范围只在整批同属一个范围时记下。
 // 排到一半失败只剩「应用正在退出」，前面已排进去的有效任务会随队列关闭被取消。
-func (s *Service) enqueueAll(kind task.Kind, ids []string) ([]task.Task, error) {
+func (s *Service) enqueueAll(kind task.Kind, ids []string, roundName string) ([]task.Task, error) {
+	scopeID := ""
+	for _, id := range ids {
+		_, sc, ok := s.findItem(id)
+		if !ok {
+			continue
+		}
+		if scopeID == "" {
+			scopeID = sc
+		} else if sc != scopeID {
+			scopeID = ""
+			break
+		}
+	}
+	roundID := s.tasks.BeginRound(kind, scopeID, roundName)
 	tasks := make([]task.Task, 0, len(ids))
 	for _, id := range ids {
-		name, scopeID, _ := s.findItem(id)
-		t, err := s.tasks.Enqueue(task.NewRequest{Kind: kind, ItemID: id, Name: name, ScopeID: scopeID})
+		name, itemScope, _ := s.findItem(id)
+		t, err := s.tasks.Enqueue(task.NewRequest{Kind: kind, ItemID: id, Name: name, ScopeID: itemScope, RoundID: roundID})
 		if err != nil {
 			return nil, ToPublicError(err)
 		}
 		tasks = append(tasks, t)
 	}
 	return tasks, nil
+}
+
+// applyRoundName / restoreRoundName 是原型定下的两条轮名规则，写在一处免得界面自己拼第二套：
+// 应用一批是「应用队列 · N 项」，恢复单个是「恢复 · 项目名」，恢复多个和恢复同类成一批「恢复队列 · N 项」。
+func applyRoundName(count int) string {
+	return "应用队列 · " + strconv.Itoa(count) + " 项"
+}
+
+func restoreRoundName(itemName string, count int) string {
+	if count == 1 {
+		return "恢复 · " + itemName
+	}
+	return "恢复队列 · " + strconv.Itoa(count) + " 项"
 }
 
 // privilegePublicError 把特权层失败翻成带稳定错误码的公开错误（只用于不走队列的直接命令）。

@@ -76,9 +76,11 @@ func (s *Service) DetectItems(itemIDs []string) ([]task.Task, error) {
 
 	// 一次入口调用就是一轮：这一批项目共享一份候选探测预算。
 	// 预算 = min(本轮唯一域名数 × 档位每域名候选上限, 用户总上限)，账本建在轮上。
-	roundID := ""
+	// 轮的 ID 和名字都来自队列：ID 只有队列会发号，预算账本按同一个 ID 记账。
+	roundName, roundScope := detectRoundLabel(batch, s.scopeName)
+	roundID := s.tasks.BeginRound(task.KindDetect, roundScope, roundName)
 	if s.rounds != nil {
-		roundID = s.newDetectRound(cfg, batch)
+		s.rounds.put(roundID, s.detectRoundBudget(cfg, batch))
 	}
 	tasks := make([]task.Task, 0, len(batch))
 	for _, p := range batch {
@@ -136,9 +138,9 @@ type detectCandidate struct {
 	scopeID string
 }
 
-// newDetectRound 按本轮全部项目的唯一域名数建共享预算，返回轮 ID。
-// 预算公式来自技术规划：min(本轮唯一目标域名数 × 档位每域名候选上限, 用户总上限)。
-func (s *Service) newDetectRound(cfg config.Config, batch []detectCandidate) string {
+// detectRoundBudget 算这一轮共享的候选探测预算。
+// 公式来自技术规划：min(本轮唯一目标域名数 × 档位每域名候选上限, 用户总上限)。
+func (s *Service) detectRoundBudget(cfg config.Config, batch []detectCandidate) int {
 	hostnames := make(map[string]bool)
 	for _, p := range batch {
 		_, _, item, ok := s.lookupItem(p.id)
@@ -151,14 +153,51 @@ func (s *Service) newDetectRound(cfg config.Config, batch []detectCandidate) str
 	}
 	count := len(hostnames)
 	if count == 0 {
-		return s.rounds.newRound(0)
+		return 0
 	}
 	b, err := accelerator.BudgetFor(cfg, count)
 	if err != nil {
 		// 预算算不出来就给最保守的一份：只够一个域名按档位走，别放开闸。
-		return s.rounds.newRound(1)
+		return 1
 	}
-	return s.rounds.newRound(b.MaxProbes)
+	return b.MaxProbes
+}
+
+// detectRoundLabel 定这一轮在队列里叫什么、属于哪个范围，规则照原型：
+// 根节点按一级菜单分组，名字就是那个分类名。一次入口调用只覆盖一个范围时用分类名；
+// 真跨了范围（现在的界面入口不会产生，服务检测和单项检测都只给一个范围）退回「批量检测」，
+// 范围留空——宁可根节点少一句归属说明，也不把两个分类名拼成一条谁也对不上的句子。
+func detectRoundLabel(batch []detectCandidate, scopeName func(string) string) (name string, scopeID string) {
+	scopeID = ""
+	for _, p := range batch {
+		if scopeID == "" {
+			scopeID = p.scopeID
+			continue
+		}
+		if p.scopeID != scopeID {
+			return "批量检测", ""
+		}
+	}
+	if scopeID == "" {
+		return "批量检测", ""
+	}
+	if n := scopeName(scopeID); n != "" {
+		return n, scopeID
+	}
+	return "批量检测", scopeID
+}
+
+// scopeName 按加速范围 ID 取分类显示名；范围不在目录里就给空串，由调用方兜底。
+func (s *Service) scopeName(scopeID string) string {
+	if s.productCatalog == nil || scopeID == "" {
+		return ""
+	}
+	for _, category := range s.productCatalog.Categories {
+		if category.ScopeID == scopeID {
+			return category.Name
+		}
+	}
+	return ""
 }
 
 // DetectBudgetPreview 是「这批项目一起测要多少预算」的预估，给界面在启动前展示和确认。

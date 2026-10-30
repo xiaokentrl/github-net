@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { Snapshot, Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
+import type { Round, Snapshot, Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { getDetectResult } from '../../api/client'
 import type { DetectProgressPayload, TaskProgressPayload } from '../../api/events'
@@ -18,6 +18,9 @@ type TaskState = {
   paused: boolean
   sequence: number
   tasks: Task[]
+  // rounds 是轮次（原型队列的根节点/包裹）：一次批量检测、一次应用、一次恢复各算一轮，
+  // 任务明细按 roundId 挂在轮下。只列「还有任务挂着」的轮，后端已剪空。
+  rounds: Round[]
   // results 是每个项目最近一轮检测的权威快照；事件带来的行是临时补画，任务终态后会被 refreshResult 换成后端原样。
   results: Record<string, DetectResultView>
   // live 是正在跑的那一轮的整体计数（解析/探测阶段的 done/total/active 等），任务行上显示用。
@@ -30,6 +33,7 @@ let state: TaskState = {
   paused: false,
   sequence: 0,
   tasks: [],
+  rounds: [],
   results: {},
   live: {},
 }
@@ -63,6 +67,7 @@ export function applyTaskSnapshot(snap: Snapshot) {
     paused: snap.paused,
     sequence: snap.sequence,
     tasks: snap.tasks ?? [],
+    rounds: snap.rounds ?? [],
   })
 }
 

@@ -95,7 +95,7 @@ func TestGetTasksOnEmptyQueue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("快照无法序列化: %v", err)
 	}
-	if want := `{"tasks":[],"sequence":0,"paused":false}`; string(raw) != want {
+	if want := `{"tasks":[],"rounds":[],"sequence":0,"paused":false}`; string(raw) != want {
 		t.Errorf("空队列的 JSON 形状不对：want %s got %s", want, raw)
 	}
 }
