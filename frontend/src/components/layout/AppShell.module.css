@@ -296,16 +296,61 @@
   text-overflow: ellipsis;
 }
 
-.updateBadge {
-  font: inherit;
-  font-size: 0.78rem;
-  padding: 0.15rem 0.6rem;
-  border: 1px solid var(--green);
-  border-radius: 999px;
-  background: var(--green-soft);
-  color: var(--green);
+.updateBtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--ctl);
+  color: var(--text-2);
+  font-size: 12px;
   cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  white-space: nowrap;
   --wails-draggable: no-drag;
+}
+
+.updateBtn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.updIco {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.updDot {
+  display: none;
+}
+
+.hasUpdate .updDot {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  border: 1.5px solid var(--panel);
+  animation: upd-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes upd-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.82);
+  }
 }
 
 /* 标题栏右侧三颗窗口按钮，抄原型 .win-btns(40–42)：

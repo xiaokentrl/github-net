@@ -112,11 +112,16 @@ export function AppShell({
             {t('topbar.perm.prefix', { access: t(PERM_KEY[status.hostsAccess]) })}
           </span>
         )}
-        {updateLatest !== '' && (
-          <button type="button" className={styles.updateBadge} title={t('topbar.update.hint')} onClick={onOpenUpdate}>
-            {t('topbar.update.badge', { version: updateLatest })}
-          </button>
-        )}
+        <button
+          type="button"
+          className={`${styles.updateBtn} ${updateLatest !== '' ? styles.hasUpdate : ''}`}
+          title={updateLatest !== '' ? t('topbar.update.badge', { version: updateLatest }) : t('topbar.update.checkHint')}
+          onClick={onOpenUpdate}
+        >
+          <span className={styles.updIco} aria-hidden="true">⟳</span>
+          <span className={styles.updLbl}>{t('topbar.update.check')}</span>
+          <span className={styles.updDot} aria-hidden="true" />
+        </button>
         <div className={styles.winBtns}>
           <button
             type="button"
