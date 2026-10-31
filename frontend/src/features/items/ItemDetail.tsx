@@ -263,58 +263,59 @@ export function ItemDetail({
           </p>
         ) : null}
 
-        {flatCandidates.length === 0 ? (
-          <p className={styles.hint}>{t('detect.empty')}</p>
-        ) : (
-          <>
-            {failedHosts.length > 0 ? (
-              <p className={styles.hint}>
-                {failedHosts.map((host) => (
-                  <span key={host.hostname} className={detectStyles.blockFailed}>
-                    {host.hostname}
-                    {t('detect.resolveFailed', { reason: host.detail ?? '' })}
-                    {'　'}
-                  </span>
-                ))}
-              </p>
-            ) : null}
-            <table className={detectStyles.cands}>
-              <thead>
-                <tr>
-                  <th scope="col">{t('detect.col.index')}</th>
-                  <th scope="col">{t('detect.col.ip')}</th>
-                  <th scope="col">{t('detect.col.hostname')}</th>
-                  <th scope="col">{t('detect.col.mark')}</th>
-                  <th scope="col">{t('detect.col.latency')}</th>
-                  <th scope="col">{t('detect.col.score')}</th>
+        {failedHosts.length > 0 ? (
+          <p className={styles.hint}>
+            {failedHosts.map((host) => (
+              <span key={host.hostname} className={detectStyles.blockFailed}>
+                {host.hostname}
+                {t('detect.resolveFailed', { reason: host.detail ?? '' })}
+                {'　'}
+              </span>
+            ))}
+          </p>
+        ) : null}
+        {/* 表头常驻（拍板 2026-10-31）：还没检测时空一行占位，列的样子先立住。 */}
+        <table className={detectStyles.cands}>
+          <thead>
+            <tr>
+              <th scope="col">{t('detect.col.index')}</th>
+              <th scope="col">{t('detect.col.ip')}</th>
+              <th scope="col">{t('detect.col.hostname')}</th>
+              <th scope="col">{t('detect.col.mark')}</th>
+              <th scope="col">{t('detect.col.latency')}</th>
+              <th scope="col">{t('detect.col.score')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {flatCandidates.length === 0 ? (
+              <tr className={detectStyles.emptyRow}>
+                <td colSpan={6}>{t('detect.empty')}</td>
+              </tr>
+            ) : (
+              flatCandidates.map(({ candidate, host }, index) => (
+                <tr key={candidate.id} className={candidate.applied ? detectStyles.currentRow : undefined}>
+                  <td>{index + 1}</td>
+                  <td className={detectStyles.ipCell}>
+                    {candidate.ip}
+                    {candidate.ipv6 ? <span className={detectStyles.v6}> · {t('detect.ipv6')}</span> : null}
+                    {candidate.applied ? <span className={detectStyles.currentTag}>{t('detect.current')}</span> : null}
+                  </td>
+                  <td className={detectStyles.hostCell}>{host.hostname}</td>
+                  <td>
+                    <span className={`${detectStyles.tag} ${CANDIDATE_TONE[candidate.status] ?? ''}`}>
+                      {t(CANDIDATE_KEY[candidate.status] ?? 'detect.candidate.unknown')}
+                    </span>
+                    {candidate.reason ? <span className={detectStyles.reason}>{candidate.reason}</span> : null}
+                  </td>
+                  <td className={candidate.latencyMs > 0 ? detectStyles.latency : detectStyles.latencyNone}>
+                    {candidate.latencyMs > 0 ? t('detect.latency', { ms: candidate.latencyMs }) : '—'}
+                  </td>
+                  <td className={detectStyles.none}>{t('detail.metric.unprovided.short')}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {flatCandidates.map(({ candidate, host }, index) => (
-                  <tr key={candidate.id} className={candidate.applied ? detectStyles.currentRow : undefined}>
-                    <td>{index + 1}</td>
-                    <td className={detectStyles.ipCell}>
-                      {candidate.ip}
-                      {candidate.ipv6 ? <span className={detectStyles.v6}> · {t('detect.ipv6')}</span> : null}
-                      {candidate.applied ? <span className={detectStyles.currentTag}>{t('detect.current')}</span> : null}
-                    </td>
-                    <td className={detectStyles.hostCell}>{host.hostname}</td>
-                    <td>
-                      <span className={`${detectStyles.tag} ${CANDIDATE_TONE[candidate.status] ?? ''}`}>
-                        {t(CANDIDATE_KEY[candidate.status] ?? 'detect.candidate.unknown')}
-                      </span>
-                      {candidate.reason ? <span className={detectStyles.reason}>{candidate.reason}</span> : null}
-                    </td>
-                    <td className={candidate.latencyMs > 0 ? detectStyles.latency : detectStyles.latencyNone}>
-                      {candidate.latencyMs > 0 ? t('detect.latency', { ms: candidate.latencyMs }) : '—'}
-                    </td>
-                    <td className={detectStyles.none}>{t('detail.metric.unprovided.short')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
-        )}
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   )
