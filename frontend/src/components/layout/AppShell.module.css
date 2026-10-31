@@ -393,52 +393,13 @@
   outline-offset: -2px;
 }
 
-/* 工具栏按钮抄原型 .btn（第 52–59 行）：30px 高、12px 内边距、6px 圆角、描边；
-   底色取 --ctl（浅色下就是原型的 #fff，其余五套由主题令牌给深色底），悬停只换底色。 */
+/* 工具栏与侧栏那排按钮用的就是公共那一份按钮配方（原型 .btn 第 52–61 行，落在
+   components/ui/ui.module.css）。这里只留本层叫得出的名字，样式全部指过去，
+   免得两边各改各的——结构规划第 73 行「业务页面不自行复制按钮」。
+   主色/危险两档不在这里转一手：composes 只认单类选择器，写成 .action.primary 构建直接报错，
+   所以由调用方把 ui 的那两份和 .action 一起挂上——.action 已经自带 --btn，照样命中。 */
 .action {
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--ctl);
-  color: var(--text);
-  font-size: 12.5px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-}
-
-.action:hover:not(:disabled) {
-  background: var(--hov);
-}
-
-.action:active:not(:disabled) {
-  transform: translateY(0.5px);
-}
-
-.action:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.action.primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
-}
-
-.action.primary:hover:not(:disabled) {
-  background: var(--primary);
-  opacity: 0.9;
-}
-
-/* 「恢复」是危险动作：只把字染红，悬停才铺一层淡红（原型 .btn.danger 第 58–59 行）。 */
-.action.danger {
-  color: var(--red);
-}
-
-.action.danger:hover:not(:disabled) {
-  background: var(--red-soft);
+  composes: btn from '../ui/ui.module.css';
 }
 
 /* 模式选择框（原型 select.mode 第 73 行）：本工具只会写系统 Hosts，另两项按原型置灰。 */
@@ -453,27 +414,4 @@
   font-size: 13px;
   outline: none;
   cursor: pointer;
-}
-
-.action {
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--ctl);
-  color: var(--text);
-  font-size: 12.5px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.action:hover:not(:disabled) {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.action.primaryAction {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
 }

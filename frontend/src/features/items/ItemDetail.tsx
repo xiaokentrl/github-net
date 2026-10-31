@@ -1,9 +1,10 @@
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { CatalogCategory, CatalogItem, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
-import { formatDateTime, formatInteger } from '../../i18n/formatters'
+import { formatDateTime } from '../../i18n/formatters'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import uiStyles from '../../components/ui/ui.module.css'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
 import { useTaskQueue } from '../tasks/taskStore'
 import styles from './ItemDetail.module.css'
@@ -33,6 +34,15 @@ const CANDIDATE_KEY: Record<string, string> = {
   untested: 'detect.candidate.untested',
 }
 
+// 八档分到原型那四种徽章色（原型 .tag 第 290–292 行只有三种，这里多出来的都归中性）。
+const CANDIDATE_TONE: Record<string, string> = {
+  available: detectStyles.tagOk,
+  unavailable: detectStyles.tagFail,
+  timeout: detectStyles.tagWarn,
+  probing: detectStyles.tagBusy,
+  queued: detectStyles.tagBusy,
+}
+
 // 「哪些项目能进批量检测」只有一个主人：这里算，App 拿到的是已经算好的那批。
 // 挡在外面的是两类——域名由用户自填的手动映射，和目录里没给主机名的项：都没有可解析的目标。
 export function detectableItems(items: CatalogItem[]): CatalogItem[] {
@@ -40,6 +50,7 @@ export function detectableItems(items: CatalogItem[]): CatalogItem[] {
 }
 
 // 详情里每一行都来自后端 GetItems / GetDetectResult / 事件：没有的字段就说没有，不补演示数据。
+// 六格指标里「检测最优 IP」「综合评分」「IP 来源」后端还没给，一律显示未提供；要填它们得先加后端字段。
 export function ItemDetail({
   item,
   category,
@@ -79,172 +90,283 @@ export function ItemDetail({
   const live = state.live[item.id]
   const detecting = state.tasks.some((task) => task.itemId === item.id && task.kind === 'detect' && (task.status === 'running' || task.status === 'waiting'))
 
+  const rows = result?.hosts ?? []
+  const candidates = rows.flatMap((host) => host.candidates ?? [])
+  // 当前写入 IP 只有一个来源：后端在这轮候选里标了 applied 的那几条。界面不自己认。
+  const appliedIps = [...new Set(candidates.filter((c) => c.applied).map((c) => c.ip))]
+  const appliedLatency = candidates.find((c) => c.applied)?.latencyMs ?? 0
+  const restorable = status === HostsStatus.HostsApplied || status === HostsStatus.HostsPartial
+  const canApply = candidates.some((c) => c.status === 'available')
+
+  // 所有候选共用一张表（拍板 2026-10-31）：不再按域名分块，域名是行里的一列；
+  // 排序按延迟升序，没测出延迟（0）的按原顺序排在后面。
+  const flatCandidates = rows
+    .flatMap((host) => (host.candidates ?? []).map((candidate) => ({ host, candidate })))
+    .map((row, order) => ({ ...row, order }))
+    .sort((a, b) => {
+      const la = a.candidate.latencyMs > 0 ? a.candidate.latencyMs : Number.MAX_SAFE_INTEGER
+      const lb = b.candidate.latencyMs > 0 ? b.candidate.latencyMs : Number.MAX_SAFE_INTEGER
+      return la - lb || a.order - b.order
+    })
+  // 解析失败的域名没有候选行，单独在表上方说一句，不混进表里冒充候选。
+  const failedHosts = rows.filter((h) => !h.resolved)
+
+  // 一格指标：检测中整块换微光条；值没来源时用 dim 那档字色，和原型的 b.dim 同一处理。
+  const metricCell = (labelKey: string, value: string, tone: 'mono' | 'plain' | 'dim' = 'plain') => (
+    <div key={labelKey} className={styles.metric}>
+      <span className={styles.metricLabel}>{t(labelKey)}</span>
+      {detecting ? (
+        <span className={styles.skeleton} aria-hidden="true" />
+      ) : (
+        <span className={`${styles.metricValue} ${tone === 'dim' ? styles.dim : ''} ${tone === 'mono' ? styles.mono : ''}`}>{value}</span>
+      )}
+    </div>
+  )
+
   return (
     <div className={styles.wrap}>
-      <div className={styles.head}>
-        <h2 className={styles.title}>{item.name}</h2>
-        <ServiceStrategySelector scopeId={category.scopeId} scopeName={category.name} onSaved={onStrategySaved} />
-      </div>
-      <dl className={styles.fields}>
-        <div>
-          <dt>{t('detail.field.id')}</dt>
-          <dd>{item.id}</dd>
-        </div>
-        <div>
-          <dt>{t('detail.field.category')}</dt>
-          <dd>{category.name}</dd>
-        </div>
-        <div>
-          <dt>{t('detail.field.scope')}</dt>
-          <dd>{category.scopeId}</dd>
-        </div>
-        <div>
-          <dt>{t('detail.field.status')}</dt>
-          <dd>
+      {/* 第一张卡：这是哪个服务、用什么方法加速、当前 Hosts 是什么结论。 */}
+      <div className={styles.card}>
+        <div className={`${styles.cardHead} ${styles.headGrid}`}>
+          <h3 className={styles.title}>
+            {category.name}
+            <span className={styles.crumb}> / {item.name}</span>
+          </h3>
+          <ServiceStrategySelector scopeId={category.scopeId} scopeName={category.name} onSaved={onStrategySaved} />
+          <div className={styles.headActions}>
             <StatusBadge status={status} reason={hosts?.message} />
-          </dd>
+            {selfDetectable && restorable ? (
+              <button
+                type="button"
+                className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.restore}`}
+                disabled={detecting}
+                title={t('hosts.restoreHint')}
+                onClick={() => onRestore(item.id)}
+              >
+                {t('hosts.restore')}
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div>
-          <dt>{t('detail.field.readAt')}</dt>
-          <dd>{hosts ? t('detail.readAt.value', { time: formatDateTime(hosts.readAt), count: formatInteger(hosts.revision) }) : t('detail.field.readAt.none')}</dd>
-        </div>
-      </dl>
 
-      <p className={styles.hint}>{t(HINT_KEY[status])}</p>
-      {hosts?.message ? <p className={styles.plain}>{t('detail.reason', { reason: hosts.message })}</p> : null}
-
-      <h3 className={styles.subTitle}>{t('detail.field.hostnames')}</h3>
-      {item.userSupplied ? (
-        <p className={styles.plain}>{t('detail.hostnames.userSupplied')}</p>
-      ) : hostnames.length === 0 ? (
-        <p className={styles.plain}>{t('detail.hostnames.none')}</p>
-      ) : (
-        <ul className={styles.hosts}>
-          {hostnames.map((hostname) => (
-            <li key={hostname}>{hostname}</li>
-          ))}
-        </ul>
-      )}
-
-      <h3 className={styles.subTitle}>{t('detect.section')}</h3>
-      {detectReady ? (
-        <div className={detectStyles.actions}>
-          {selfDetectable ? (
-            <button
-              type="button"
-              className={detectStyles.detect}
-              disabled={detecting}
-              onClick={() => onDetect(item.id)}
-            >
-              {detecting ? t('detect.running') : t('detect.start')}
-            </button>
-          ) : null}
-          {batch.length > 1 ? (
-            <button
-              type="button"
-              disabled={detecting}
-              onClick={() => onDetectAll(batch)}
-              title={t('detect.allHint', { count: batch.length })}
-            >
-              {t('detect.all', { count: batch.length })}
-            </button>
-          ) : null}
-          {detecting && live ? (
-            <span className={detectStyles.live}>
-              {t('detect.live', { done: live.done, total: live.total, active: live.active })}
-            </span>
-          ) : null}
-        </div>
-      ) : (
-        <p className={detectStyles.note}>{t('detect.notReady')}</p>
-      )}
-      {detectReady && !selfDetectable ? (
-        <p className={detectStyles.note}>{t('detect.unavailable')}</p>
-      ) : null}
-
-      {selfDetectable ? (
-        <div className={detectStyles.actions}>
-          <button
-            type="button"
-            className={detectStyles.apply}
-            disabled={detecting || !result || !(result.hosts ?? []).some((h) => (h.candidates ?? []).some((c) => c.status === 'available'))}
-            onClick={() => onApply(item.id)}
-          >
-            {t('hosts.apply')}
-          </button>
-          {(hosts?.status === HostsStatus.HostsApplied || hosts?.status === HostsStatus.HostsPartial) && (
-            <button type="button" disabled={detecting} onClick={() => onRestore(item.id)}>
-              {t('hosts.restore')}
-            </button>
+        <div className={styles.metrics}>
+          {metricCell(
+            'detail.metric.appliedIp',
+            appliedIps.length === 0
+              ? result
+                ? t('detail.metric.appliedIp.none')
+                : t('detail.metric.noRun')
+              : appliedIps.length === 1
+                ? appliedIps[0]
+                : t('detail.metric.appliedIp.many', { count: appliedIps.length }),
+            appliedIps.length === 1 ? 'mono' : 'dim',
           )}
-          <button type="button" onClick={onOpenHosts}>
-            {t('hosts.open')}
-          </button>
+          {metricCell('detail.metric.bestIp', t('detail.metric.unprovided'), 'dim')}
+          {metricCell(
+            'detail.metric.latency',
+            appliedLatency > 0
+              ? t('detect.latency', { ms: appliedLatency })
+              : result
+                ? t('detail.metric.unprovided')
+                : t('detail.metric.noRun'),
+            appliedLatency > 0 ? 'plain' : 'dim',
+          )}
+          {metricCell('detail.metric.score', t('detail.metric.unprovided'), 'dim')}
+          {metricCell('detail.metric.source', t('detail.metric.unprovided'), 'dim')}
+          {metricCell(
+            'detail.metric.lastCheck',
+            result?.finishedAt ? formatDateTime(result.finishedAt) : t('detail.metric.lastCheck.none'),
+            result?.finishedAt ? 'plain' : 'dim',
+          )}
         </div>
-      ) : null}
-      {hostsError ? (
-        <p className={detectStyles.detectError} role="alert">
-          {t('hosts.error', { reason: hostsError })}
-        </p>
-      ) : null}
-      {detectError ? (
-        <p className={detectStyles.detectError} role="alert">
-          {t('detect.error', { reason: detectError })}
-        </p>
-      ) : null}
 
-      {result && (result.hosts?.length ?? 0) > 0 ? (
-        <div className={detectStyles.result}>
-          <p className={detectStyles.meta}>
-            {t('detect.meta', {
-              available: result.available,
-              probes: result.probesUsed,
-              dns: result.dnsQueries,
-            })}
+        <div className={styles.domainsLine}>
+          <span className={styles.lbl}>{t('detail.domains')}</span>
+          {item.userSupplied ? (
+            <span className={styles.dim}>{t('detail.hostnames.userSupplied')}</span>
+          ) : hostnames.length === 0 ? (
+            <span className={styles.dim}>{t('detail.hostnames.none')}</span>
+          ) : (
+            hostnames.map((hostname) => (
+              <span key={hostname} className={styles.chip}>
+                {hostname}
+              </span>
+            ))
+          )}
+        </div>
+
+        <p className={styles.hint}>{t(HINT_KEY[status])}</p>
+        {hosts?.message ? <p className={styles.hint}>{t('detail.reason', { reason: hosts.message })}</p> : null}
+        {hostsError ? (
+          <p className={styles.errorBox} role="alert">
+            <span className={styles.boxIco} aria-hidden="true">!</span>
+            <span>{t('hosts.error', { reason: hostsError })}</span>
+          </p>
+        ) : null}
+        {detectError ? (
+          <p className={styles.errorBox} role="alert">
+            <span className={styles.boxIco} aria-hidden="true">!</span>
+            <span>{t('detect.error', { reason: detectError })}</span>
+          </p>
+        ) : null}
+      </div>
+
+      {/* 第二张卡：这一轮查到的候选。按钮全在原型 .candidate-actions 的位置（第 298 行）。 */}
+      <div className={styles.card}>
+        <div className={styles.cardHead}>
+          <h3 className={styles.title}>{t('detail.candidates.title')}</h3>
+          <span className={styles.countPill}>{t('detail.candidates.count', { count: candidates.length })}</span>
+          <div className={detectStyles.candidateActions}>
+            {detectReady && selfDetectable ? (
+              <button
+                type="button"
+                className={`${uiStyles.btn} ${uiStyles.small}`}
+                disabled={detecting}
+                onClick={() => onDetect(item.id)}
+              >
+                {detecting ? t('detect.running') : t('detect.start')}
+              </button>
+            ) : null}
+            {detectReady && batch.length > 1 ? (
+              <button
+                type="button"
+                className={`${uiStyles.btn} ${uiStyles.small}`}
+                disabled={detecting}
+                onClick={() => onDetectAll(batch)}
+                title={t('detect.allHint', { count: batch.length })}
+              >
+                {t('detect.all', { count: batch.length })}
+              </button>
+            ) : null}
+            {selfDetectable ? (
+              <button
+                type="button"
+                className={`${uiStyles.btn} ${uiStyles.small}`}
+                onClick={onOpenHosts}
+                title={t('hosts.openHint')}
+              >
+                {t('hosts.open')}
+              </button>
+            ) : null}
+            {detectReady && selfDetectable ? (
+              <button
+                type="button"
+                className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.primary}`}
+                disabled={detecting || !canApply}
+                onClick={() => onApply(item.id)}
+              >
+                {t('hosts.apply')}
+              </button>
+            ) : null}
+            {detecting && live ? <span className={styles.hint}>{t('detect.live', { done: live.done, total: live.total, active: live.active })}</span> : null}
+            {!detectReady ? <span className={styles.hint}>{t('detect.notReady')}</span> : null}
+            {detectReady && !selfDetectable ? <span className={styles.hint}>{t('detect.unavailable')}</span> : null}
+          </div>
+        </div>
+
+        {result && rows.length > 0 ? (
+          <p className={styles.hint}>
+            {t('detect.meta', { available: result.available, probes: result.probesUsed, dns: result.dnsQueries })}
             {result.truncated ? ` · ${t('detect.truncated')}` : ''}
             {result.deadlineHit ? ` · ${t('detect.deadlineHit')}` : ''}
             {result.cancelled ? ` · ${t('detect.cancelledBadge')}` : ''}
           </p>
-          {(result.hosts ?? []).map((host) => (
-            <div key={host.hostname} className={detectStyles.host}>
-              <p className={detectStyles.hostname}>
-                {host.hostname}
-                {!host.resolved ? ` · ${t('detect.resolveFailed', { reason: host.detail ?? '' })}` : ''}
+        ) : null}
+
+        {rows.length === 0 ? (
+          <p className={styles.hint}>{t('detect.empty')}</p>
+        ) : (
+          <>
+            {failedHosts.length > 0 ? (
+              <p className={styles.hint}>
+                {failedHosts.map((host) => (
+                  <span key={host.hostname} className={detectStyles.blockFailed}>
+                    {host.hostname}
+                    {t('detect.resolveFailed', { reason: host.detail ?? '' })}
+                    {'　'}
+                  </span>
+                ))}
               </p>
-              {(host.candidates ?? []).length === 0 ? (
-                <p className={detectStyles.note}>{t('detect.noCandidates')}</p>
-              ) : (
-                <table className={detectStyles.table}>
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('detect.col.ip')}</th>
-                      <th scope="col">{t('detect.col.status')}</th>
-                      <th scope="col">{t('detect.col.latency')}</th>
-                      <th scope="col">{t('detect.col.reason')}</th>
+            ) : null}
+            {flatCandidates.length === 0 ? (
+              <table className={detectStyles.cands}>
+                <tbody>
+                  <tr className={detectStyles.emptyRow}>
+                    <td colSpan={6}>{t('detect.noCandidates')}</td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <table className={detectStyles.cands}>
+                <thead>
+                  <tr>
+                    <th scope="col">{t('detect.col.index')}</th>
+                    <th scope="col">{t('detect.col.ip')}</th>
+                    <th scope="col">{t('detect.col.hostname')}</th>
+                    <th scope="col">{t('detect.col.mark')}</th>
+                    <th scope="col">{t('detect.col.latency')}</th>
+                    <th scope="col">{t('detect.col.score')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {flatCandidates.map(({ candidate, host }, index) => (
+                    <tr key={candidate.id} className={candidate.applied ? detectStyles.currentRow : undefined}>
+                      <td>{index + 1}</td>
+                      <td className={detectStyles.ipCell}>
+                        {candidate.ip}
+                        {candidate.ipv6 ? <span className={detectStyles.v6}> · {t('detect.ipv6')}</span> : null}
+                        {candidate.applied ? <span className={detectStyles.currentTag}>{t('detect.current')}</span> : null}
+                      </td>
+                      <td className={detectStyles.hostCell}>{host.hostname}</td>
+                      <td>
+                        <span className={`${detectStyles.tag} ${CANDIDATE_TONE[candidate.status] ?? ''}`}>
+                          {t(CANDIDATE_KEY[candidate.status] ?? 'detect.candidate.unknown')}
+                        </span>
+                        {candidate.reason ? <span className={detectStyles.reason}>{candidate.reason}</span> : null}
+                      </td>
+                      <td className={candidate.latencyMs > 0 ? detectStyles.latency : detectStyles.latencyNone}>
+                        {candidate.latencyMs > 0 ? t('detect.latency', { ms: candidate.latencyMs }) : '—'}
+                      </td>
+                      <td className={detectStyles.none}>{t('detail.metric.unprovided.short')}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {(host.candidates ?? []).map((candidate) => (
-                      <tr key={candidate.id} className={candidate.applied ? detectStyles.currentRow : undefined}>
-                        <td>
-                          {candidate.ip}
-                          {candidate.ipv6 ? <span className={detectStyles.v6}> · {t('detect.ipv6')}</span> : null}
-                          {candidate.applied ? <span className={detectStyles.currentTag}>{t('detect.current')}</span> : null}
-                        </td>
-                        <td>{t(CANDIDATE_KEY[candidate.status] ?? 'detect.candidate.unknown')}</td>
-                        <td>{candidate.latencyMs > 0 ? t('detect.latency', { ms: candidate.latencyMs }) : '—'}</td>
-                        <td className={detectStyles.reason}>{candidate.reason ?? ''}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          ))}
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 第三张卡：后端给的这份目录与 Hosts 快照的事实，排查时不用翻日志。 */}
+      <div className={styles.card}>
+        <div className={styles.cardHead}>
+          <h3 className={styles.title}>{t('detail.info.title')}</h3>
         </div>
-      ) : (
-        <p className={detectStyles.note}>{t('detect.empty')}</p>
-      )}
+        <dl className={styles.fields}>
+          <div>
+            <dt>{t('detail.field.id')}</dt>
+            <dd>{item.id}</dd>
+          </div>
+          <div>
+            <dt>{t('detail.field.category')}</dt>
+            <dd>{category.name}</dd>
+          </div>
+          <div>
+            <dt>{t('detail.field.scope')}</dt>
+            <dd>{category.scopeId}</dd>
+          </div>
+          <div>
+            <dt>{t('detail.field.status')}</dt>
+            <dd>
+              <StatusBadge status={status} reason={hosts?.message} />
+            </dd>
+          </div>
+          <div>
+            <dt>{t('detail.field.readAt')}</dt>
+            <dd>{hosts ? t('detail.readAt.value', { time: formatDateTime(hosts.readAt) }) : t('detail.field.readAt.none')}</dd>
+          </div>
+        </dl>
+      </div>
     </div>
   )
 }

@@ -604,6 +604,8 @@ export function App() {
         onRetryStatus={loadStatus}
         sidebarWidth={settings?.layout.sidebarWidth ?? null}
         onSidebarResize={changeSidebarWidth}
+        searchQuery={query}
+        onSearchQueryChange={setQuery}
         toolbar={
           <Toolbar
             settings={settings}
@@ -611,8 +613,6 @@ export function App() {
             saveKind={save.kind}
             saveText={save.text}
             busy={save.kind === 'pending'}
-            query={query}
-            onQueryChange={setQuery}
             onOpenNetwork={() => openSettings('network')}
             onDetectChecked={() => startDetectChecked(checkedIds)}
             onApplyChecked={() => startApplyChecked(checkedIds)}

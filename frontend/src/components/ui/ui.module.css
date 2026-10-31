@@ -43,10 +43,6 @@
   color: var(--text-2);
 }
 
-.ok {
-  background: var(--green-soft);
-  color: var(--green);
-}
 
 .failed {
   background: var(--red-soft);
@@ -138,4 +134,88 @@
 .segValue {
   color: var(--text-2);
   font-size: 12px;
+}
+
+/* 统一按钮配方，抄原型 .btn（唯一正式原型第 52–61 行）：30px 高、0 12px 内边距、6px 圆角、
+   --border-strong 描边；底色取 --ctl（浅色下就是原型写死的 #fff，其余五套由主题令牌给深色底），
+   悬停只换底色成 --hov。页面和布局层都不许再各写一份按钮（结构规划第 73 行），
+   要用就 composes 指到这里。 .small 对原型 .btn-sm（第 60 行）。 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--ctl);
+  color: var(--text);
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--hov);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.small {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* 主行动按钮（原型 .btn.primary 第 55–56 行）：实心主色，悬停不换色，只把整颗压暗一点。 */
+.btn.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--primary);
+  opacity: 0.9;
+}
+
+/* 弱化按钮（原型 .btn.ghost 第 57–58 行）：没有边框和底色，悬停才铺一层条带色。 */
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.btn.ghost:hover:not(:disabled) {
+  background: var(--hov2);
+}
+
+/* 危险动作（原型 .btn.danger 第 58–59 行）：只把字染红，悬停才铺淡红。 */
+.btn.danger {
+  color: var(--red);
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: var(--red-soft);
+}
+
+/* 还原类动作（原型 .btn.btn-sm.restore 第 61–62 行）：琥珀字＋琥珀描边，悬停铺淡琥珀。
+   原型那条边框是写死的 #f0d8b0，这里落 --amber-soft，六套配色共用。 */
+.btn.restore {
+  border-color: var(--amber-soft);
+  color: var(--amber);
+}
+
+.btn.restore:hover:not(:disabled) {
+  background: var(--amber-soft);
 }

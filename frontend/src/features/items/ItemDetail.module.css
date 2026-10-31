@@ -1,44 +1,179 @@
+/* 详情页外壳，逐条抄唯一正式原型的 #detail 那一块：
+   .card(242) .card-head(243) .service-card-head(244) .service-card-actions(246)
+   .card-head h3(247) .crumb(248) .metrics(258) .metric(259) .metric label(260) .metric b(261)
+   .metric b.dim(262) .metric b.mono(263) .domains-line(265) .domains-line .lbl(266) .chip(267)
+   .error-box(269) .error-box.warn(271) .candidate-actions .hint(300) .skeleton(583)。
+   原型写死的浅色（#f0f2f5 / #fbd5d5 / #e1e6ee 等）一律落回主题令牌，换肤只改令牌不改这里。 */
+
+/* 三张卡从上到下排，卡间距按原型 .card 的 margin-bottom。 */
 .wrap {
-  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-/* 详情标题行：项目名在左、这个服务的加速方法居中（原型 .service-card-head 第 243 行、DOM 第 2533–2535 行
-   就是这三列：1fr / auto / 1fr，操作那一列本项目还没搬过来，空着也让方法块保持居中）。 */
-.head {
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* 第一张卡的标题行：项目名在左、加速方法居中、徽章与还原在右（原型 .service-card-head 第 244 行）。 */
+.headGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 10px;
 }
 
-@media (max-width: 900px) {
-  .head {
-    grid-template-columns: 1fr;
-    justify-items: center;
-  }
-
-  /* 窄屏时标题仍靠左占满一行（原型第 245 行同一条）。 */
-  .head .title {
-    justify-self: start;
-    width: 100%;
-  }
+.headActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
 }
 
 .title {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.subTitle {
-  margin: 18px 0 6px;
+/* 「分类 / 项目」里的项目名那一段（原型 .crumb 第 248 行）。 */
+.crumb {
+  color: var(--text-3);
   font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
+  font-weight: 400;
 }
 
+/* 六格指标网：格子之间靠 1px 的背景色当分隔线（原型 .metrics 第 258 行）。 */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1px;
+  background: var(--border);
+}
+
+.metric {
+  padding: 12px 16px;
+  background: var(--panel);
+}
+
+.metricLabel {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.metricValue {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* 没有值的那一格：字变淡、不再加粗（原型 .metric b.dim 第 262 行）。 */
+.dim {
+  color: var(--text-3);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+/* IP 这类要逐位对齐的值走等宽（原型 .metric b.mono 第 263 行）。 */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+/* 域名条（原型 .domains-line 第 265–267 行）：一句「域名」加一串 chip，窄了自动折行。 */
+.domainsLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.lbl {
+  margin-right: 2px;
+  color: var(--text-3);
+}
+
+.chip {
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--band);
+  color: var(--text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+/* 出错那条（原型 .error-box 第 269–271 行）：淡红底、红字；有候选时的软失败走淡琥珀。
+   原型那条上边框是写死的浅色，这里靠底色本身就够了，和 components/ui 的报错条同一形状。 */
+.errorBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.warnBox {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.boxIco {
+  flex: none;
+  font-weight: 700;
+}
+
+/* 卡头那颗数量小胶囊（原型 .badge / .badge.unset 第 250、253 行）。 */
+.countPill {
+  padding: 2px 9px;
+  border-radius: 20px;
+  background: var(--hov2);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* 一句说明（原型 .hint 第 300 行）。 */
+.hint {
+  margin: 0;
+  padding: 8px 16px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 第三张卡的项目信息：左问右答一行一条（沿用工程已有的 dl 形状，卡片化后按原型间距）。 */
 .fields {
-  margin: 12px 0 0;
+  margin: 0;
+  padding: 4px 16px 10px;
   font-size: 13px;
 }
 
@@ -48,6 +183,10 @@
   gap: 16px;
   padding: 7px 0;
   border-bottom: 1px solid var(--border);
+}
+
+.fields > div:last-child {
+  border-bottom: none;
 }
 
 .fields dt {
@@ -61,28 +200,40 @@
   text-align: right;
 }
 
-.hint {
-  margin: 10px 0 0;
-  color: var(--text-3);
-  font-size: 12px;
-  line-height: 1.5;
+/* 检测中：六格指标整块换成微光条（原型 .skeleton 第 583–584 行），只由既有的检测中状态驱动。 */
+.skeleton {
+  display: inline-block;
+  width: 60px;
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--band) 25%, var(--border) 37%, var(--band) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
 }
 
-.plain {
-  margin: 0;
-  color: var(--text-2);
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0 50%;
+  }
 }
 
-.hosts {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
+@media (max-width: 900px) {
+  .headGrid {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
 
-.hosts li {
-  padding: 5px 0;
-  border-bottom: 1px solid var(--border);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  overflow-wrap: anywhere;
+  /* 窄屏时标题仍靠左占满一行（原型第 245 行同一条）。 */
+  .headGrid .title {
+    justify-self: start;
+    width: 100%;
+  }
+
+  .headActions {
+    justify-content: center;
+  }
 }

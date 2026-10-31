@@ -1,103 +1,190 @@
-/* 候选结果区：只管布局，颜色和间距引用令牌。 */
-.actions {
+/* 候选 IP 这一块照原型 #detail 第二张卡：表是 table.cands（第 274–288 行），
+   小徽章是 .tag（第 289–292 行），「当前生效」是 .cur-tag（第 293 行），
+   卡头那排小钮是 .candidate-actions（第 298–300 行）。
+   按钮本身一律走 components/ui 那一份配方，这里不再画按钮。 */
+
+/* 卡头那排小钮：靠右、挤不下就折行（原型 .candidate-actions 第 298–300 行）。 */
+.candidateActions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
-  margin: 0.3rem 0;
+  gap: 6px;
+  margin-left: auto;
 }
 
-.detect {
-  font: inherit;
-  padding: 0.25rem 0.9rem;
-  border: 1px solid var(--primary);
-  border-radius: var(--radius);
-  background: var(--primary);
-  color: var(--on-primary);
-  cursor: pointer;
+/* 一个域名一条分块：本项目一个项目可能带好几个域名，后端按域名各给一批候选。 */
+.block {
+  border-top: 1px solid var(--border);
 }
 
-.detect:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+.block:first-child {
+  border-top: none;
 }
 
-.live {
-  font-size: 0.8rem;
+/* 分块抬头：域名 + 解析失败那句（原型没有这一层，是本项目按真实数据形状补的一行）。 */
+.blockHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--strip);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
   color: var(--text-2);
 }
 
-.note {
-  margin: 0.3rem 0;
-  font-size: 0.8rem;
-  color: var(--text-2);
+.blockFailed {
+  color: var(--red);
+  font-family: inherit;
+  font-size: 11px;
 }
 
-.result {
-  margin-top: 0.4rem;
-}
-
-.meta {
-  margin: 0 0 0.3rem;
-  font-size: 0.78rem;
-  color: var(--text-2);
-}
-
-.host {
-  margin-bottom: 0.6rem;
-}
-
-.hostname {
-  margin: 0.15rem 0;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.table {
+.cands {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.78rem;
+  table-layout: auto;
 }
 
-.table th,
-.table td {
-  text-align: left;
-  padding: 0.15rem 0.5rem;
+.cands th {
+  padding: 9px 16px;
   border-bottom: 1px solid var(--border);
-}
-
-.table th {
-  color: var(--text-2);
+  background: var(--hov);
+  color: var(--text-3);
+  font-size: 11px;
   font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
 }
 
-.v6 {
-  color: var(--text-2);
-  font-size: 0.72rem;
+.cands td {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--band);
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  vertical-align: top;
 }
 
-/* 已生效那条：整行淡绿底 + IP 后一句话，读屏拿得到这句话（原型同款）。 */
+.cands tr:last-child td {
+  border-bottom: none;
+}
+
+.cands tbody tr:hover td {
+  background: var(--hov);
+}
+
+/* 序号列窄、评分列给一点宽度（原型第 280–281 行给第 5、6 列定过宽）。 */
+.cands th:nth-child(1),
+.cands td:nth-child(1) {
+  width: 34px;
+}
+
+.cands th:nth-child(5),
+.cands td:nth-child(5) {
+  width: 100px;
+}
+
+.ipCell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 单列表的域名列：字号收一档，长域名省略号，不把行撑高。 */
+.hostCell {
+  font-size: 12px;
+  color: var(--text-dim, var(--text));
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 这一条当时已经写在这个域名上：整行淡绿底，IP 后跟一句小字（原型 tr.current 第 285 行、.cur-tag 第 293 行）。 */
 .currentRow td {
   background: var(--green-soft);
 }
 
+.currentRow td:hover {
+  background: var(--green-soft);
+}
+
 .currentTag {
-  margin-left: 0.25rem;
+  margin-left: 4px;
   color: var(--green);
-  font-size: 0.72rem;
+  font-size: 10px;
   font-weight: 600;
 }
 
-.reason {
+.v6 {
+  margin-left: 4px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+/* 状态徽章：原型 .tag 是实心小块（第 289–292 行），底色按八档分到主题令牌上。 */
+.tag {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--band);
   color: var(--text-2);
+  font-size: 10px;
+  vertical-align: middle;
 }
 
-.detectError {
-  margin: 0.3rem 0;
-  font-size: 0.8rem;
-  color: var(--red);
-}
-
-.apply {
-  border-color: var(--green);
+.tagOk {
   background: var(--green);
+  color: var(--on-primary);
+}
+
+.tagFail {
+  background: var(--red);
+  color: var(--on-primary);
+}
+
+.tagWarn {
+  background: var(--amber);
+  color: var(--on-primary);
+}
+
+.tagBusy {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+/* 后端给的那句原因：跟着状态字放在同一格，不再单开一列（原型没有这一列）。 */
+.reason {
+  display: block;
+  margin-top: 3px;
+  max-width: 320px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.none {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.latency {
+  color: var(--text);
+}
+
+.latencyNone {
+  color: var(--text-3);
+}
+
+/* 整张表没有候选时那一条居中的话（原型第 2559–2561 行同款）。 */
+.emptyRow td {
+  padding: 24px 16px;
+  color: var(--text-3);
+  text-align: center;
+  white-space: normal;
 }
