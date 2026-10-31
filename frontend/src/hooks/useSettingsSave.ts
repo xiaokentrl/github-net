@@ -36,7 +36,8 @@ export function useSettingsSave(settings: Config | null, apply: (next: Config) =
           if (requestRef.current !== request) return
           // 保存成功返回的就是最新快照，界面直接采用，省掉一次读。
           apply(next)
-          setState({ kind: 'ok', text: t('settings.save.ok', { revision: next.revision, label }), subject: seed })
+          // 成功不留提示：改了什么用户自己看得到，配置版本号是内部细节，不往上摆。
+          setState(IDLE_SAVE)
         })
         .catch((err: unknown) => {
           if (requestRef.current !== request) return

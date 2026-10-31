@@ -63,8 +63,9 @@ export function ServiceStrategySelector({
       (next) => {
         if (requestRef.current !== request) return
         setSnap(next)
-        setKind('ok')
-        setText(t('settings.save.ok', { revision: next.revision, label }))
+        // 成功不留提示：选择框里已经是新选中的方法，不需要再喊一句「已保存」。
+        setKind('idle')
+        setText('')
         // 这次保存把配置版本号抬了一格：让手里也有一份配置的地方重读，不然它下一次保存必撞版本冲突。
         onSaved()
       },
