@@ -126,3 +126,82 @@ func TestCandidatesOfMissingRound(t *testing.T) {
 		t.Fatalf("不存在的轮该给空列表，实际 %d（err=%v）", len(cands), err)
 	}
 }
+
+// 候选池按「主机名 + IP」去重：同一个 IP 跨轮再写只更新那一行，不堆积；
+// 轮底账则照实每轮一行，两份数据各管各的。
+func TestPoolDedupesAcrossRounds(t *testing.T) {
+	s := newTestStore(t)
+	first := sampleResult()
+	if err := s.SaveRound("r1", "github", "gitcdn", first); err != nil {
+		t.Fatalf("第一轮落盘失败: %v", err)
+	}
+
+	// 第二轮：同一个 IP 又出现，延迟变了，另有一个新 IP。
+	second := sampleResult()
+	second.Candidates[0].LatencyMS = 88
+	second.Candidates = append(second.Candidates,
+		accelerator.Candidate{ID: "c4", Hostname: "github.com", IP: "4.4.4.4", Status: accelerator.StatusAvailable})
+	if err := s.SaveRound("r2", "github", "all-sources", second); err != nil {
+		t.Fatalf("第二轮落盘失败: %v", err)
+	}
+
+	pool, err := s.Pool("github.com")
+	if err != nil {
+		t.Fatalf("读候选池失败: %v", err)
+	}
+	// 140.82.121.4 / 2606:...（v6）/ 20.205.243.166 / 4.4.4.4，重复的 140.82.121.4 只有一行。
+	if len(pool) != 4 {
+		t.Fatalf("候选池该是 4 行（去重后），实际 %d：%v", len(pool), pool)
+	}
+	var updated *PoolRow
+	for i := range pool {
+		if pool[i].IP == "140.82.121.4" {
+			updated = &pool[i]
+		}
+	}
+	if updated == nil || updated.LatencyMS != 88 || updated.SourceID != "all-sources" {
+		t.Errorf("重复 IP 该被第二轮的结果更新，实际 %+v", updated)
+	}
+	if updated.UpdatedAt != "2026-10-31T08:00:05Z" {
+		t.Errorf("更新时间该取这轮收尾时刻，实际 %q", updated.UpdatedAt)
+	}
+
+	// 池按主机名过滤：只有 github.com 的查询不给别的域名的行。
+	for _, p := range pool {
+		if p.Hostname != "github.com" {
+			t.Fatalf("按主机名过滤后不该混进其他域名：%+v", p)
+		}
+	}
+
+	// 底账不受池的去重影响：两轮各自的候选行都在。
+	rounds, _ := s.Rounds(0)
+	if len(rounds) != 2 {
+		t.Fatalf("底账该有 2 轮，实际 %d", len(rounds))
+	}
+	all, err := s.Pool("")
+	if err != nil || len(all) != 4 {
+		t.Fatalf("不过滤的池该是同 4 行（err=%v）", err)
+	}
+}
+
+// 池里的状态是最后一次探测的结论：同一 IP 从可用变超时，池里要跟着变。
+func TestPoolTracksLatestStatus(t *testing.T) {
+	s := newTestStore(t)
+	good := sampleResult()
+	if err := s.SaveRound("r1", "github", "gitcdn", good); err != nil {
+		t.Fatal(err)
+	}
+	bad := sampleResult()
+	for i := range bad.Candidates {
+		bad.Candidates[i].Status = accelerator.StatusTimeout
+	}
+	if err := s.SaveRound("r2", "github", "gitcdn", bad); err != nil {
+		t.Fatal(err)
+	}
+	pool, _ := s.Pool("github.com")
+	for _, p := range pool {
+		if p.Status != string(accelerator.StatusTimeout) {
+			t.Errorf("%s 最后一次是超时，池里该记 timeout，实际 %s", p.IP, p.Status)
+		}
+	}
+}

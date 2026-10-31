@@ -111,6 +111,19 @@ func (s *Store) migrate() error {
 			applied      INTEGER NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_candidates_round ON detect_candidates(round_row)`,
+		// candidate_ips 是按 IP 去重的候选池：每个「主机名 + IP」只有一行，
+		// 重复写入只更新最新状态——它回答「这个域名现在有哪些已知地址、最后一次测是什么结果」。
+		// 轮底账（上面两张表）管「每轮发生了什么」，两份各管各的。
+		`CREATE TABLE IF NOT EXISTS candidate_ips (
+			hostname   TEXT NOT NULL,
+			ip         TEXT NOT NULL,
+			ipv6       INTEGER NOT NULL,
+			status     TEXT NOT NULL,
+			latency_ms INTEGER NOT NULL,
+			source_id  TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (hostname, ip)
+		)`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil {
 			return fmt.Errorf("store: 建表失败: %w", err)
@@ -158,6 +171,19 @@ func (s *Store) SaveRound(taskRound, scopeID, strategyID string, r *accelerator.
 			c.LatencyMS, c.TLSMS, c.Reason, b2i(c.Applied),
 		); err != nil {
 			return fmt.Errorf("store: 候选行写不进去: %w", err)
+		}
+		// 同一笔进候选池：同主机名同 IP 已存在就更新成这次的结果，不另起一行（去重）。
+		if _, err := tx.Exec(
+			`INSERT INTO candidate_ips
+				(hostname, ip, ipv6, status, latency_ms, source_id, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT (hostname, ip) DO UPDATE SET
+				ipv6 = excluded.ipv6, status = excluded.status, latency_ms = excluded.latency_ms,
+				source_id = excluded.source_id, updated_at = excluded.updated_at`,
+			c.Hostname, c.IP, b2i(c.IPv6), string(c.Status), c.LatencyMS,
+			strategyID, r.FinishedAt.UTC().Format(timeFormat),
+		); err != nil {
+			return fmt.Errorf("store: 候选池写不进去: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -224,6 +250,44 @@ func (s *Store) Candidates(roundRow int64) ([]CandidateRow, error) {
 		}
 		c.IPv6, c.Applied = ipv6 != 0, applied != 0
 		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// PoolRow 是候选池里的一行：一个「主机名 + IP」的最新已知状态。
+type PoolRow struct {
+	Hostname  string
+	IP        string
+	IPv6      bool
+	Status    string
+	LatencyMS int64
+	SourceID  string
+	UpdatedAt string
+}
+
+// Pool 按主机名分组读出整份候选池（组内按 IP 排序）。hostname 不为空就只看这个主机名。
+func (s *Store) Pool(hostname string) ([]PoolRow, error) {
+	q := `SELECT hostname, ip, ipv6, status, latency_ms, source_id, updated_at FROM candidate_ips`
+	var args []any
+	if hostname != "" {
+		q += ` WHERE hostname = ?`
+		args = append(args, hostname)
+	}
+	q += ` ORDER BY hostname, ip`
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: 读候选池失败: %w", err)
+	}
+	defer rows.Close()
+	var out []PoolRow
+	for rows.Next() {
+		var p PoolRow
+		var ipv6 int
+		if err := rows.Scan(&p.Hostname, &p.IP, &ipv6, &p.Status, &p.LatencyMS, &p.SourceID, &p.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("store: 候选池行读不出来: %w", err)
+		}
+		p.IPv6 = ipv6 != 0
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }
