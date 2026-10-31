@@ -178,15 +178,52 @@ func Path() (string, error) {
 		}
 		return filepath.Join(home, "Library", "Application Support", "GitHubNet", "config", "config.json"), nil
 	default:
-		if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
-			return filepath.Join(dir, "github-net", "config", "config.json"), nil
+		// Linux 按惯例放配置目录（拍板 2026-10-31）：XDG_CONFIG_HOME 优先，默认 ~/.config/github-net/config.json。
+		// 0.1.1 及之前放在数据目录，由 MigrateLegacy 搬过来。
+		if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
+			return filepath.Join(dir, "github-net", "config.json"), nil
 		}
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", err
 		}
-		return filepath.Join(home, ".local", "share", "github-net", "config", "config.json"), nil
+		return filepath.Join(home, ".config", "github-net", "config.json"), nil
 	}
+}
+
+// legacyPath 是 0.1.1 及之前配置文件的旧位置（数据目录），只有 Linux 动过，另两个平台没有旧档。
+func legacyPath() (string, bool) {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		return "", false
+	}
+	if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
+		return filepath.Join(dir, "github-net", "config", "config.json"), true
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", false
+	}
+	return filepath.Join(home, ".local", "share", "github-net", "config", "config.json"), true
+}
+
+// MigrateLegacy 把旧数据目录里的配置搬一次家：新位置还没有而旧位置有，
+// 就整体复制过去（原件保留当备份，不做删除）。搬不动不算致命——NewStore 会用默认值开新档。
+func MigrateLegacy(newPath string) {
+	if _, err := os.Stat(newPath); err == nil {
+		return
+	}
+	old, ok := legacyPath()
+	if !ok {
+		return
+	}
+	raw, err := os.ReadFile(old)
+	if err != nil || len(raw) == 0 {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o700); err != nil {
+		return
+	}
+	_ = os.WriteFile(newPath, raw, 0o600)
 }
 
 // Validate 检查全部字段。scopeIDs 是产品目录里的合法加速范围，

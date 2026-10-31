@@ -115,8 +115,9 @@ export function applyTaskEvent(payload: TaskProgressPayload) {
     next.results = results
     next.live = live
   }
-  if (isTerminalTask(payload.task.status) && payload.task.kind === 'detect') {
-    // 终态后后端已经把整轮结论存好，这里拉权威快照替换事件补画的临时行。
+  if (isTerminalTask(payload.task.status) && (payload.task.kind === 'detect' || payload.task.kind === 'apply' || payload.task.kind === 'restore')) {
+    // 终态后后端已经把整轮结论存好（应用/还原收尾还会按 Hosts 现状重标「当前生效」），
+    // 这里拉权威快照替换事件补画的临时行。
     void refreshResult(payload.task.itemId)
     const live = { ...state.live }
     delete live[payload.task.itemId]
@@ -162,6 +163,12 @@ export async function refreshResult(itemId: string): Promise<DetectResultView> {
 
 function emptyResult(itemId: string): DetectResultView {
   return { itemId, scopeId: '', strategyId: '', available: 0, probesUsed: 0, dnsQueries: 0, truncated: false, deadlineHit: false, cancelled: false, hosts: [] }
+}
+
+// refreshAllResults 把已在 store 里的项目全部重拉一遍：RestoreAll 一笔清空「当前生效」，
+// 不走队列没有逐项事件，还原成功后调它，各详情页的「当前写入 IP」才回得来。
+export async function refreshAllResults(): Promise<void> {
+  await Promise.all(Object.keys(state.results).map((id) => refreshResult(id).catch(() => undefined)))
 }
 
 // isTerminalTask 判断任务是否已到终态；taskEvents 用它触发「任务落定」回调。

@@ -21,10 +21,13 @@ type dispatchExecutor struct {
 	priv privilege.Caller
 	// results 是检测结果存储：应用前从「最近一轮」取可用候选。
 	results *detectResultStore
+	// appliedIPs 读「这些主机名当前写在系统 Hosts 上的是哪些地址」；应用/还原收尾时
+	// 用它把候选的「当前生效」标记重标一遍，详情页的「当前写入 IP」才有实时事实。
+	appliedIPs func(hostnames []string) map[string][]string
 }
 
-func newDispatchExecutor(detect task.Executor, priv privilege.Caller, results *detectResultStore) *dispatchExecutor {
-	return &dispatchExecutor{detect: detect, priv: priv, results: results}
+func newDispatchExecutor(detect task.Executor, priv privilege.Caller, results *detectResultStore, appliedIPs func(hostnames []string) map[string][]string) *dispatchExecutor {
+	return &dispatchExecutor{detect: detect, priv: priv, results: results, appliedIPs: appliedIPs}
 }
 
 func (e *dispatchExecutor) Execute(ctx context.Context, t task.Task, report task.Report) task.Outcome {
@@ -62,7 +65,22 @@ func (e *dispatchExecutor) apply(t task.Task, report task.Report) task.Outcome {
 	if err := e.priv.Apply(t.ItemID, mappings); err != nil {
 		return task.Outcome{Status: task.StatusFailed, Message: privilegeErrorText(err)}
 	}
+	// 写完把「当前生效」标记按 Hosts 现状重标一遍：检测那轮的标记是写入前的旧事实。
+	hostnames := make([]string, 0, len(view.Hosts))
+	for _, h := range view.Hosts {
+		hostnames = append(hostnames, h.Hostname)
+	}
+	e.markApplied(t.ItemID, hostnames)
 	return task.Outcome{Status: task.StatusDone}
+}
+
+// markApplied 用 appliedIPs 接缝现读 Hosts，重标该项目候选的「当前生效」；
+// 接缝没接（纯测试场景）就跳过。还原成功走 markApplied(id, nil) 清光标记。
+func (e *dispatchExecutor) markApplied(itemID string, hostnames []string) {
+	if e.appliedIPs == nil {
+		return
+	}
+	e.results.markApplied(itemID, e.appliedIPs(hostnames))
 }
 
 // restore 把一个项目退回它应用前的映射；写系统的事在特权服务那边，这里只管叫它做并翻译失败。
@@ -73,6 +91,15 @@ func (e *dispatchExecutor) restore(t task.Task, report task.Report) task.Outcome
 	report("restore", "正在还原系统 Hosts", 0)
 	if err := e.priv.RestoreItem(t.ItemID); err != nil {
 		return task.Outcome{Status: task.StatusFailed, Message: privilegeErrorText(err)}
+	}
+	// 还原完清掉「当前生效」标记：这些地址已经不在 Hosts 上了。
+	view, ok := e.results.view(t.ItemID)
+	if ok {
+		hostnames := make([]string, 0, len(view.Hosts))
+		for _, h := range view.Hosts {
+			hostnames = append(hostnames, h.Hostname)
+		}
+		e.markApplied(t.ItemID, hostnames)
 	}
 	return task.Outcome{Status: task.StatusRestored}
 }

@@ -40,6 +40,28 @@ func (s *detectResultStore) put(scopeID, strategyID string, result *accelerator.
 	s.byItem[result.ItemID] = detectResultRecord{scopeID: scopeID, strategyID: strategyID, result: result}
 }
 
+// markApplied 按系统 Hosts 的现状重标这轮候选的「当前生效」标记。
+// 应用成功后调：写入前检测的那轮里标记是旧事实，Hosts 才是权威——
+// 候选的地址现在写在这个主机名上就是 true，不在就是 false（包括把旧标记清掉）。
+func (s *detectResultStore) markApplied(itemID string, applied map[string][]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.byItem[itemID]
+	if !ok {
+		return
+	}
+	for i, c := range rec.result.Candidates {
+		on := false
+		for _, ip := range applied[c.Hostname] {
+			if ip == c.IP {
+				on = true
+				break
+			}
+		}
+		rec.result.Candidates[i].Applied = on
+	}
+}
+
 // view 把某项目最近一轮结果整理成给前端的 DTO。没有记录时 ok 为 false，
 // 调用方返回「还没有检测结果」的空形状，这不是错误。
 func (s *detectResultStore) view(itemID string) (DetectResultView, bool) {

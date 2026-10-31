@@ -74,7 +74,7 @@ func newApplyService(t *testing.T, priv privilege.Caller) *Service {
 			c.ScopeIDs(), map[string]bool{"live.one": true}),
 		priv:          priv,
 		detectResults: results,
-		tasks:         task.NewQueue(newDispatchExecutor(newGatedExecutor(), priv, results), nil),
+		tasks:         task.NewQueue(newDispatchExecutor(newGatedExecutor(), priv, results, nil), nil),
 	}
 }
 

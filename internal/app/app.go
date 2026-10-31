@@ -151,7 +151,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	s.updater = updater.NewClient()
 	s.pubKey = updater.PublicKey()
 	s.autostart = platform.NewAutostart()
-	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results), taskEmit)
+	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results, s.appliedIPsFor), taskEmit)
 	return s
 }
 
@@ -190,6 +190,8 @@ func newSettingsStore(c *catalog.Catalog) (*config.Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 0.1.2 起配置从数据目录搬到配置目录：开档前先搬一次家（新位置已有就不动）。
+	config.MigrateLegacy(path)
 	return config.NewStore(path, c.ScopeIDs(), strategies.IDs()), nil
 }
 

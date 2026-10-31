@@ -384,7 +384,7 @@ func TestPendingExecutorFailsQueuedTaskInsteadOfCrashing(t *testing.T) {
 	// 队列入队会拦下未知类型，nil 执行器的风险只剩一种：某个 Kind 的执行器没接。
 	// 这里直接打分发执行器的 nil 分支：万一以后有人在分发台挂了个没接活的类型，
 	// 任务会以「失败」被界面看见，而不是让驱动协程撞上 nil 把整个应用带崩。
-	dispatch := newDispatchExecutor(nil, nil, newDetectResultStore())
+	dispatch := newDispatchExecutor(nil, nil, newDetectResultStore(), nil)
 	out := dispatch.Execute(context.Background(), task.Task{ID: "t1", Kind: task.KindDetect},
 		func(string, string, int) {})
 	if out.Status != task.StatusFailed || out.Message != pendingExecutorMessage {
