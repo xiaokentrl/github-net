@@ -186,7 +186,7 @@ func Path() (string, error) {
 		return filepath.Join(home, "Library", "Application Support", "GitHubNet", "config", "config.json"), nil
 	default:
 		// Linux 按惯例放配置目录（拍板 2026-10-31）：XDG_CONFIG_HOME 优先，默认 ~/.config/github-net/config.json。
-		// 0.1.1 及之前放在数据目录，由 MigrateLegacy 搬过来。
+		// 开发期早先的版本把它放在数据目录，由 MigrateLegacy 搬过来（不写具体版本号：编号回退过一次）。
 		if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
 			return filepath.Join(dir, "github-net", "config.json"), nil
 		}
@@ -198,7 +198,7 @@ func Path() (string, error) {
 	}
 }
 
-// legacyPath 是 0.1.1 及之前配置文件的旧位置（数据目录），只有 Linux 动过，另两个平台没有旧档。
+// legacyPath 是开发期早先版本的配置文件旧位置（数据目录），只有 Linux 动过，另两个平台没有旧档。
 func legacyPath() (string, bool) {
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		return "", false

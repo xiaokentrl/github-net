@@ -195,7 +195,7 @@ func newSettingsStore(c *catalog.Catalog) (*config.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 0.1.2 起配置从数据目录搬到配置目录：开档前先搬一次家（新位置已有就不动）。
+	// 配置从数据目录搬到配置目录（随首个对外版本一起出）：开档前先搬一次家（新位置已有就不动）。
 	config.MigrateLegacy(path)
 	return config.NewStore(path, c.ScopeIDs(), strategies.IDs(), c.CategoryIDs()), nil
 }

@@ -1,55 +1,61 @@
 ## English
 
-### github-net 0.1.2 Stable (0.1.1 → 0.1.2)
+### github-net 0.1.0 Stable
 
 **Added**
 
-1. Add local SQLite persistence for detection results: each round is recorded as a ledger, with a per-hostname+IP cache pool keeping the latest usable addresses
-2. Add three public hosts-source methods (GitCDN/HelloGitHub/GitLab) plus an aggregate "All sources" method, which is the default for the GitHub scope
-3. Add a "Use stored IPs" method that re-verifies cached usable addresses without re-fetching sources
-4. Group the method dropdown with numbered sources and add a Detect button that runs only the selected method
-5. Add a title-bar tray pill for quick theme switching, minimize-to-tray and quit, with a pulsing dot while tasks run
-6. Replace the language dropdown with two buttons (Simplified/Traditional) in appearance settings
+1. Add the product catalog: 11 categories and 52 projects (GitHub, AI dev tools, JetBrains, Steam, game platforms, specific games, public CDNs, Microsoft / Xbox, Coursera, ad blocking, custom subscription sources), with the category tree and detail pages reading real backend data
+2. Add live detection: candidates come from the system DNS resolver, each one probed for reachability and HTTPS certificate validity, grouped by hostname in the UI; the address currently in effect is listed too and marked "in use"
+3. Add Hosts apply and restore: a least-privileged helper service runs in the background, backing up before writing, replacing atomically, verifying afterwards and rolling back on failure, per item or all at once
+4. Add the task queue panel: detection, apply and restore run through a queue with pause, cancel, retry-failed and restore-all, and both the list width and the panel height are draggable
+5. Add acceleration methods: GitHub scope defaults to "all public sources" (aggregating GitCDN, HelloGitHub and GitLab), plus "auto-find usable IPs" and "use stored IPs" which re-verifies cached addresses without refetching sources
+6. Add a local SQLite ledger: every detection round is recorded, and the candidate pool caches the latest usable addresses per hostname plus IP
+7. Add network and traffic settings: low / standard / full profiles plus a per-run candidate probe limit (default 130, up to 1040), with the real per-round budget enforced by the backend
+8. Add startup automation: auto-detect the selected top-level menus after boot, optionally auto-apply when detection finishes and quit the program once the apply queue settles
+9. Add appearance and preferences: six themes, four zoom steps (90% / 100% / 110% / 125%), Simplified and Traditional Chinese
+10. Add the tray and a frameless window: closing the window can minimize to the tray, the app can start at login, and the title bar carries minimize / maximize / close
+11. Add update check and install: shows the latest stable release and package size, then verifies both the SHA256 digest and the Ed25519 signature after download and only hands the package over to the system installer when both pass; never downloads on its own and never installs silently
+12. Add the eight-pane settings center (layout, UI zoom, appearance, network & traffic, tray, start at login, update check, about) with per-control immediate saving and an authoritative reload whenever a write fails
+13. Add a Linux x64 deb package containing the app, the privileged helper service and its systemd unit
 
 **Fixed**
 
-1. Fix the settings dialog stealing focus from text inputs on background events
-2. Fix invisible option text in native dropdowns on the light theme caused by system-following popups
-3. Fix segmented-button hover overriding the selected state and hiding its label
-4. Fix the "applied IP" metric not refreshing after apply or restore
-5. Move the config file to ~/.config/github-net/config.json with automatic migration from the old location
+None
 
 **Updated**
 
-1. Trim UI copy: remove placeholder hints, show only data-backed metrics and relative check time
-2. Update defaults: collapsed menu, no selection, compact queue height, focus-follow on, and reordered categories
-3. Update hosts writing: separate the managed block with a blank line that is removed again on restore
-4. Remove the Pages and Gist submenus (their domains are not covered by public sources)
+1. Update the shipped defaults: low-traffic profile, Daylight theme, 100% zoom, nothing preselected on start, focus following on for detection and apply, 240px sidebar and the compact queue height
+2. Update Hosts writing: the managed block is separated by blank lines that are removed again on restore
+3. Update the config location to ~/.config/github-net/config.json, migrating the old file automatically on startup
+4. Update the upgrade path: the package post-install script enables the service at boot and then restarts it, so an upgrade always runs the new binary
 
 ## 中文
 
-### 0.1.2 稳定版（0.1.1 → 0.1.2）
+### 0.1.0 稳定版
 
 **新增**
 
-1. 新增候选结论落盘：每轮检测整笔记进本机 SQLite 底账，候选池按「域名+IP」缓存最近一轮的可用地址
-2. 新增三个公共 hosts 源加速方法（GitCDN/HelloGitHub/GitLab）和汇总方法「全部公共源」，GitHub 范围默认使用后者
-3. 新增「使用已有储存」方法：直接用缓存里的可用地址重新验证，不重新拉源
-4. 方法下拉分组显示，公共源按优先序编号；下拉旁新增「检测」按钮，只测选中的方法
-5. 标题栏新增托盘胶囊：主题色点快切、最小化到托盘、退出，圆点随任务运行脉冲
-6. 设置中心外观页语言改为简体/繁体两颗按钮
+1. 新增产品目录：11 个类目、52 个项目（GitHub、AI 开发工具、JetBrains、Steam、游戏平台、特定游戏专项、公共 CDN、微软 / Xbox、Coursera、去广告与屏蔽、自定义订阅源），分类树和详情页都读后端真实数据
+2. 新增真实检测：走系统 DNS 取候选地址，逐个探测连通性和 HTTPS 证书，结果按主机名分组显示；正在生效的地址也列进候选并标「当前生效」
+3. 新增 Hosts 应用与还原：受限的特权辅助服务常驻后台，写入前备份、原子替换、写后校验，失败自动回滚，可按项还原也可全部还原
+4. 新增任务队列面板：检测、应用、恢复排队执行，支持暂停、取消、重试失败项和全部还原，任务列表宽度与面板高度都能拖动
+5. 新增加速方法：GitHub 范围默认使用「全部公共源」（GitCDN、HelloGitHub、GitLab 三源汇总），另有「自动查找可用 IP」和「使用已有储存」——后者直接复验缓存里的可用地址，不重新拉源
+6. 新增本机 SQLite 底账：每轮检测整笔记账，候选池按「域名 + IP」缓存最近一轮的可用地址
+7. 新增网络与流量设置：省流／标准／完整三档，外加每轮候选探测上限（默认 130，最多可填 1040），一轮实际发多少次探测由后端统一收口
+8. 新增启动自动化：按勾中的主菜单在开机后自动检测，可选检测完成后自动应用、应用队列跑完后自动退出程序
+9. 新增外观与偏好：六套主题、界面缩放四档（90%／100%／110%／125%）、简体中文与繁体中文
+10. 新增托盘与无边框窗口：关窗可最小化到托盘、登录系统后自动启动，标题栏内是最小化／最大化／关闭三颗按钮
+11. 新增更新检查与安装：显示最新稳定版和包大小，下载后同时校验 SHA256 摘要与 Ed25519 签名，两项都过才交给系统安装；不自动下载、不静默安装
+12. 新增设置中心八页（布局、界面缩放、外观、网络与流量、托盘、开机自启、检测升级、关于我们），改一处即时保存，保存失败回读后端权威快照
+13. 新增 Linux x64 的 deb 安装包，包内含主程序、特权辅助服务和 systemd 单元
 
 **修复**
 
-1. 修复设置对话框抢焦点：后台事件一进来输入框就失去焦点
-2. 修复浅色主题下原生下拉弹层跟系统走深色导致悬停文字看不见
-3. 修复分段按钮悬停覆盖选中态样式导致白字不可见
-4. 修复应用/还原后详情页「当前写入 IP」不刷新
-5. 配置文件迁移到 ~/.config/github-net/config.json，旧位置自动搬家
+无
 
 **更新**
 
-1. 更新界面文案与布局：删除占位提示与说明小字，指标格改为有数据来源的真指标，检测完成时间改相对时间
-2. 更新默认值：菜单折叠、默认无勾选、队列高度小档、焦点跟随打开；分类排序调整
-3. 更新启动行为：写入 Hosts 前先空一行与原有内容分隔，还原时一并收走
-4. 删除 Pages 和 Gist 两个子菜单（公共源不覆盖其域名）
+1. 更新出厂默认：省流档、晨光白主题、缩放 100%、启动后不预选任何项目、检测与应用的焦点跟随打开、侧栏宽 240px、队列面板取小档
+2. 更新 Hosts 写法：托管区段前后各空一行与原有内容分隔，还原时一并收走
+3. 更新配置文件位置：改存到 ~/.config/github-net/config.json，旧位置的文件在开档时自动搬家
+4. 更新升级安装：安装包后置脚本先设开机自启、再重启辅助服务，升级后运行的一定是新二进制

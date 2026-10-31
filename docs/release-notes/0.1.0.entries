@@ -1,7 +1,38 @@
-# 0.1.0 条目清单（唯一来源是 docs/CHANGELOG.md 的 [未发布] 段；这里只放对外说得住的净变化）
-added|zh|建好 Wails v3 工程骨架：Go 后端、React 前端、Taskfile 构建任务和 CI 门禁
-added|en|Set up the Wails v3 project skeleton: Go backend, React frontend, Taskfile build tasks and CI gates
-added|zh|接入产品目录与 GetItems 接口，分类树和详情页改读后端真实数据
-added|en|Add the product catalog and the GetItems API so the category tree and detail pages read real backend data
-added|zh|接入设置服务与设置中心对话框（布局、网络与流量两页），每控件即时保存，失败回读后端权威快照
-added|en|Add the settings service and the settings center dialog (layout and network & traffic panes), saving per control and reloading the authoritative snapshot on failure
+# 0.1.0 条目清单（首个对外版本；唯一来源是 docs/CHANGELOG.md，这里只放对外说得住的净变化）
+# 这一版没有「修复」组：之前没有对外版本，开发期的问题不算修好了某个已发布的版本。
+# added
+added|zh|新增产品目录：11 个类目、52 个项目（GitHub、AI 开发工具、JetBrains、Steam、游戏平台、特定游戏专项、公共 CDN、微软 / Xbox、Coursera、去广告与屏蔽、自定义订阅源），分类树和详情页都读后端真实数据
+added|en|Add the product catalog: 11 categories and 52 projects (GitHub, AI dev tools, JetBrains, Steam, game platforms, specific games, public CDNs, Microsoft / Xbox, Coursera, ad blocking, custom subscription sources), with the category tree and detail pages reading real backend data
+added|zh|新增真实检测：走系统 DNS 取候选地址，逐个探测连通性和 HTTPS 证书，结果按主机名分组显示；正在生效的地址也列进候选并标「当前生效」
+added|en|Add live detection: candidates come from the system DNS resolver, each one probed for reachability and HTTPS certificate validity, grouped by hostname in the UI; the address currently in effect is listed too and marked "in use"
+added|zh|新增 Hosts 应用与还原：受限的特权辅助服务常驻后台，写入前备份、原子替换、写后校验，失败自动回滚，可按项还原也可全部还原
+added|en|Add Hosts apply and restore: a least-privileged helper service runs in the background, backing up before writing, replacing atomically, verifying afterwards and rolling back on failure, per item or all at once
+added|zh|新增任务队列面板：检测、应用、恢复排队执行，支持暂停、取消、重试失败项和全部还原，任务列表宽度与面板高度都能拖动
+added|en|Add the task queue panel: detection, apply and restore run through a queue with pause, cancel, retry-failed and restore-all, and both the list width and the panel height are draggable
+added|zh|新增加速方法：GitHub 范围默认使用「全部公共源」（GitCDN、HelloGitHub、GitLab 三源汇总），另有「自动查找可用 IP」和「使用已有储存」——后者直接复验缓存里的可用地址，不重新拉源
+added|en|Add acceleration methods: GitHub scope defaults to "all public sources" (aggregating GitCDN, HelloGitHub and GitLab), plus "auto-find usable IPs" and "use stored IPs" which re-verifies cached addresses without refetching sources
+added|zh|新增本机 SQLite 底账：每轮检测整笔记账，候选池按「域名 + IP」缓存最近一轮的可用地址
+added|en|Add a local SQLite ledger: every detection round is recorded, and the candidate pool caches the latest usable addresses per hostname plus IP
+added|zh|新增网络与流量设置：省流／标准／完整三档，外加每轮候选探测上限（默认 130，最多可填 1040），一轮实际发多少次探测由后端统一收口
+added|en|Add network and traffic settings: low / standard / full profiles plus a per-run candidate probe limit (default 130, up to 1040), with the real per-round budget enforced by the backend
+added|zh|新增启动自动化：按勾中的主菜单在开机后自动检测，可选检测完成后自动应用、应用队列跑完后自动退出程序
+added|en|Add startup automation: auto-detect the selected top-level menus after boot, optionally auto-apply when detection finishes and quit the program once the apply queue settles
+added|zh|新增外观与偏好：六套主题、界面缩放四档（90%／100%／110%／125%）、简体中文与繁体中文
+added|en|Add appearance and preferences: six themes, four zoom steps (90% / 100% / 110% / 125%), Simplified and Traditional Chinese
+added|zh|新增托盘与无边框窗口：关窗可最小化到托盘、登录系统后自动启动，标题栏内是最小化／最大化／关闭三颗按钮
+added|en|Add the tray and a frameless window: closing the window can minimize to the tray, the app can start at login, and the title bar carries minimize / maximize / close
+added|zh|新增更新检查与安装：显示最新稳定版和包大小，下载后同时校验 SHA256 摘要与 Ed25519 签名，两项都过才交给系统安装；不自动下载、不静默安装
+added|en|Add update check and install: shows the latest stable release and package size, then verifies both the SHA256 digest and the Ed25519 signature after download and only hands the package over to the system installer when both pass; never downloads on its own and never installs silently
+added|zh|新增设置中心八页（布局、界面缩放、外观、网络与流量、托盘、开机自启、检测升级、关于我们），改一处即时保存，保存失败回读后端权威快照
+added|en|Add the eight-pane settings center (layout, UI zoom, appearance, network & traffic, tray, start at login, update check, about) with per-control immediate saving and an authoritative reload whenever a write fails
+added|zh|新增 Linux x64 的 deb 安装包，包内含主程序、特权辅助服务和 systemd 单元
+added|en|Add a Linux x64 deb package containing the app, the privileged helper service and its systemd unit
+# updated
+updated|zh|更新出厂默认：省流档、晨光白主题、缩放 100%、启动后不预选任何项目、检测与应用的焦点跟随打开、侧栏宽 240px、队列面板取小档
+updated|en|Update the shipped defaults: low-traffic profile, Daylight theme, 100% zoom, nothing preselected on start, focus following on for detection and apply, 240px sidebar and the compact queue height
+updated|zh|更新 Hosts 写法：托管区段前后各空一行与原有内容分隔，还原时一并收走
+updated|en|Update Hosts writing: the managed block is separated by blank lines that are removed again on restore
+updated|zh|更新配置文件位置：改存到 ~/.config/github-net/config.json，旧位置的文件在开档时自动搬家
+updated|en|Update the config location to ~/.config/github-net/config.json, migrating the old file automatically on startup
+updated|zh|更新升级安装：安装包后置脚本先设开机自启、再重启辅助服务，升级后运行的一定是新二进制
+updated|en|Update the upgrade path: the package post-install script enables the service at boot and then restarts it, so an upgrade always runs the new binary
