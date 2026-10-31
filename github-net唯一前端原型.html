@@ -2066,8 +2066,11 @@ document.getElementById('networkProfileGrid').addEventListener('click', e => {
   state.settings.networkProfile = button.dataset.profile;
   saveNetworkSettings(previousSettings);
 });
-document.getElementById('networkCandidateBudget').addEventListener('change', e => {
-  const input = e.currentTarget;
+// 每轮候选上限失焦才保存（拍板 2026-10-31，与工程一致）：敲键和点箭头都不发保存，
+// 失焦（含回车触发失焦）时校验并提交一次。
+function commitBudget() {
+  const input = document.getElementById('networkCandidateBudget');
+  if (!input) return;
   const value = Number(input.value);
   if (!Number.isInteger(value) || value < 1 || value > 108) {
     input.setAttribute('aria-invalid', 'true');
@@ -2079,6 +2082,10 @@ document.getElementById('networkCandidateBudget').addEventListener('change', e =
   const previousSettings = { maxCandidatesPerRun: state.settings.maxCandidatesPerRun };
   state.settings.maxCandidatesPerRun = value;
   saveNetworkSettings(previousSettings);
+}
+document.getElementById('networkCandidateBudget').addEventListener('blur', commitBudget);
+document.getElementById('networkCandidateBudget').addEventListener('keydown', e => {
+  if (e.key === 'Enter') e.currentTarget.blur();
 });
 
 document.getElementById('segSidebar').addEventListener('click', e => {
