@@ -643,7 +643,6 @@ export function App() {
             onDetectAll={startDetectAll}
             onApply={startApply}
             onRestore={startRestore}
-            onOpenHosts={openHostsFile}
             onStrategySaved={loadSettings}
           />
         }

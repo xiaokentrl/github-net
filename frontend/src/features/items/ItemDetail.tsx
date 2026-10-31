@@ -64,7 +64,6 @@ export function ItemDetail({
   onDetectAll,
   onApply,
   onRestore,
-  onOpenHosts,
   onStrategySaved,
 }: {
   item: CatalogItem | null
@@ -77,7 +76,6 @@ export function ItemDetail({
   onDetectAll: (items: CatalogItem[]) => void
   onApply: (itemId: string) => void
   onRestore: (itemId: string) => void
-  onOpenHosts: () => void
   onStrategySaved: () => void
 }) {
   const state = useTaskQueue()
@@ -257,17 +255,10 @@ export function ItemDetail({
             </select>
           ) : null}
           <div className={detectStyles.candidateActions}>
-            {detectReady && selfDetectable ? (
-              <button
-                type="button"
-                className={`${uiStyles.btn} ${uiStyles.small}`}
-                disabled={detecting}
-                onClick={() => onDetect(item.id)}
-              >
-                {detecting ? t('detect.running') : t('detect.start')}
-              </button>
-            ) : null}
-            {detectReady && batch.length > 1 ? (
+            {/* 只留两颗（拍板 2026-10-31）：「检测」检测当前菜单下全部能测的项目
+                （原「检测全部」，和单项检测重复所以合并），「应用到 Hosts」只管当前项目。
+                单项检测由上方方法下拉旁那颗「检测」负责（用下拉选中的方法测当前项目）。 */}
+            {detectReady && batch.length > 0 ? (
               <button
                 type="button"
                 className={`${uiStyles.btn} ${uiStyles.small}`}
@@ -275,17 +266,7 @@ export function ItemDetail({
                 onClick={() => onDetectAll(batch)}
                 title={t('detect.allHint', { count: batch.length })}
               >
-                {t('detect.all', { count: batch.length })}
-              </button>
-            ) : null}
-            {selfDetectable ? (
-              <button
-                type="button"
-                className={`${uiStyles.btn} ${uiStyles.small}`}
-                onClick={onOpenHosts}
-                title={t('hosts.openHint')}
-              >
-                {t('hosts.open')}
+                {detecting ? t('detect.running') : t('detect.start')}
               </button>
             ) : null}
             {detectReady && selfDetectable ? (
