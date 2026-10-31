@@ -163,7 +163,7 @@ func detectStore(t *testing.T, defaults map[string]string) *config.Store {
 // 要用例关心它时再改 exec.appliedIPs。
 func newDetectExecutorForTest(t *testing.T, store *config.Store, probe accelerator.ProbeFunc) *detectExecutor {
 	t.Helper()
-	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil, nil, nil, nil)
+	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil, nil, nil, nil, nil)
 }
 
 func detectCandidates() map[string][]strategies.Candidate {
@@ -244,6 +244,41 @@ func TestDetectExecutorRunsOneRoundAndReportsProgress(t *testing.T) {
 		assertNoSensitive(t, call.Text)
 	}
 	assertNoSensitive(t, out.Message)
+}
+
+// 跑完的一轮要交到底账接缝上：轮 ID、范围、方法、结果四样都不许丢。
+// 接缝给 nil 就不调（底账打不开的场景），这里顺带验一下不炸。
+func TestDetectExecutorHandsRoundToLedger(t *testing.T) {
+	lookup := &detectLookup{cands: detectCandidates()}
+	var saved []string
+	save := func(taskRound, scopeID, strategyID string, r *accelerator.Result) {
+		saved = append(saved, taskRound+"|"+scopeID+"|"+strategyID+"|"+r.ItemID)
+	}
+	exec := newDetectExecutor(detectCatalog(), detectStore(t, nil), availableProbe,
+		newDetectResultStore(), nil, nil, nil, nil, save)
+	exec.strategyFor = lookup.table(lookup.strategy(detectMethodGitHub, []string{detectScopeGitHub}))
+
+	out := exec.Execute(context.Background(),
+		task.Task{Kind: task.KindDetect, ItemID: "api", ScopeID: detectScopeGitHub,
+			StrategyID: detectMethodGitHub, RoundID: "round-9"},
+		func(string, string, int) {})
+
+	if out.Status != task.StatusDone {
+		t.Fatalf("这轮该跑完，实际 %+v", out)
+	}
+	if len(saved) != 1 || saved[0] != "round-9|"+detectScopeGitHub+"|"+detectMethodGitHub+"|api" {
+		t.Fatalf("底账该收到恰好一笔且四样齐全，实际 %v", saved)
+	}
+
+	// nil 接缝：没底账的装配照跑不落盘，不能炸。
+	execNil := newDetectExecutorForTest(t, detectStore(t, nil), availableProbe)
+	execNil.strategyFor = lookup.table(lookup.strategy(detectMethodGitHub, []string{detectScopeGitHub}))
+	out = execNil.Execute(context.Background(),
+		task.Task{Kind: task.KindDetect, ItemID: "api", ScopeID: detectScopeGitHub, StrategyID: detectMethodGitHub},
+		func(string, string, int) {})
+	if out.Status != task.StatusDone {
+		t.Fatalf("没底账也要能跑完，实际 %+v", out)
+	}
 }
 
 func TestDetectExecutorRejectsUnknownItemAndEmptyHostnames(t *testing.T) {

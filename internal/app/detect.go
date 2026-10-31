@@ -46,12 +46,15 @@ type detectExecutor struct {
 	// appliedIPs 读「这些主机名当前写在系统 Hosts 上的是哪些地址」，读不出来就给空。
 	// 留成接缝是为了让测试自己喂一份已知地址，不去碰真文件；线上由 Service 用它那一份 hostsPath 实现。
 	appliedIPs func(hostnames []string) map[string][]string
+	// save 把跑完的一轮写进候选底账（SQLite）。留成接缝：nil 表示没有底账
+	// （库打不开或纯测试场景），照跑不落盘。写失败也不许影响检测结果——底账是「发生过什么的记录」，不是检测结果本身。
+	save func(taskRound, scopeID, strategyID string, r *accelerator.Result)
 }
 
 // newDetectExecutor 建检测执行器。调用方必须在产品目录和设置服务都准备好之后再来建：
 // 目录读不出来时任何检测都没有可查的项目，那种情况队列该继续用 pendingExecutor。
-func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter, gate chan struct{}, rounds *roundBudgets, appliedIPs func(hostnames []string) map[string][]string) *detectExecutor {
-	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub, gate: gate, rounds: rounds, appliedIPs: appliedIPs}
+func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter, gate chan struct{}, rounds *roundBudgets, appliedIPs func(hostnames []string) map[string][]string, save func(taskRound, scopeID, strategyID string, r *accelerator.Result)) *detectExecutor {
+	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub, gate: gate, rounds: rounds, appliedIPs: appliedIPs, save: save}
 }
 
 // appliedFor 取出这些主机名当前已经写在管理区段里的地址，作为本轮的已知地址交给检测编排。
@@ -155,6 +158,10 @@ func (e *detectExecutor) Execute(ctx context.Context, t task.Task, report task.R
 	// 跑完的结论交给结果存储，详情页从那里取。取消的那轮也存：已完成的那部分候选
 	// 是真实测出来的东西，界面上该留着看。nil 结果（没跑起来）存储自己会拒收。
 	e.results.put(item.scopeID, strategyID, result)
+	// 同一笔结论抄进候选底账；底账写失败只少一行记录，不回改这一轮的结论。
+	if e.save != nil {
+		e.save(t.RoundID, item.scopeID, strategyID, result)
+	}
 	if result.Cancelled {
 		// 队列在取消那一刻已经把这条定成「已取消」，这里 returned 的结论不会再改写它；
 		// 给失败而不是成功，是为了让单独调用这一层（没有队列）的调用方拿到不撒谎的结论。

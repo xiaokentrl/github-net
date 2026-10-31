@@ -3,6 +3,7 @@ package app
 import (
 	"crypto/ed25519"
 	"errors"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -16,6 +17,7 @@ import (
 	"github.com/xiaokentrl/github-net/internal/hosts"
 	"github.com/xiaokentrl/github-net/internal/platform"
 	"github.com/xiaokentrl/github-net/internal/privilege"
+	"github.com/xiaokentrl/github-net/internal/store"
 	"github.com/xiaokentrl/github-net/internal/task"
 	"github.com/xiaokentrl/github-net/internal/updater"
 )
@@ -48,6 +50,10 @@ type Service struct {
 
 	// detectResults 存每个项目最近一轮的检测结论，详情页的候选表从它取。
 	detectResults *detectResultStore
+
+	// candidateStore 是候选底账（SQLite，配置目录旁的 detect-history.db）。
+	// 打不开就是 nil：检测照跑，只是不留底账。读接口下一轮接。
+	candidateStore *store.Store
 
 	// rounds 是批量检测共享预算的账本（每轮一份，内存态）。
 	rounds *roundBudgets
@@ -93,6 +99,13 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	rounds := newRoundBudgets()
 	// 全进程网络并发闸：无论多少条检测任务并行，同时活动的 DNS/IP 请求不过 8 个。
 	probeGate := accelerator.NewGate(accelerator.MaxConcurrency)
+	// 候选底账开在配置文件旁边。开不出来不拦启动：底账是锦上添花的记录，检测结果照常有。
+	var candDB *store.Store
+	if p, perr := config.Path(); perr == nil {
+		if db, derr := store.Open(filepath.Join(filepath.Dir(p), "detect-history.db")); derr == nil {
+			candDB = db
+		}
+	}
 	s := &Service{
 		appName:        appName,
 		version:        version,
@@ -103,6 +116,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 		productCatalogErr: err,
 		hostsPath:         HostsPath(),
 		detectResults:     results,
+		candidateStore:    candDB,
 		rounds:            rounds,
 		stamp:             currentBuildStamp(),
 	}
@@ -112,7 +126,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	if err == nil {
 		s.settings, s.settingsErr = newSettingsStore(c)
 		if s.settings != nil {
-			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit), probeGate, rounds, s.appliedIPsFor)
+			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit), probeGate, rounds, s.appliedIPsFor, s.saveDetectRound)
 			s.detectReady = true
 		}
 	}
@@ -122,6 +136,15 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	s.autostart = platform.NewAutostart()
 	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results), taskEmit)
 	return s
+}
+
+// saveDetectRound 把跑完的一轮写进候选底账。没开成库就什么都不做；
+// 写失败在这里收掉——底账少一行不影响检测结论，也不该把错误抛回队列。
+func (s *Service) saveDetectRound(taskRound, scopeID, strategyID string, r *accelerator.Result) {
+	if s.candidateStore == nil {
+		return
+	}
+	_ = s.candidateStore.SaveRound(taskRound, scopeID, strategyID, r)
 }
 
 // newSettingsStore 用目录里的 scopeID 和方法注册表里的已注册方法作为校验集合。
