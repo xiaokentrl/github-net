@@ -463,14 +463,27 @@
   }
 }
 
+/* 勾选框加大（拍板 2026-10-31）：原生默认太小难点中；整行都是点击区，
+   悬停垫一层底色让可点范围看得见。 */
 .checkRow {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 10px;
+  padding: 7px 8px;
+  margin: 0 -8px;
+  border-radius: 6px;
   font-size: 0.85rem;
   cursor: pointer;
 }
 
+.checkRow:hover {
+  background: var(--hov);
+}
+
 .checkRow input {
   accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+  flex: none;
+  cursor: pointer;
 }
