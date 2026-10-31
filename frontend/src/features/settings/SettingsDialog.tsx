@@ -83,17 +83,22 @@ export function SettingsDialog({
   onApplyFocusFollow: (enabled: boolean) => void
 }) {
   const closeRef = useRef<HTMLButtonElement>(null)
+  // onClose 用 ref 转一手：App 每次渲染都给新的箭头函数，副作用若直接依赖它，
+  // 任何队列事件触发的重渲染都会把焦点抢回关闭按钮——输入框敲数字就被顶掉就是这么来的。
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   // 打开即把焦点放进对话框（聚焦关闭按钮，实测聚焦面板本身在 WebView 里落不住）；
-  // Esc 听在 document 上，这样焦点没进对话框时键盘也能退出。
+  // Esc 听在 document 上，这样焦点没进对话框时键盘也能退出。只挂一次，之后不再动焦点。
   useEffect(() => {
     closeRef.current?.focus()
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') onCloseRef.current()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className={styles.mask} onClick={(event) => { if (event.target === event.currentTarget) onClose() }}>
