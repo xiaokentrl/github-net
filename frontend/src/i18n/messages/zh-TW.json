@@ -334,5 +334,6 @@
   "queue.status.restoring": "還原中",
   "queue.status.restored": "已還原",
   "queue.status.unknown": "狀態未知",
-  "settings.subject.language": "介面語言"
+  "settings.subject.language": "介面語言",
+  "settings.appearance.lang.zhTW": "繁體中文"
 }

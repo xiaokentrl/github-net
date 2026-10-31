@@ -167,7 +167,7 @@ func TestInvalidValuesRejected(t *testing.T) {
 		{"未知档位", Patch{NetworkProfile: str("turbo")}},
 		{"总上限为 0", Patch{MaxCandidateProbesPerRun: num(0)}},
 		{"总上限超过 1040", Patch{MaxCandidateProbesPerRun: num(1041)}},
-		{"未正式支持的语言", Patch{Language: str("zh-TW")}},
+		{"未正式支持的语言", Patch{Language: str("fr-FR")}},
 		{"未知主题", Patch{Theme: str("neon")}},
 		{"不在档位的缩放", Patch{Zoom: func() *float64 { z := 1.5; return &z }()}},
 		{"侧栏过窄", Patch{SidebarWidth: num(120)}},
