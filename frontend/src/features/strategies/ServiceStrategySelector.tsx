@@ -106,6 +106,19 @@ export function ServiceStrategySelector({
   const current = snap?.savedId && snap.savedUsable ? snap.savedId : ''
   const notices = snap?.notices ?? []
 
+  // 下拉分组（拍板 2026-10-31）：三个公共源一组按优先序编号，汇总和本机储存一组。
+  // 分组归属只对有公共源的范围生效；别的范围（只有 DNS 一个方法）平铺，不给空组。
+  const SOURCE_IDS = ['gitcdn', 'hellogithub', 'gitlab']
+  const flatOptions = options.map((option) => ({ value: option.id, label: option.name }))
+  const sourceOptions = SOURCE_IDS.flatMap((id, index) => {
+    const found = options.find((option) => option.id === id)
+    return found ? [{ value: found.id, label: `${index + 1}. ${found.name}` }] : []
+  })
+  const grouped = sourceOptions.length > 0
+  const restOptions = grouped
+    ? options.filter((option) => !SOURCE_IDS.includes(option.id)).map((option) => ({ value: option.id, label: option.name }))
+    : []
+
   return (
     <div className={styles.stack}>
       <div className={styles.panel} title={t('strategy.hint')}>
@@ -114,7 +127,15 @@ export function ServiceStrategySelector({
           value={current}
           placeholder={t('strategy.pickOne')}
           disabled={kind === 'pending'}
-          options={options.map((option) => ({ value: option.id, label: option.name }))}
+          options={flatOptions}
+          groups={
+            grouped
+              ? [
+                  { label: t('strategy.group.sources'), options: sourceOptions },
+                  { label: t('strategy.group.local'), options: restOptions },
+                ]
+              : undefined
+          }
           onChange={choose}
         />
         {/* 「检测」只检测下拉选中的那一个方法（拍板 2026-10-31）：不改保存的选择，

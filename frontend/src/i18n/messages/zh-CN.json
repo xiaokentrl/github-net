@@ -247,6 +247,8 @@
   "strategy.empty": "「{name}」这个范围后端一个可选方法都没有，检测跑不了。",
   "strategy.detect": "检测",
   "strategy.detectHint": "用「{name}」检测当前项目",
+  "strategy.group.sources": "公共源（按优先序）",
+  "strategy.group.local": "汇总与本地",
   "strategy.pickOne": "（还没选）",
   "strategy.unsaved": "还没选加速方法：现在点检测会被挡下，先在这里选一个。",
   "strategy.stale": "之前保存的方法现在不能用了：{note}",

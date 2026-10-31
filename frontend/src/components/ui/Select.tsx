@@ -2,6 +2,8 @@ import type { ChangeEvent } from 'react'
 import styles from './ui.module.css'
 
 export type SelectOption = { value: string; label: string }
+// 分组下拉：每组渲染成原生 optgroup；空组直接跳过。
+export type SelectGroup = { label: string; options: SelectOption[] }
 
 // 这一版用原生 select：键盘、读屏和弹层定位都是浏览器负责的，不会有
 // 「下拉挂错位置」那类坑。规划里的自定义弹层 Select 等做完整设置界面时再换，
@@ -10,6 +12,7 @@ export function Select({
   label,
   value,
   options,
+  groups,
   disabled,
   disabledHint,
   placeholder,
@@ -18,6 +21,8 @@ export function Select({
   label: string
   value: string
   options: SelectOption[]
+  // 给了 groups 就按组分节显示（优先）；不给就是平铺列表。
+  groups?: SelectGroup[]
   disabled?: boolean
   disabledHint?: string
   // 「还没选」要能被显示出来：不给占位项时，浏览器会把没有匹配值的选择框显示成第一项，
@@ -36,11 +41,23 @@ export function Select({
           onChange={(event: ChangeEvent<HTMLSelectElement>) => onChange?.(event.target.value)}
         >
           {placeholder !== undefined && <option value="" disabled>{placeholder}</option>}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          {groups
+            ? groups
+                .filter((group) => group.options.length > 0)
+                .map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+            : options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
         </select>
       </label>
       {disabled && disabledHint && <p className={styles.hint}>{disabledHint}</p>}

@@ -247,6 +247,8 @@
   "strategy.empty": "「{name}」這個範圍後端一個可選方法都沒有，偵測跑不了。",
   "strategy.detect": "偵測",
   "strategy.detectHint": "用「{name}」偵測目前項目",
+  "strategy.group.sources": "公共來源（按優先序）",
+  "strategy.group.local": "彙總與本機",
   "strategy.pickOne": "（還沒選）",
   "strategy.unsaved": "還沒選加速方法：現在點偵測會被擋下，先在這裡選一個。",
   "strategy.stale": "之前保存的方法現在不能用了：{note}",
