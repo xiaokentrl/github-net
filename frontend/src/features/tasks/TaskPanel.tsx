@@ -304,9 +304,8 @@ export function TaskPanel({
           <div className={styles.body} ref={bodyRef}>
             <aside className={styles.roundsPane} ref={listResize.targetRef} style={shownListWidth !== null ? { width: shownListWidth } : undefined}>
               <div className={styles.paneHead}>{t('queue.roundsTitle')}</div>
-              {roundRows.length === 0 ? (
-                <div className={styles.paneEmpty}>{state.loaded ? t('queue.empty') : t('detail.loading')}</div>
-              ) : (
+              {/* 空队列留白（拍板 2026-10-31）：不放提示文字。 */}
+              {roundRows.length === 0 ? null : (
                 roundRows.map((r) => (
                   <div
                     key={r.round.id}
@@ -339,9 +338,7 @@ export function TaskPanel({
               onPointerCancel={listResize.onPointerUp}
             />
             <section className={styles.detailPane}>
-              {selected === null ? (
-                <div className={styles.paneEmpty}>{t('queue.detail.pick')}</div>
-              ) : (
+              {selected === null ? null : (
                 <table className={styles.qtable2}>
                   <thead>
                     <tr>
