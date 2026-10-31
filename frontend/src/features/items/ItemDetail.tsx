@@ -144,20 +144,23 @@ export function ItemDetail({
           </div>
         </div>
 
-        {/* 指标只报有料的三格（拍板 2026-10-31）：没写入 IP/没测过就不出这一格，
-            「还没检测」「未提供」这类占位话一律不说。 */}
-        {appliedIps.length > 0 || appliedLatency > 0 || result?.finishedAt ? (
-          <div className={styles.metrics}>
-            {appliedIps.length > 0
-              ? metricCell(
-                  'detail.metric.appliedIp',
-                  appliedIps.length === 1 ? appliedIps[0] : t('detail.metric.appliedIp.many', { count: appliedIps.length }),
-                )
-              : null}
-            {appliedLatency > 0 ? metricCell('detail.metric.latency', t('detect.latency', { ms: appliedLatency })) : null}
-            {result?.finishedAt ? metricCell('detail.metric.lastCheck', formatDateTime(result.finishedAt)) : null}
-          </div>
-        ) : null}
+        {/* 六格指标是布局骨架，常驻（拍板 2026-10-31 复盘）：没值显示「—」，
+            「还没检测」「未提供（后端没给这一项）」这类占位句子一律不说。 */}
+        <div className={styles.metrics}>
+          {metricCell(
+            'detail.metric.appliedIp',
+            appliedIps.length === 0
+              ? '—'
+              : appliedIps.length === 1
+                ? appliedIps[0]
+                : t('detail.metric.appliedIp.many', { count: appliedIps.length }),
+          )}
+          {metricCell('detail.metric.bestIp', '—')}
+          {metricCell('detail.metric.latency', appliedLatency > 0 ? t('detect.latency', { ms: appliedLatency }) : '—')}
+          {metricCell('detail.metric.score', '—')}
+          {metricCell('detail.metric.source', '—')}
+          {metricCell('detail.metric.lastCheck', result?.finishedAt ? formatDateTime(result.finishedAt) : '—')}
+        </div>
 
         <div className={styles.domainsLine}>
           <span className={styles.lbl}>{t('detail.domains')}</span>
@@ -253,12 +256,13 @@ export function ItemDetail({
               <th scope="col">{t('detect.col.hostname')}</th>
               <th scope="col">{t('detect.col.mark')}</th>
               <th scope="col">{t('detect.col.latency')}</th>
+              <th scope="col">{t('detect.col.score')}</th>
             </tr>
           </thead>
           <tbody>
             {flatCandidates.length === 0 ? (
               <tr className={detectStyles.emptyRow}>
-                <td colSpan={5}>{t('detect.empty')}</td>
+                <td colSpan={6}>{t('detect.empty')}</td>
               </tr>
             ) : (
               flatCandidates.map(({ candidate, host }, index) => (
@@ -279,6 +283,7 @@ export function ItemDetail({
                   <td className={candidate.latencyMs > 0 ? detectStyles.latency : detectStyles.latencyNone}>
                     {candidate.latencyMs > 0 ? t('detect.latency', { ms: candidate.latencyMs }) : '—'}
                   </td>
+                  <td className={detectStyles.none}>—</td>
                 </tr>
               ))
             )}
