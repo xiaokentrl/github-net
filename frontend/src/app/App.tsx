@@ -57,7 +57,6 @@ export function App() {
   const [query, setQuery] = useState('')
   // 展开状态。原型一进来是全部展开（collapsed 是空集合，第 1342 行），所以拿到目录后补一次全展开。
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
-  const expandedInitialized = useRef(false)
   const [selectedId, setSelectedId] = useState('')
 
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -240,15 +239,8 @@ export function App() {
     })
   }, [snapshot])
 
-  // 默认展开：第一次拿到目录就全部展开（原型 collapsed 初始为空），此后不再自动改。
-  useEffect(() => {
-    if (expandedInitialized.current || catalogLoad !== 'ready') return
-    expandedInitialized.current = true
-    setExpanded((current) => {
-      if (current.size > 0) return current
-      return new Set((snapshot?.categories ?? []).map((cat) => cat.id))
-    })
-  }, [catalogLoad, snapshot])
+  // 默认折叠：进来全部收着，用户自己想看哪簇点开哪簇（拍板 2026-10-31，替代原型的「初始全展开」）。
+  // 运行中的焦点跟随照旧会把正在跑的分类展开，不受这个默认影响。
 
   // 工具栏「折叠」：全展开时一键全折叠，否则一键全展开（原型第 3599–3610 行同一条规则）。
   const foldAll = useCallback(() => {

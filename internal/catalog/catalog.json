@@ -76,75 +76,10 @@
       ]
     },
     {
-      "id": "jetbrains",
-      "name": "JetBrains",
-      "scopeID": "jetbrains",
-      "order": 2,
-      "items": [
-        {
-          "id": "jb-plug",
-          "name": "插件市场",
-          "order": 1,
-          "protoLine": 1239,
-          "hostnames": [
-            "plugins.jetbrains.com",
-            "downloads.marketplace.jetbrains.com"
-          ]
-        },
-        {
-          "id": "jb-ide",
-          "name": "IDE 下载",
-          "order": 2,
-          "protoLine": 1240,
-          "hostnames": [
-            "download.jetbrains.com",
-            "download-cdn.jetbrains.com"
-          ]
-        },
-        {
-          "id": "jb-acc",
-          "name": "账号验证",
-          "order": 3,
-          "protoLine": 1241,
-          "hostnames": [
-            "account.jetbrains.com"
-          ]
-        },
-        {
-          "id": "jb-tool",
-          "name": "Toolbox",
-          "order": 4,
-          "protoLine": 1242,
-          "hostnames": [
-            "toolbox.jetbrains.com"
-          ]
-        },
-        {
-          "id": "jb-res",
-          "name": "文档与资源",
-          "order": 5,
-          "protoLine": 1243,
-          "hostnames": [
-            "resources.jetbrains.com",
-            "www.jetbrains.com"
-          ]
-        },
-        {
-          "id": "jb-upd",
-          "name": "更新检查",
-          "order": 6,
-          "protoLine": 1244,
-          "hostnames": [
-            "updates.jetbrains.com"
-          ]
-        }
-      ]
-    },
-    {
       "id": "ai",
       "name": "AI 开发工具",
       "scopeID": "ai",
-      "order": 3,
+      "order": 2,
       "items": [
         {
           "id": "ai-cursor",
@@ -202,6 +137,71 @@
           "protoLine": 1252,
           "hostnames": [
             "api.anthropic.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jetbrains",
+      "name": "JetBrains",
+      "scopeID": "jetbrains",
+      "order": 3,
+      "items": [
+        {
+          "id": "jb-plug",
+          "name": "插件市场",
+          "order": 1,
+          "protoLine": 1239,
+          "hostnames": [
+            "plugins.jetbrains.com",
+            "downloads.marketplace.jetbrains.com"
+          ]
+        },
+        {
+          "id": "jb-ide",
+          "name": "IDE 下载",
+          "order": 2,
+          "protoLine": 1240,
+          "hostnames": [
+            "download.jetbrains.com",
+            "download-cdn.jetbrains.com"
+          ]
+        },
+        {
+          "id": "jb-acc",
+          "name": "账号验证",
+          "order": 3,
+          "protoLine": 1241,
+          "hostnames": [
+            "account.jetbrains.com"
+          ]
+        },
+        {
+          "id": "jb-tool",
+          "name": "Toolbox",
+          "order": 4,
+          "protoLine": 1242,
+          "hostnames": [
+            "toolbox.jetbrains.com"
+          ]
+        },
+        {
+          "id": "jb-res",
+          "name": "文档与资源",
+          "order": 5,
+          "protoLine": 1243,
+          "hostnames": [
+            "resources.jetbrains.com",
+            "www.jetbrains.com"
+          ]
+        },
+        {
+          "id": "jb-upd",
+          "name": "更新检查",
+          "order": 6,
+          "protoLine": 1244,
+          "hostnames": [
+            "updates.jetbrains.com"
           ]
         }
       ]
