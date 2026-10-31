@@ -52,7 +52,6 @@ export function App() {
   // 勾选模型：批量检测/应用的参与范围，内存态（规划明确勾选不持久化）。
   // 首次拿到目录时默认勾选 GitHub 和 Steam（用户拍板的默认值）。
   const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(new Set())
-  const checkedInitialized = useRef(false)
 
   const [query, setQuery] = useState('')
   // 展开状态。原型一进来是全部展开（collapsed 是空集合，第 1342 行），所以拿到目录后补一次全展开。
@@ -197,17 +196,8 @@ export function App() {
   const queue = useTaskQueue()
   const liveOf = useMemo(() => liveByItem(queue.tasks), [queue.tasks])
 
-  // 默认勾选：第一次拿到目录时勾上 GitHub 和 Steam（已拍板）；此后不再自动改。
-  useEffect(() => {
-    if (checkedInitialized.current || catalogLoad !== 'ready') return
-    checkedInitialized.current = true
-    if (checkedIds.size > 0) return
-    const defaults = new Set<string>()
-    for (const cat of snapshot?.categories ?? []) {
-      if (cat.id === 'github' || cat.id === 'steam') for (const it of cat.items ?? []) defaults.add(it.id)
-    }
-    setCheckedIds(defaults)
-  }, [catalogLoad, snapshot, checkedIds.size])
+  // 默认无选中（拍板 2026-10-31，替代原型的「默认勾选 GitHub+Steam」）：
+  // 勾选是「接下来要操作哪些」的意图，不该替用户预设；要用谁自己勾。
 
   const toggleChecked = useCallback((itemId: string, checked: boolean) => {
     setCheckedIds((current) => {
