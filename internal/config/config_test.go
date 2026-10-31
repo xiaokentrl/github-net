@@ -26,9 +26,9 @@ func TestDefaultIsValidAndUnsaved(t *testing.T) {
 	if c.Revision != 0 {
 		t.Errorf("默认值 revision = %d，期望 0（还没保存过）", c.Revision)
 	}
-	// 130 = 目录去重后 65 个主机名 × 省流档每项 2 个候选：默认值就该盖住默认档位的一轮全量。
-	if c.Network.Profile != ProfileLow || c.Network.MaxCandidateProbesPerRun != 130 {
-		t.Errorf("首次安装必须是省流档、总上限 130，得到 %+v", c.Network)
+	// 126 = 目录去重后 63 个主机名 × 省流档每项 2 个候选：默认值就该盖住默认档位的一轮全量。
+	if c.Network.Profile != ProfileLow || c.Network.MaxCandidateProbesPerRun != 126 {
+		t.Errorf("首次安装必须是省流档、总上限 126，得到 %+v", c.Network)
 	}
 	// 队列三个尺寸各有默认值：左栏 220 是原型定稿的标准宽度。
 	if c.Layout.SidebarWidth != 240 || c.Layout.QueueHeight != 252 || c.Layout.QueueListWidth != 220 {
@@ -166,7 +166,7 @@ func TestInvalidValuesRejected(t *testing.T) {
 	}{
 		{"未知档位", Patch{NetworkProfile: str("turbo")}},
 		{"总上限为 0", Patch{MaxCandidateProbesPerRun: num(0)}},
-		{"总上限超过 1040", Patch{MaxCandidateProbesPerRun: num(1041)}},
+		{"总上限超过 1008", Patch{MaxCandidateProbesPerRun: num(1009)}},
 		{"未正式支持的语言", Patch{Language: str("fr-FR")}},
 		{"未知主题", Patch{Theme: str("neon")}},
 		{"不在档位的缩放", Patch{Zoom: func() *float64 { z := 1.5; return &z }()}},
@@ -191,10 +191,10 @@ func TestInvalidValuesRejected(t *testing.T) {
 	}
 }
 
-// 边界值本身必须能用：130 是省流档一轮全量刚好盖住的那个数，1040 是完整档一轮全量的理论值。
+// 边界值本身必须能用：126 是省流档一轮全量刚好盖住的那个数，1008 是完整档一轮全量的理论值。
 // 卡在边界上被拒，等于把「最大档位配满」这条路堵死，而界面输入框的 max 正是它。
 func TestCandidateBudgetBoundaryValuesAreAccepted(t *testing.T) {
-	for _, value := range []int{MinCandidateProbes, 130, 1040} {
+	for _, value := range []int{MinCandidateProbes, 126, 1008} {
 		s := NewStore(newPath(t), nil, nil)
 		got, err := s.Save(Patch{MaxCandidateProbesPerRun: num(value)}, 0, "m-boundary")
 		if err != nil {

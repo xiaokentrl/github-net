@@ -17,16 +17,16 @@ func settingsWith(profile string, userCap int) config.Config {
 }
 
 func TestBudgetForDefaultProfileCoversFullRound(t *testing.T) {
-	// 目录实数是 65 个去重主机名，默认档省流（每主机名 2 个候选、并发 2）。
-	b, err := BudgetFor(config.Default(), 65)
+	// 目录实数是 63 个去重主机名，默认档省流（每主机名 2 个候选、并发 2）。
+	b, err := BudgetFor(config.Default(), 63)
 	if err != nil {
 		t.Fatalf("默认设置算预算失败：%v", err)
 	}
 	if b.PerHostname != 2 || b.Concurrency != 2 {
 		t.Errorf("省流档数字不对：每主机名 %d、并发 %d", b.PerHostname, b.Concurrency)
 	}
-	if b.Needed != 130 || b.MaxProbes != 130 {
-		t.Errorf("默认应该正好盖住一轮全量：理论 %d、实际 %d（期望都 130）", b.Needed, b.MaxProbes)
+	if b.Needed != 126 || b.MaxProbes != 126 {
+		t.Errorf("默认应该正好盖住一轮全量：理论 %d、实际 %d（期望都 126）", b.Needed, b.MaxProbes)
 	}
 	if b.Short {
 		t.Error("默认档位默认盖得住一轮全量，不该标成「盖不住」")
@@ -45,11 +45,11 @@ func TestBudgetForTakesMinOfNeedAndUserCap(t *testing.T) {
 		wantProbe int
 		wantShort bool
 	}{
-		{"标准档被用户上限裁", config.ProfileStandard, 100, 65, 100, true},
-		{"标准档用户上限够不着理论需求", config.ProfileStandard, 520, 65, 520, false},
-		{"省流档不会因为上限大而变大", config.ProfileLow, 1040, 65, 130, false},
-		{"完整档一轮全量正好配满", config.ProfileFull, 1040, 65, 1040, false},
-		{"完整档超出上限就标盖不住", config.ProfileFull, 1039, 65, 1039, true},
+		{"标准档被用户上限裁", config.ProfileStandard, 100, 63, 100, true},
+		{"标准档用户上限够不着理论需求", config.ProfileStandard, 504, 63, 504, false},
+		{"省流档不会因为上限大而变大", config.ProfileLow, 1008, 63, 126, false},
+		{"完整档一轮全量正好配满", config.ProfileFull, 1008, 63, 1008, false},
+		{"完整档超出上限就标盖不住", config.ProfileFull, 1007, 63, 1007, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -79,7 +79,7 @@ func TestBudgetForProfileConcurrency(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.profile, func(t *testing.T) {
-			b, err := BudgetFor(settingsWith(tc.profile, 1040), 10)
+			b, err := BudgetFor(settingsWith(tc.profile, 1008), 10)
 			if err != nil {
 				t.Fatalf("算预算失败：%v", err)
 			}

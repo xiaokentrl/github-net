@@ -109,7 +109,7 @@ func TestGetSettingsGivesDefaultsWithoutWriting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("没配置文件时应回默认值: %v", err)
 	}
-	if cfg.Revision != 0 || cfg.Network.Profile != config.ProfileLow || cfg.Network.MaxCandidateProbesPerRun != 130 {
+	if cfg.Revision != 0 || cfg.Network.Profile != config.ProfileLow || cfg.Network.MaxCandidateProbesPerRun != 126 {
 		t.Errorf("默认值不对: %+v", cfg.Network)
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {

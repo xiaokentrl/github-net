@@ -53,8 +53,8 @@ func TestCatalogToCategoriesKeepsCountsAndOrder(t *testing.T) {
 		}
 		items += len(cat.Items)
 	}
-	if items != 54 {
-		t.Fatalf("项目总数 = %d，期望 54", items)
+	if items != 52 {
+		t.Fatalf("项目总数 = %d，期望 52", items)
 	}
 }
 
@@ -175,8 +175,8 @@ func stateFor(t *testing.T, states []HostsState, itemID string) HostsState {
 func TestHostsStatesOrderAndReadTrace(t *testing.T) {
 	c := mustCatalog(t)
 	states := HostsStates(c, emptySnapshot(), noWriting(), 7)
-	if len(states) != 54 {
-		t.Fatalf("状态条数 = %d，期望 54", len(states))
+	if len(states) != 52 {
+		t.Fatalf("状态条数 = %d，期望 52", len(states))
 	}
 	var itemIDs []string
 	for _, cat := range c.Categories {
@@ -283,11 +283,11 @@ func TestHostsStatesAppliedPartialAndNone(t *testing.T) {
 	if got := stateFor(t, states, "gh-raw").Status; got != HostsApplied {
 		t.Errorf("gh-raw 状态 = %q，期望 applied", got)
 	}
-	if got := stateFor(t, states, "gh-pages").Status; got != HostsNone {
-		t.Errorf("没写过的 gh-pages 状态 = %q，期望 none", got)
+	if got := stateFor(t, states, "gh-cdn").Status; got != HostsNone {
+		t.Errorf("没写过的 gh-cdn 状态 = %q，期望 none", got)
 	}
-	if counts[HostsApplied] != 1 || counts[HostsPartial] != 1 || counts[HostsNone] != 52 {
-		t.Errorf("applied=%d partial=%d none=%d，期望 1/1/52（共 54 项）",
+	if counts[HostsApplied] != 1 || counts[HostsPartial] != 1 || counts[HostsNone] != 50 {
+		t.Errorf("applied=%d partial=%d none=%d，期望 1/1/50（共 52 项）",
 			counts[HostsApplied], counts[HostsPartial], counts[HostsNone])
 	}
 }
@@ -372,8 +372,8 @@ func TestHostsStatesBlockWithoutWritingRecord(t *testing.T) {
 		}
 	}
 	// github.com 被 gh-main 和 cu-china 两个项目共用（目录里量出来的），所以正好两条 conflict。
-	if conflicted != 2 || none != 52 {
-		t.Errorf("conflict=%d none=%d，期望 2 和 52（共 54 项）", conflicted, none)
+	if conflicted != 2 || none != 50 {
+		t.Errorf("conflict=%d none=%d，期望 2 和 50（共 52 项）", conflicted, none)
 	}
 
 	// 区段外的用户手写行不算本工具记录：同一份文件去掉标记，那一行就该报 none。
@@ -445,14 +445,14 @@ func TestGetItemsServesCatalogWithHonestStatus(t *testing.T) {
 			}
 		}
 	}
-	if items != 54 {
-		t.Errorf("项目数 = %d，期望 54", items)
+	if items != 52 {
+		t.Errorf("项目数 = %d，期望 52", items)
 	}
-	if len(unique) != 65 {
-		t.Errorf("去重后主机名 = %d，期望 65", len(unique))
+	if len(unique) != 63 {
+		t.Errorf("去重后主机名 = %d，期望 63", len(unique))
 	}
-	if len(snapshot.Hosts) != 54 {
-		t.Fatalf("状态条数 = %d，期望 54", len(snapshot.Hosts))
+	if len(snapshot.Hosts) != 52 {
+		t.Fatalf("状态条数 = %d，期望 52", len(snapshot.Hosts))
 	}
 	for _, h := range snapshot.Hosts {
 		// 临时文件里没有区段标记，唯一诚实的结论是「已读过、区段里没有本工具的记录」。

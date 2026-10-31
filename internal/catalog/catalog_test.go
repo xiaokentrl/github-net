@@ -8,13 +8,13 @@ import (
 	"testing"
 )
 
-// 计数基线来自 2026-10-27 对唯一正式原型 CATEGORY_DEFS 的抽取结果，那份数据到现也没变过项目集合。
+// 计数基线：2026-10-31 产品决策删除 gh-pages/gh-gist 两个子菜单（三源均未覆盖其域名）后，从唯一正式原型 CATEGORY_DEFS 重新抽取的结果。
 // 这一栏故意不写行号：原型一改，CATEGORY_DEFS 的行号就会整体挪动，能挪的是行号（由 TestProtoLinesPointAtThePrototypeDefinition 逐条回查原文），不能挪的是这几个数。
 const (
 	wantCategories = 11
-	wantItems      = 54
-	wantHostnames  = 65
-	wantOccurrence = 68
+	wantItems      = 52
+	wantHostnames  = 63
+	wantOccurrence = 66
 )
 
 func mustLoad(t *testing.T) *Catalog {
