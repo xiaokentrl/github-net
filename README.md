@@ -10,74 +10,89 @@
 
 ## 中文
 
-GitHub Net（GitHub 加速助手）是一个用 Go、Wails v3、React 和 TypeScript 构建的跨平台桌面应用。它通过检测 GitHub 域名的可用 IP 并写入系统 Hosts 文件来加速访问：不改系统代理、不装虚拟网卡、不需要常驻后台流量。加速方法按独立策略扩展，后续可加装系统代理、PAC 等新方式，每种方式一个实现文件。
+GitHub Net（GitHub 加速助手）是一个用 Go、Wails v3、React 和 TypeScript 构建的桌面应用。它把 GitHub 等站点的可用 IP 写进系统 Hosts 来加速访问：不改系统代理、不装虚拟网卡、不留常驻后台流量。加速方法按独立策略扩展，一种方法一个 Go 文件。
+
+### 主界面
+
+![GitHub Net 主界面](./docs/screenshots/main-window.png)
+
+1280×800 首次启动的样子：左边分类树，中间服务详情与候选 IP 表，下面任务队列，最后一行状态栏（档位、Hosts 路径与可写性、DNS 来源、上次检测、事件序号、目录计数）。截图是同一套前端在无头浏览器里跑真后端（`go build -tags server`）拍的，不是原生无边框窗口——所以右上角那三个窗口按钮在这张图里点了没作用。
 
 ### 功能特性
 
-- **一站式加速**：选服务 → 选加速方法 → 检测 → 确认应用，四步完成；GitHub 的加速方法独立保存，之后新增 Steam 等服务互不影响。
-- **加速方法可扩展**：首期提供「自动查找可用 IP」（DNS 候选 + Hosts）；新增方法只需一个 Go 文件自注册，不改注册表、路由和界面。
-- **真实可见的检测**：每个候选 IP 逐行显示排队中 → 检测中 → 可用/不可用/超时的完整状态、延迟和耗时；单项最多 5 秒、整个服务最多 30 秒，不伪造进度和剩余时间。
-- **省流三档**：省流（每域名 2 个候选、并发 2）/ 标准（8 / 8）/ 完整检测（16 / 8）；每轮探测预算启动前可见，预算不足先确认；只做 DNS 查询和 TCP/TLS 握手，不下载网页，不自动重试。
-- **任务队列**：检测、应用、还原统一进队列，支持进度、取消、重试和一键清空；切页面不丢进度。
-- **Hosts 安全**：写入前备份，只修改带本工具标记的区段，原子替换并验证，失败自动回滚；一键还原到应用前状态，也可直接打开 Hosts 查看。
-- **权限最小化**：主界面始终以普通用户权限运行；首次安装时一次性启用受限特权辅助服务，之后读写 Hosts 不再反复要管理员/root 权限。
-- **自动更新**：检查 GitHub Releases 最新稳定版，下载前显示版本、来源和大小，签名与摘要校验通过才安装。
-- **设置中心**：网络与流量、外观、语言、布局、启动（托盘、开机自启动）、检测与应用分页管理；设置经后端统一保存，跨重启生效。
-- **六套主题**：晨光白、樱花粉、森林绿、深海蓝、午夜蓝、极夜黑（纯黑 OLED 省电）；另有界面缩放。
-- **双语界面**：简体中文默认，繁体中文可切换；日期、数字按语言本地化。
-- **无障碍**：键盘可完成核心操作，状态变化对读屏器可见，不只用颜色传达。
+- **产品目录**：11 个分类、52 个项目、去重后 63 个主机名，数据在 `internal/catalog/catalog.json`。
+- **六种加速方法，单文件自注册**：GitHub 分类下是 GitCDN / HelloGitHub / GitLab（ineo6）三家公共源、「全部公共源」（三家合并，GitHub 的默认）和「使用已有储存」（读本机 SQLite 底账）；其余分类用「自动查找可用 IP」（系统配置的 DNS 解析）。新增方法写一个 Go 文件、在 `init()` 里 `Register`，不改注册表、路由和界面。
+- **真实可见的检测**：候选逐行显示排队中 / 检测中 / 可用 / 不可用 / 超时 / 已取消 / 预算用完未检测，带延迟；单项一轮 5 秒截止，DNS 查询与 TCP+TLS 探测各 2 秒预算，不伪造进度和剩余时间。
+- **省流三档**：省流（每主机名 2 个候选、并发 2）/ 标准（8 / 8）/ 完整检测（16 / 8）；每轮探测总上限默认 126、可填 1–1008，够不够覆盖一轮在「网络与流量」页和工具栏档位按钮上先看得见，批量检测覆盖不全时先弹确认。只做 DNS 查询和 TCP/TLS 握手，不下载网页内容，不自动重试。
+- **任务队列**：检测、应用、还原统一入队、串行执行，九档状态；面板给分轮进度与耗时，支持暂停、取消等待、重试失败、清空已完成、清空队列、全部还原；状态存在应用级 store 里，切页面不丢进度。
+- **Hosts 安全**：界面进程永不直接写盘——写入交给 root 常驻的辅助服务 `github-net-helper`（Unix socket `/run/github-net/helper.sock`，白名单只有 ping / apply / restoreItem / restoreAll / hostsState 五个操作）。写前备份，只改带本工具标记的区段，原子替换后重读校验，失败自动回滚，可一键还原到应用前状态，也可直接打开 Hosts 查看。
+- **权限最小化**：主界面始终以普通用户运行。Linux 装包时由 postinst 一次性 enable 并 restart 那个 systemd 服务，之后读写 Hosts 不再反复要 root。
+- **开机自动化**：开机自启（Linux 写 XDG autostart）、启动后自动检测（可多选哪些主菜单参与，一个没勾就不跑）、检测完成自动应用、自动应用队列跑完真退出进程；状态栏回显这一轮跑到哪、哪些菜单没排上、为什么没退出。
+- **候选底账**：每轮检测结果落 SQLite（`detect-history.db`，`internal/store`），「使用已有储存」直接复用它，不重复探测。
+- **自动更新**：检查 GitHub Releases 最新稳定版，下载前显示版本、来源和大小，SHA256 与 Ed25519 签名双校验通过才交给系统安装器；嵌入公钥缺失一律拒绝。
+- **设置中心八页**：布局、界面缩放、外观、网络与流量、托盘、开机自启、检测升级、关于我们；改动即时经后端统一保存，跨重启生效。
+- **外观与窗口**：六套主题（晨光白是唯一浅色，另五套深色，含纯黑 OLED 档）、界面缩放四档（90/100/110/125%）、侧栏宽度可拖（200–600）、队列高度三档加拖动条；无边框窗口自绘标题栏，配系统托盘（显示主窗口、最小化到托盘、主题子菜单、退出，托盘提示跟着队列是否在跑变）。
+- **双语界面**：简体中文默认，繁体中文可切换，两份语言包各 368 个键；缺键时界面直接印「缺文案:键名」，不静默兜底。
+- **无障碍**：分类树用 `role="tree"` 加方向键操作，设置对话框 `aria-modal` 且 Esc 可关，保存结果与错误经 `aria-live` / `role="alert"` 播报。
+
+### 已知边界
+
+- 只有 Linux x64 进了 CI 与发布流水线，也只有它经过实机验证；Windows 和 macOS 有打包配置但没验证、不在发布矩阵——它们的特权辅助服务和安装交接还没做。arm64 同样没验。
+- GitHub 分类不提供系统 DNS 解析法（拍板 2026-10-31）：候选只来自公共源和本机储存。
+- 候选表的「评分」列恒为 `—`（评分还没做）；托盘菜单和队列分页那几个词还是硬编码中文，切繁体不会跟着变。
+- 工具栏「模式」下拉只有 Hosts 可选，系统代理和 PAC 两项照原型置灰——它们还没实现，选中也不会改变行为。
 
 ### 工作原理
 
-1. 检测：向可信 DNS 解析器查询目标域名的候选 IP，对每个候选做 TCP/TLS 连通性验证（保留主机名和证书校验，不下载网页内容）。
-2. 选择：界面逐行展示每个候选的状态、延迟和验证结果，由用户决定用哪个。
-3. 应用：把选中的 IP 写入系统 Hosts，只修改带本工具标记的区段，不碰用户和其他程序的内容；写入前备份，可随时还原。
-4. 扩展：加速方法采用单文件自注册设计——新增方式各加一个 Go 文件即可，不改中心注册表和界面。
+1. 取候选：GitHub 走三家公共 hosts 源（或本机 SQLite 底账），其余分类用系统配置的 DNS 解析域名；查询不转发给第三方解析器，也不记录完整查询域名。
+2. 验候选：对每个地址做 TCP 连接 + TLS 握手，保留主机名和证书校验，不下载页面内容。
+3. 选与写：界面逐行给状态和延迟，由用户决定用哪个；点「应用」入队，辅助服务备份后把选中映射原子写进系统 Hosts，只动本工具标记的区段，写完重读校验。
+4. 回来：按恢复元数据还原到首次写入前的状态，或直接「全部还原」。
+5. 扩展：加速方法从单个文件自注册，未来加系统代理、PAC 各写一个 Go 文件，不动中心注册表和界面。
 
 ### 使用流程
 
-1. 左侧分类树选服务或单个项目。
-2. 在详情顶部的「GitHub 全部加速方法」里选一种方法（首次使用默认「自动查找可用 IP」）。
-3. 点「检测」，逐个候选确认可用性；可在检测按钮旁的档位标签里快速切省流/标准/完整检测。
-4. 点「应用」写入 Hosts；需要撤销时「还原」回应用前的状态。
+1. 左侧分类树选分类或单个项目。
+2. 在详情顶部的「GitHub 全部加速方法」里选方法（GitHub 默认「全部公共源」）。
+3. 点「检测」或工具栏「检测全部」，逐个候选确认可用性；档位就在检测按钮旁边，点了立刻切省流 / 标准 / 完整检测。
+4. 点「应用到 Hosts」写入；需要撤销时「恢复」回应用前状态。任务都在下方队列里排队，可暂停、取消、重试。
 
 ### 下载与安装
 
-到 [Releases](https://github.com/xiaokentrl/github-net/releases) 下载对应平台的安装包：
+到 [Releases](https://github.com/xiaokentrl/github-net/releases) 下载对应平台的安装包（打一个 `v<版本号>` 标签才会触发流水线建 Release，没有发布时该页为空）：
 
-| 平台 | 安装包 | 系统要求 |
-|---|---|---|
-| Windows | `.exe`（NSIS 安装器） | Windows 10 及以上，WebView2（安装器自动补齐） |
-| macOS | `.dmg` | 内置 WKWebView 的受支持版本 |
-| Linux | `.deb` / `.rpm` / `.AppImage` | Debian 13、Ubuntu 26.04 及兼容发行版（GTK4 / WebKitGTK 6.0） |
+| 平台 | 安装包 | 现状 | 系统要求 |
+|---|---|---|---|
+| Linux x64 | `.deb` | 发布流水线出包并签名，附 `.deb.sig` 与 `checksums.txt` | Debian 13、Ubuntu 26.04 及兼容发行版（GTK4 / WebKitGTK 6.0） |
+| Linux | `.rpm` / `.AppImage` / Arch 包 | 本地任务已备好，未进流水线，不发布 | 同上 |
+| Windows | `.exe`（NSIS）/ MSIX | 只有构建配置，未验证、不发布 | — |
+| macOS | `.dmg` / `.app` | 只有构建配置，未验证、不发布 | — |
 
-每个版本都附 `checksums.txt` 和签名文件；更新由应用内自动检查，也可手动到 Releases 页下载。Linux 系统要求详见下文「开发和构建」里的发布线说明。
+Linux 系统要求详见下文「开发和构建」里的发布线说明。
 
 ### 开发环境
 
-- Go 1.27.3 或更高版本
-- Wails v3.0.0
+- Go 1.27.3 或更高（`go.mod` 的 `go` 指令）
+- Wails v3.0.0 命令行（`wails3`）
 - Node.js 和 npm
 
 ### 开发和构建
 
 ```sh
-wails3 dev
-```
-
-```sh
-wails3 build
+wails3 dev          # 热重载开发
+wails3 build        # 当前平台产物
+go test ./...       # Go 测试
 ```
 
 Linux 只有一条发布线：默认 GTK4/WebKitGTK 6.0，构建宿主为 Ubuntu 26.04（本机即该版本，或等效容器 `ubuntu:26.04`），也就是上面的 `wails3 build`。发布目标是 Debian 13 与 Ubuntu 26.04。Debian 12 不在目标内——它的仓库没有 `webkitgtk-6.0`，默认后端编不过；Ubuntu 24.04 也已于 2026-10-27 经裁决移出，改由 26.04 LTS 取代。`-tags gtk3` 只留作开发者本机备选，官方不为它出包、不承诺修复。
 
-Linux 构建需要 `libgtk-4-dev libwebkitgtk-6.0-dev`。产物能不能装某台机器，看实测的两道门：用 `objdump -T` 查产物要求的最高 `GLIBC_x.y` 是否不高于 `GLIBC_2.41`（最低目标 Debian 13 的 glibc），用 `ldd` 查目标发行版是否有 `libwebkitgtk-6.0.so.4` 和 `libgtk-4.so.1`。同一份代码在 Ubuntu 26.04 编出的产物要求 `GLIBC_2.38`，放进 Debian 13 容器 `ldd -r` 无未解析符号，所以一台 26.04 宿主可以同时供 Debian 13 与 Ubuntu 26.04 两条线；Debian 13 那边只验过链接，实机运行还没验。Windows 和 macOS 构建需在各自原生 runner 上验证。
-
-运行 Go 测试：
+Linux 构建需要 `libgtk-4-dev libwebkitgtk-6.0-dev`（另需 gcc、pkg-config、binutils，CGO 打开）。手动出 deb：
 
 ```sh
-go test ./...
+wails3 task linux:create:deb     # 同族还有 create:rpm / create:appimage / create:aur
 ```
+
+产物能不能装某台机器，看实测的两道门：用 `objdump -T` 查产物要求的最高 `GLIBC_x.y` 是否不高于 `GLIBC_2.41`（最低目标 Debian 13 的 glibc），用 `ldd` 查目标发行版是否有 `libgtk-4.so.1`、`libwebkitgtk-6.0.so.4` 和 `libjavascriptcoregtk-6.0.so.1`。同一份代码在 Ubuntu 26.04 编出的产物要求 `GLIBC_2.38`，放进 Debian 13 容器 `ldd -r` 无未解析符号，所以一台 26.04 宿主可以同时供 Debian 13 与 Ubuntu 26.04 两条线；Debian 13 那边只验过链接，实机运行还没验。Windows 和 macOS 构建需在各自原生 runner 上验证。
 
 ### 推送前自动重装
 
@@ -100,38 +115,42 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 
 ### 项目结构
 
-标了【未建】的目录还只在规划里，仓库里还没有这些文件；其余是当前的真实结构。
-
 ```text
 .
-├── main.go                  # Wails 应用入口：装配服务、托盘、单实例锁、生命周期
+├── main.go                  # Wails 入口：装配服务、无边框窗口、托盘、单实例锁、更新检查、启动自动化链、生命周期
 ├── cmd/
+│   ├── github-net-helper/   # root 常驻特权辅助服务：唯一被允许写系统 Hosts 的进程（systemd 单元在 build/linux/systemd/）
 │   └── identity/            # 取值小命令：给脚本和构建项读产品身份（--key / --shell）
 ├── internal/
-│   ├── app/                 # 暴露给前端的接口、DTO 和错误转换；队列那 7 条命令在 queue.go，检测任务的执行器适配在 detect.go（已写好、零调用点）
-│   ├── accelerator/         # 【部分建】检测执行编排已落（budget.go 算一轮预算、detect.go 串起取候选与验候选，管并发/时限/逐候选状态与事件）；接到队列的执行器也已写好（在 app/detect.go，没换装），仍没接界面，根包零生产调用点
-│   │   └── strategies/      # 加速方法单文件自注册：契约、注册表与 dns-hosts（注册表已进应用装配层；编排层已落，但整条检测路径还没有生产入口）
-│   ├── catalog/             # 服务、项目、域名等产品数据（catalog.json）
-│   ├── config/              # 用户配置：校验、revision、原子保存
-│   ├── detector/            # 【部分建】候选连通性与证书校验（probe.go，已被检测编排调用，仍无生产入口）；DNS 解析仍在策略包内、候选排序未建
+│   ├── accelerator/         # 检测编排：budget.go 算一轮预算，detect.go 串起取候选与验候选，管并发、单项 5 秒截止、逐候选状态与带序号事件
+│   │   └── strategies/      # 加速方法单文件自注册：契约、注册表与六个方法（三家公共源、全部公共源、使用已有储存、系统 DNS）
+│   ├── app/                 # 暴露给前端的 27 条命令、DTO 与错误转换：队列 7 条在 queue.go，检测 detect_items.go + detect.go，应用/还原 apply_items.go，更新 update.go，启动自动化 startup_automation.go
+│   ├── catalog/             # 产品数据：11 分类 / 52 项目 / 63 主机名（catalog.json）
+│   ├── config/              # 用户配置：校验、revision、原子保存、旧位置迁移
+│   ├── detector/            # 候选连通性与证书校验（TCP+TLS，2 秒预算），被检测编排调用
 │   ├── event/               # 给前端推事件的统一出口
-│   ├── hosts/               # Hosts 管理区段判读、渲染、恢复元数据与事务逻辑（都已落但没接线，本包不写盘）
+│   ├── hosts/               # Hosts 区段判读、渲染、恢复元数据与事务（纯计算，写盘只发生在辅助服务里）
 │   ├── identity/            # 产品名字的唯一手写源：户口层常量、派生路径与钉死它们的金标准测试
-│   ├── platform/            # 【未建】Windows/macOS/Linux 系统差异适配
-│   ├── privilege/           # 【未建】受限特权辅助服务的 IPC 客户端与协议
-│   ├── task/                # 【已落但没接入口】内存队列由 `internal/app` 构造（7 条队列命令已进绑定层，退出时停队列）：串行执行、九档状态、取消/暂停/重试/两项清理，事件序号与快照水位同源；做事的动作交给注入的执行器，现在注入的还是「这一类任务没接上执行动作」的占位，检测那只真执行器已写好但没换装
-│   └── updater/             # 【未建】稳定版检查与更新包校验
+│   ├── platform/            # 开机自启适配：Linux 写 XDG autostart；Windows/macOS 明确返回不支持
+│   ├── privilege/           # 特权辅助服务的客户端、服务端与白名单协议（Unix socket）
+│   ├── sources/             # GitHub 三家公共源的地址与合并解析
+│   ├── store/               # SQLite 候选底账（detect-history.db）
+│   ├── task/                # 内存任务队列：串行执行、九档状态、取消/暂停/重试/两项清理，事件序号与快照水位同源
+│   └── updater/             # 检查 Releases、下载并做 SHA256 + Ed25519 双校验，再交给系统安装器
 ├── frontend/
 │   ├── bindings/            # Wails 生成的绑定（不手改）
-│   └── src/                 # React 页面、组件、i18n、样式
-├── scripts/                 # 版本号、Release notes 生成、推送前自动重装等脚本
-├── docs/                    # 更新日志与 Release 条目清单（docs/release-notes/）
-└── .github/workflows/       # CI 与工作流
+│   └── src/                 # React 页面与组件、i18n（zh-CN / zh-TW）、样式
+├── build/                   # 各平台打包：linux（deb/rpm/AppImage/Arch + systemd + 安装脚本）、windows、darwin
+├── scripts/                 # 版本号、Release notes、签名、推送前自动重装等脚本
+├── docs/                    # 更新日志、Release 条目清单、界面截图
+└── .github/workflows/       # ci.yml（四步校验）、release.yml（标签触发出包+签名+发布）、cleanup-actions.yml
 ```
 
-### CI
+### CI 与发布
 
 `.github/workflows/ci.yml` 在 push 和 PR 上跑四步：前端 `npm ci && npm run build`（含 tsc）；后端在 `ubuntu:26.04` 容器里查 `gofmt`、`go vet ./...`、`go test -count=1 ./...`；同在 Ubuntu 26.04 宿主用默认后端出 x64 产物并跑门一（≤`GLIBC_2.41`）与本发行版门二；最后把产物放进 `debian:13` 容器复核门二。当前只覆盖 Linux x64，arm64、Windows、macOS 还没有对应任务，所以本地提交前请自行跑 `go build ./... && go vet ./... && go test ./...`、`gofmt -l .`（应为空）和 `frontend` 里的 `npm run build`。
+
+`.github/workflows/release.yml` 由 `v*` 标签触发：先核对标签与 `scripts/version.sh`（唯一来源是 `main.go` 的 `appVersion`）一致，再在 Ubuntu 26.04 容器出 deb、过门一与门二、用 `NET_SIGNING_KEY` 签出 `.deb.sig` 和 `checksums.txt`，最后连同正文建 GitHub Release；正文取仓库根 `release-notes.md`，由 `scripts/gen-release-notes.sh` 按「新增 / 修复 / 更新」三组生成。Windows 与 macOS 不在矩阵里。
 
 ### 文档
 
@@ -148,95 +167,89 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 
 ## English
 
-GitHub Net is a cross-platform desktop app built with Go, Wails v3, React and TypeScript. It speeds up access to GitHub by probing available IPs for GitHub domains and writing them into the system hosts file: no system proxy changes, no virtual network adapters, no background traffic. Acceleration methods are independent strategies — a system proxy, PAC and other methods can be added later, one file each.
+GitHub Net is a desktop app built with Go, Wails v3, React and TypeScript. It speeds up GitHub and similar sites by probing working IPs and writing them into the system hosts file: no system proxy changes, no virtual network adapters, no background traffic. Each acceleration method is an independent strategy shipped as one Go file.
 
-### Status
+### Main window
 
-The project follows the five stages in [TECHNICAL_PLAN](./TECHNICAL_PLAN.md). The catalog and the settings read/write path are wired; detection tasks, the task queue and hosts writing come later.
+![GitHub Net main window](./docs/screenshots/main-window.png)
 
-| Feature | Status |
-|---|---|
-| Category tree, search, service detail | ✅ Live, reads real backend data |
-| Status bar (platform, version, permission) | ✅ Live |
-| Settings center: network & traffic, layout | ✅ Live through the backend config service; queue height and the other six pages (zoom, appearance, tray, startup, update check, about) are not wired yet |
-| System tray | ✅ Basic tray live |
-| Acceleration method selection (DNS candidates written to hosts) | 🚧 Planned |
-| IP candidate probing (low / standard / full profiles) | 🚧 Planned |
-| Task queue (progress, cancel, retry, clear) | 🚧 Planned |
-| Hosts backup, apply and restore | 🚧 Planned |
-| Auto update (GitHub Releases) | 🚧 Planned |
-| UI localization (zh-CN first, zh-TW follows) | 🚧 Planned |
+The first-launch window at 1280×800: category tree on the left, service detail with the candidate table in the middle, the task queue below, and a status line (profile, hosts path and writability, DNS source, last probe, event sequence, catalog counters). The capture is the same frontend talking to the real backend in a headless browser (`go build -tags server`), not the native frameless window — so the three window buttons in the top-right corner do nothing in this picture.
 
-### Feature plan
+### Features
 
-Everything below describes the target product; check the table above for what actually runs today.
+- **Catalog**: 11 categories, 52 items, 63 unique hostnames (`internal/catalog/catalog.json`).
+- **Six acceleration methods, self-registering**: for GitHub — GitCDN, HelloGitHub and GitLab (ineo6) public sources, "all public sources" (the three merged, GitHub's default) and "use stored IPs" (the local SQLite ledger); every other category uses "find working IPs" (the OS-configured DNS). A new method is one Go file calling `Register()` from `init()` — no central registry, routing or UI changes.
+- **Visible probing**: each candidate gets its own row — queued / probing / reachable / unreachable / timeout / cancelled / skipped-for-budget — with latency; a 5-second deadline per item per round, 2 seconds for a DNS query and 2 for a TCP+TLS probe, and no fake progress bars.
+- **Three data profiles**: low data (2 candidates per hostname, concurrency 2) / standard (8 / 8) / full (16 / 8); the per-round probe cap defaults to 126 and is editable from 1 to 1008, whether it covers a round is shown before you start (network page and the profile button in the toolbar), and a batch probe with a shortfall asks for confirmation first. Probing sends DNS queries and TCP/TLS handshakes only — no page downloads, no automatic retries.
+- **Task queue**: probing, applying and restoring all run through one serial queue with nine statuses; the panel shows per-round progress and duration and offers pause, cancel waiting, retry failed, clear finished, clear all and restore all; state lives in an app-level store, so switching pages never loses a task.
+- **Hosts safety**: the UI process never writes the file — a root-resident helper (`github-net-helper`, Unix socket `/run/github-net/helper.sock`) does, and its whitelist is five operations only (ping / apply / restoreItem / restoreAll / hostsState). It backs up first, touches only the section tagged by this tool, replaces atomically, re-reads to verify, rolls back on failure, and restores on demand; an "open hosts" shortcut is there too.
+- **Least privilege**: the UI always runs as a normal user. On Linux the package's postinst enables and restarts the systemd service once, so hosts read/write never asks for root again.
+- **Startup automation**: launch at login (an XDG autostart entry on Linux), probe on startup for the categories you ticked (none ticked = the chain never starts), apply automatically once probing settles, and really exit the process when that auto-apply queue drains; the status bar reports how far the round got, which categories were skipped and why the app did not quit.
+- **Candidate ledger**: every round is stored in SQLite (`detect-history.db`, `internal/store`), which "use stored IPs" reads back instead of re-probing.
+- **Auto updates**: checks the latest stable GitHub Release, shows version, source and size before downloading, and hands the file to the system installer only after SHA256 and Ed25519 signature verification; a missing embedded public key is a hard refusal.
+- **Settings, eight pages**: layout, zoom, appearance, network & traffic, tray, startup, update check, about; every change is saved through the backend immediately and survives a restart.
+- **Look and shell**: six themes (Daylight is the only light one; OLED Black is pure black), four zoom levels (90/100/110/125%), a draggable sidebar (200–600 px), three queue heights plus a drag bar, a frameless window with a self-drawn titlebar, and a tray menu (show, minimize to tray, theme submenu, quit) whose tooltip follows whether tasks are running.
+- **Bilingual UI**: Simplified Chinese by default, Traditional Chinese available; both catalogs hold 368 keys, and a missing key prints `缺文案:key` on screen instead of silently falling back.
+- **Accessibility**: the tree is `role="tree"` with arrow-key navigation, the settings dialog is `aria-modal` and closes on Esc, and save results and errors are announced through `aria-live` / `role="alert"`.
 
-- **One-stop acceleration**: pick a service → pick a method → probe → apply, four steps. Each service keeps its own method; adding Steam later never affects GitHub.
-- **Extensible methods**: the first method is "find working IPs automatically" (DNS candidates + hosts). A new method ships as one self-registering Go file — no central registry, routing or UI changes.
-- **Visible probing**: every candidate IP shows its full lifecycle per row — queued → probing → reachable/unreachable/timeout — with latency and elapsed time; a single item takes at most 5 seconds, a whole service at most 30, with no fake progress bars.
-- **Three data profiles**: low data (2 candidates per domain, concurrency 2) / standard (8 / 8) / full (16 / 8); the per-round probe budget is shown up front, and shortfalls are confirmed before starting. Probing sends DNS queries and TCP/TLS handshakes only — no page downloads, no automatic retries.
-- **Task queue**: probing, applying and restoring all run through one queue with progress, cancel, retry and a clear-all; switching pages never loses a task.
-- **Hosts safety**: backup before writing, touch only the section tagged by this tool, atomic replace with verification and automatic rollback; one-click restore to the pre-apply state, plus an "open hosts" shortcut.
-- **Least privilege**: the UI always runs as a normal user; a restricted privileged helper is enabled once at install time, so hosts read/write never asks for admin/root again.
-- **Auto updates**: checks the latest stable GitHub Release, shows version, source and size before downloading, and installs only after signature and digest verification.
-- **Settings center**: network & traffic, appearance, language, layout and startup (tray, launch at login) as separate pages, saved through the backend and kept across restarts.
-- **Six themes**: Daylight, Sakura, Forest, Deep Ocean, Midnight and OLED Black, plus UI zoom.
-- **Bilingual UI**: Simplified Chinese by default with Traditional Chinese available; dates and numbers localized per language.
-- **Accessibility**: core flows are keyboard operable, state changes are announced to screen readers, and color is never the only signal.
+### Known limits
+
+- Only Linux x64 is covered by CI and the release pipeline, and only it has been verified on a real machine. Windows and macOS have packaging files but no verification and no release-matrix entry — their privileged helper and install hand-off do not exist yet. arm64 is unverified too.
+- GitHub deliberately has no DNS method (decided 2026-10-31): its candidates come from public sources and the local ledger.
+- The "score" column in the candidate table is always `—` (scoring is not built), and the tray menu plus the queue pager labels are hardcoded Chinese — switching to Traditional Chinese does not translate them.
+- In the toolbar's "mode" dropdown only Hosts is selectable; system proxy and PAC are greyed out per the prototype — they are not implemented, and picking them changes nothing.
 
 ### How it works
 
-1. Probe: query trusted DNS resolvers for candidate IPs of the target domains, then verify each candidate with a TCP/TLS handshake (hostname and certificate validation kept; no page downloads).
-2. Choose: the UI lists every candidate with its state, latency and verification result; the user picks one.
-3. Apply: write the chosen IP into the system hosts file, touching only the section tagged by this tool; the file is backed up first and can be restored at any time.
-4. Extend: acceleration methods self-register from a single file — future methods each ship as one Go file, with no central registry or UI changes.
+1. Collect candidates: GitHub reads the three public hosts sources (or the local SQLite ledger); other categories resolve through the OS-configured DNS. Queries are never forwarded to a third-party resolver and full hostnames are not logged.
+2. Verify: TCP connect plus TLS handshake per address, keeping hostname and certificate validation; no page content is downloaded.
+3. Choose and write: the UI lists every candidate with state and latency and the user picks; "Apply" enqueues a task, the helper backs up and atomically writes the chosen mappings into the system hosts file, touching only this tool's section, then re-reads to verify.
+4. Undo: restore to the pre-apply state from the recovery metadata, or "restore all".
+5. Extend: methods self-register from a single file, so a future system-proxy or PAC method ships as one Go file with no registry or UI changes.
 
 ### Usage
 
-The flow below is the planned interaction; probing, applying and restoring are not wired yet, so today the app only shows catalog and settings state.
-
-1. Pick a service or a single item in the category tree.
-2. Under "All acceleration methods for GitHub" in the detail header, pick a method ("find working IPs automatically" is the default).
-3. Hit "Probe" and review each candidate; switch the low/standard/full profile from the compact label next to the probe button.
-4. Hit "Apply" to write hosts; "Restore" returns to the pre-apply state whenever needed.
+1. Pick a category or a single item in the tree.
+2. Choose a method under "All acceleration methods for GitHub" ("all public sources" is the default).
+3. Hit "Probe" — or "Probe all" in the toolbar — and review each candidate; the profile button next to the probe button switches low/standard/full.
+4. Hit "Apply to hosts"; "Restore" returns to the pre-apply state. Tasks queue in the panel below, where you can pause, cancel and retry them.
 
 ### Downloads
 
-No stable release exists yet (the Releases page is empty and no version tag has been cut). Once the first stable build ships, installers will be published at [Releases](https://github.com/xiaokentrl/github-net/releases); the planned packages are:
+Installers are published at [Releases](https://github.com/xiaokentrl/github-net/releases) — a `v<version>` tag is what triggers the pipeline, so the page is empty until a release exists.
 
-| Platform | Package | Requirements |
-|---|---|---|
-| Windows | `.exe` (NSIS installer) | Windows 10 or later, WebView2 (installed automatically if missing) |
-| macOS | `.dmg` | A supported version with WKWebView |
-| Linux | `.deb` / `.rpm` / `.AppImage` | Debian 13, Ubuntu 26.04 and compatible distros (GTK4 / WebKitGTK 6.0) |
+| Platform | Package | Today | Requirements |
+|---|---|---|---|
+| Linux x64 | `.deb` | Built and signed by the release pipeline, with `.deb.sig` and `checksums.txt` | Debian 13, Ubuntu 26.04 and compatible distros (GTK4 / WebKitGTK 6.0) |
+| Linux | `.rpm` / `.AppImage` / Arch package | Local tasks exist; not in the pipeline, not published | same as above |
+| Windows | `.exe` (NSIS) / MSIX | Build files only — unverified, not published | — |
+| macOS | `.dmg` / `.app` | Build files only — unverified, not published | — |
 
-Planned releases ship `checksums.txt` and signature files, and updates are checked in-app against the latest stable GitHub Release; none of that is live until the first release exists. See the release-line notes under "Development and build" for Linux requirements.
+See the release-line notes under "Development and build" for Linux requirements.
 
 ### Development environment
 
-- Go 1.27.3 or later
-- Wails v3.0.0
+- Go 1.27.3 or later (the `go` directive in `go.mod`)
+- Wails v3.0.0 CLI (`wails3`)
 - Node.js and npm
 
 ### Development and build
 
 ```sh
-wails3 dev
-```
-
-```sh
-wails3 build
+wails3 dev          # hot reload
+wails3 build        # binary for the current platform
+go test ./...       # Go tests
 ```
 
 Linux has a single release line: the default GTK4/WebKitGTK 6.0 backend, built on an Ubuntu 26.04 host (the native OS or an equivalent `ubuntu:26.04` container) via `wails3 build` above. Release targets are Debian 13 and Ubuntu 26.04. Debian 12 is out of scope — its repositories lack `webkitgtk-6.0`, so the default backend does not compile; Ubuntu 24.04 was dropped by decision on 2026-10-27 in favour of 26.04 LTS. `-tags gtk3` remains a developer-side fallback only; no official packages and no fix guarantees for it.
 
-Linux builds need `libgtk-4-dev libwebkitgtk-6.0-dev`. Whether a binary can be installed on a given machine is decided by two measured gates: `objdump -T` must show no `GLIBC_x.y` above `GLIBC_2.41` (the glibc of Debian 13, the oldest target), and `ldd` must find `libwebkitgtk-6.0.so.4` and `libgtk-4.so.1` on the target distro. A binary built on Ubuntu 26.04 currently requires `GLIBC_2.38` and links cleanly inside a Debian 13 container (`ldd -r` reports no unresolved symbols), so one 26.04 host serves both lines; on the Debian 13 side only linking has been verified, not a real desktop run. Windows and macOS builds need to be validated on their native runners.
-
-Run the Go tests:
+Linux builds need `libgtk-4-dev libwebkitgtk-6.0-dev` (plus gcc, pkg-config, binutils, CGO enabled). To build a deb locally:
 
 ```sh
-go test ./...
+wails3 task linux:create:deb     # siblings: create:rpm / create:appimage / create:aur
 ```
+
+Whether a binary can be installed on a given machine is decided by two measured gates: `objdump -T` must show no `GLIBC_x.y` above `GLIBC_2.41` (the glibc of Debian 13, the oldest target), and `ldd` must find `libgtk-4.so.1`, `libwebkitgtk-6.0.so.4` and `libjavascriptcoregtk-6.0.so.1` on the target distro. A binary built on Ubuntu 26.04 currently requires `GLIBC_2.38` and links cleanly inside a Debian 13 container (`ldd -r` reports no unresolved symbols), so one 26.04 host serves both lines; on the Debian 13 side only linking has been verified, not a real desktop run. Windows and macOS builds need to be validated on their native runners.
 
 ### Reinstall before each push
 
@@ -259,38 +272,42 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 
 ### Project layout
 
-Entries marked [not built] exist only in the plan — those directories are not in the repo yet; the rest is the current layout.
-
 ```text
 .
-├── main.go                  # Wails entry point: service wiring, single-instance lock, tray, lifecycle
+├── main.go                  # Wails entry: service wiring, frameless window, tray, single-instance lock, update check, startup-automation chain, lifecycle
 ├── cmd/
+│   ├── github-net-helper/   # Root-resident privileged helper: the only process allowed to write the system hosts file (systemd unit in build/linux/systemd/)
 │   └── identity/            # Small value command: lets scripts and build steps read the product identity (--key / --shell)
 ├── internal/
-│   ├── app/                 # Frontend-facing API, DTOs and error mapping; the 7 queue commands live in queue.go, the detection task's executor adapter in detect.go (written, zero call sites)
-│   ├── accelerator/         # [partly built] detection orchestration landed: budget.go works out one round's budget, detect.go chains candidate lookup with probing and owns concurrency, the 5-second item deadline, per-candidate statuses and sequenced events; the queue-side executor that would drive it is now written too (in app/detect.go, not swapped in), so it is still not wired to the UI and has no production callers
-│   │   └── strategies/      # Acceleration methods, one file each: contract, registry and dns-hosts (the registry is wired into the app assembly; the orchestration layer exists, but the detection path still has no production entry point)
-│   ├── catalog/             # Product data: services, items, domains (catalog.json)
-│   ├── config/              # User config: validation, revision, atomic saves
-│   ├── detector/            # [partly built] candidate reachability and certificate checks (probe.go, now called by the detection orchestration; still no production entry point); DNS still lives in the strategy package, ranking not built
+│   ├── accelerator/         # Detection orchestration: budget.go works out one round's budget, detect.go chains candidate lookup with verification and owns concurrency, the 5-second item deadline, per-candidate statuses and sequenced events
+│   │   └── strategies/      # Methods, one file each: contract, registry and the six implementations (three public sources, all-sources, stored IPs, system DNS)
+│   ├── app/                 # The 27 commands bound to the frontend, DTOs and error mapping: 7 queue commands in queue.go, probing in detect_items.go + detect.go, apply/restore in apply_items.go, updates in update.go, automation in startup_automation.go
+│   ├── catalog/             # Product data: 11 categories / 52 items / 63 hostnames (catalog.json)
+│   ├── config/              # User config: validation, revision, atomic saves, migration from the old location
+│   ├── detector/            # Candidate reachability and certificate checks (TCP+TLS, 2-second budget), called by the orchestration
 │   ├── event/               # Single outlet for events pushed to the frontend
-│   ├── hosts/               # Hosts managed-block parsing, rendering, recovery metadata and transaction logic (built, not wired; this package writes nothing)
+│   ├── hosts/               # Managed-block parsing, rendering, recovery metadata and transactions (pure logic; writing only happens inside the helper)
 │   ├── identity/            # The only handwritten source of product names: identity constants, derived paths and the golden test that pins them
-│   ├── platform/            # [not built] Windows/macOS/Linux system adapters
-│   ├── privilege/           # [not built] Restricted privileged helper IPC client and protocol
-│   ├── task/                # [built, entry points missing] the queue is now constructed by `internal/app` (7 queue commands bound, stopped on exit): serial execution, nine statuses, cancel/pause/retry/two cleanups, event sequence shared with the snapshot watermark; work happens through an injected executor, and what is injected still answers "this kind of task has no executor yet" — the real detection executor is written but not swapped in
-│   └── updater/             # [not built] Stable-release checks and update verification
+│   ├── platform/            # Launch-at-login: an XDG autostart entry on Linux; Windows/macOS answer "unsupported"
+│   ├── privilege/           # Privileged helper client, server and whitelisted protocol (Unix socket)
+│   ├── sources/             # The three GitHub public source endpoints and their merged parsing
+│   ├── store/               # SQLite candidate ledger (detect-history.db)
+│   ├── task/                # In-memory queue: serial execution, nine statuses, cancel/pause/retry/two cleanups, event sequence shared with the snapshot watermark
+│   └── updater/             # Latest-release checks, download with SHA256 + Ed25519 verification, then hand-off to the system installer
 ├── frontend/
 │   ├── bindings/            # Wails-generated bindings (do not edit by hand)
-│   └── src/                 # React pages, components, i18n, styles
-├── scripts/                 # Version, release-notes and pre-push reinstall helpers
-├── docs/                    # Changelog and release note entry lists (docs/release-notes/)
-└── .github/workflows/       # CI and workflows
+│   └── src/                 # React pages and components, i18n (zh-CN / zh-TW), styles
+├── build/                   # Packaging per platform: linux (deb/rpm/AppImage/Arch + systemd + install scripts), windows, darwin
+├── scripts/                 # Version, release-notes, signing and pre-push reinstall helpers
+├── docs/                    # Changelog, release note entry lists, screenshots
+└── .github/workflows/       # ci.yml (four gates), release.yml (tag-triggered build + sign + publish), cleanup-actions.yml
 ```
 
-### CI
+### CI and release
 
 `.github/workflows/ci.yml` runs four steps on push and PR: frontend `npm ci && npm run build` (including tsc); backend `gofmt`, `go vet ./...` and `go test -count=1 ./...` inside an `ubuntu:26.04` container; an x64 build on the default backend on an Ubuntu 26.04 host with gate one (≤`GLIBC_2.41`) and gate two for that distro; and a re-check of gate two inside a `debian:13` container. Only Linux x64 is covered for now — arm64, Windows and macOS have no tasks yet, so before pushing run `go build ./... && go vet ./... && go test ./...`, `gofmt -l .` (must be empty) and `npm run build` in `frontend` locally.
+
+`.github/workflows/release.yml` fires on a `v*` tag: it first checks the tag against `scripts/version.sh` (whose single source is `appVersion` in `main.go`), builds the deb in an Ubuntu 26.04 container, runs both gates, signs with `NET_SIGNING_KEY` into `.deb.sig` plus `checksums.txt`, and publishes the GitHub Release whose body comes from `release-notes.md` — generated by `scripts/gen-release-notes.sh` into the three fixed groups (added / fixed / updated). Windows and macOS are not in the matrix.
 
 ### Docs
 
