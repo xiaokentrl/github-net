@@ -27,33 +27,33 @@ type Store struct {
 
 // RoundRow 是底账里的一轮：谁、用哪个方法、什么时候、结论数字是多少。
 type RoundRow struct {
-	ID         int64  // 底账里的行号，读某轮的候选用它
-	TaskRound  string // 队列那一侧的轮 ID；单发检测没有批量轮就是空串
-	ItemID     string
-	ScopeID    string
-	StrategyID string
-	StartedAt  string
-	FinishedAt string
-	Available  int
-	ProbesUsed int
-	DNSQueries int
-	Truncated  bool
+	ID          int64  // 底账里的行号，读某轮的候选用它
+	TaskRound   string // 队列那一侧的轮 ID；单发检测没有批量轮就是空串
+	ItemID      string
+	ScopeID     string
+	StrategyID  string
+	StartedAt   string
+	FinishedAt  string
+	Available   int
+	ProbesUsed  int
+	DNSQueries  int
+	Truncated   bool
 	DeadlineHit bool
-	Cancelled  bool
+	Cancelled   bool
 }
 
 // CandidateRow 是底账里的一条候选，字段和 accelerator.Candidate 一一对应
 // （布尔在库里是 0/1，读出来还原成 bool）。
 type CandidateRow struct {
-	Hostname     string
-	CandidateID  string
-	IP           string
-	IPv6         bool
-	Status       string
-	LatencyMS    int64
-	TLSMS        int64
-	Reason       string
-	Applied      bool
+	Hostname    string
+	CandidateID string
+	IP          string
+	IPv6        bool
+	Status      string
+	LatencyMS   int64
+	TLSMS       int64
+	Reason      string
+	Applied     bool
 }
 
 // Open 打开（或新建）path 指向的底账库，建好两张表。父目录不存在就一并创建。
