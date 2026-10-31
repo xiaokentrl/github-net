@@ -190,7 +190,6 @@
   "settings.network.coverageShort": "本輪上限 {cap} 次，還差 {gap} 次蓋不住一輪全量；接入偵測後，超出部分的項目會標為未偵測，不會悄悄跳過。",
   "settings.network.note": "這一頁只保存參數：後端還沒有發起 DNS/TLS 偵測的任務，併發上限也還只是設定裡的數字。真實偵測接通後由後端統一限制併發和請求量。",
   "tree.ariaLabel": "服務目錄",
-  "tree.search.placeholder": "搜尋類別、項目或網域",
   "tree.loading": "正在從後端讀取產品目錄…",
   "tree.empty": "沒有符合的類別或網域",
   "tree.error": "目錄讀取失敗：{reason}",

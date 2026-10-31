@@ -3,10 +3,8 @@ import { Window } from '@wailsio/runtime'
 import { HostsAccess } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { AppStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
-import { SearchBox } from '../navigation/SearchBox'
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, useSidebarResize } from './useSidebarResize'
 import styles from './AppShell.module.css'
-import treeStyles from '../navigation/CategoryTree.module.css'
 
 // 存文案键而不是成品句子：语言来自后端设置，切语言时下一屏要跟着变。
 const PERM_KEY: Record<HostsAccess, string> = {
@@ -39,8 +37,6 @@ export function AppShell({
   onRetryStatus,
   sidebarWidth,
   onSidebarResize,
-  searchQuery,
-  onSearchQueryChange,
   toolbar,
   sidebar,
   sidebarTools,
@@ -58,8 +54,6 @@ export function AppShell({
   onRetryStatus: () => void
   sidebarWidth: number | null
   onSidebarResize: (width: number) => void
-  searchQuery: string
-  onSearchQueryChange: (value: string) => void
   toolbar: ReactNode
   sidebar: ReactNode
   sidebarTools: ReactNode
@@ -176,10 +170,6 @@ export function AppShell({
 
       <main className={styles.main}>
         <aside ref={resize.targetRef} className={styles.sidebar} style={sidebarStyle}>
-          {/* 搜索框住在菜单里、占满菜单宽：拖分隔条或换档时它跟着变宽变窄（拍板 2026-10-31）。 */}
-          <div className={treeStyles.sideSearch}>
-            <SearchBox value={searchQuery} onChange={onSearchQueryChange} />
-          </div>
           <div className={styles.sidebarTools}>{sidebarTools}</div>
           <div className={styles.treeScroll}>{sidebar}</div>
           <div className={styles.sideFoot}>{sidebarFooter}</div>

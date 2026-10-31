@@ -190,7 +190,6 @@
   "settings.network.coverageShort": "本轮上限 {cap} 次，还差 {gap} 次盖不住一轮全量；接入检测后，超出部分的项目会标为未检测，不会悄悄跳过。",
   "settings.network.note": "这一屏只保存参数：后端还没有发起 DNS/TLS 检测的任务，并发上限也还只是配置里的数字。真实检测接通后由后端统一限制并发和请求量。",
   "tree.ariaLabel": "服务目录",
-  "tree.search.placeholder": "搜索类目、项目或域名",
   "tree.loading": "正在从后端读取产品目录…",
   "tree.empty": "没有匹配的类目或域名",
   "tree.error": "目录读取失败：{reason}",

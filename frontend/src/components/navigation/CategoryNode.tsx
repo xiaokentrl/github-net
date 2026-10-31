@@ -1,7 +1,6 @@
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { CatalogCategory, CatalogItem, DetectResultView, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
-import { Highlight } from './Highlight'
 import { itemStatus, type LiveKind, type Tone } from './treeStatus'
 import styles from './CategoryTree.module.css'
 
@@ -41,7 +40,6 @@ export function CategoryNode({
   hostsOf,
   liveOf,
   results,
-  needle,
   expanded,
   selectedId,
   checkedIds,
@@ -56,7 +54,6 @@ export function CategoryNode({
   hostsOf: HostsLookup
   liveOf: LiveLookup
   results: Record<string, DetectResultView>
-  needle: string
   expanded: boolean
   selectedId: string
   onToggle: (categoryID: string) => void
@@ -105,9 +102,7 @@ export function CategoryNode({
         <span className={`${styles.caret} ${expanded ? '' : styles.collapsed}`} aria-hidden="true">
           ▼
         </span>
-        <span className={styles.name}>
-          <Highlight text={category.name} needle={needle} />
-        </span>
+        <span className={styles.name}>{category.name}</span>
         <span className={`${styles.infoArea} ${styles.infoCount}`}>
           <span className={styles.count}>{all.length}</span>
         </span>
@@ -166,7 +161,7 @@ export function CategoryNode({
                   />
                   <span className={styles.caretSlot} aria-hidden="true" />
                   <span className={styles.name} title={(item.hostnames ?? []).join(', ')}>
-                    <Highlight text={item.name} needle={needle} />
+                    {item.name}
                   </span>
                   <span className={`${styles.infoArea} ${styles.infoStatus}`} title={hosts?.message}>
                     <span className={`${styles.dot} ${DOT_CLASS[status.tone]}`} aria-hidden="true" />

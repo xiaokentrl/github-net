@@ -18,7 +18,6 @@ import { TaskPanel } from '../features/tasks/TaskPanel'
 import { subscribeTaskEvents } from '../features/tasks/taskEvents'
 import { useTaskQueue } from '../features/tasks/taskStore'
 import { useRestoreAllTasks } from '../features/tasks/useRestoreAll'
-import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
@@ -50,11 +49,10 @@ export function App() {
   const [catalogError, setCatalogError] = useState('')
 
   // 勾选模型：批量检测/应用的参与范围，内存态（规划明确勾选不持久化）。
-  // 首次拿到目录时默认勾选 GitHub 和 Steam（用户拍板的默认值）。
+  // 默认无选中（拍板 2026-10-31）：勾选是「接下来要操作哪些」的意图，不替用户预设。
   const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(new Set())
 
-  const [query, setQuery] = useState('')
-  // 展开状态。原型一进来是全部展开（collapsed 是空集合，第 1342 行），所以拿到目录后补一次全展开。
+  // 展开状态。默认全部收起（拍板 2026-10-31），用户自己点开想看的簇。
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [selectedId, setSelectedId] = useState('')
 
@@ -566,15 +564,12 @@ export function App() {
   const handleRestoreError = useCallback((err: unknown) => setHostsError(getErrorMessage(err)), [])
   const { busy: restoreBusy, restoreAll } = useRestoreAllTasks(handleRestoreError, loadCatalog)
 
-  const debouncedQuery = useDebouncedValue(query, 150)
-
   const sidebar = (
     <CategoryTree
       categories={snapshot?.categories ?? []}
       hostsOf={hostsOf}
       liveOf={liveOf}
       results={queue.results}
-      query={debouncedQuery}
       expanded={expanded}
       selectedId={selectedId}
       checkedIds={checkedIds}
@@ -604,8 +599,6 @@ export function App() {
         onRetryStatus={loadStatus}
         sidebarWidth={settings?.layout.sidebarWidth ?? null}
         onSidebarResize={changeSidebarWidth}
-        searchQuery={query}
-        onSearchQueryChange={setQuery}
         toolbar={
           <Toolbar
             settings={settings}
