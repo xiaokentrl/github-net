@@ -115,7 +115,9 @@
   border-right: none;
 }
 
-.seg button:hover:not(:disabled) {
+/* 悬停只提未选中的那几颗：选中颗是实心主色配 --on-primary 文字，
+   悬停规则优先级更高会把底色换成浅灰，白字落在浅灰上就直接看不见了。 */
+.seg button:hover:not(:disabled):not(.segOn) {
   background: var(--hov);
 }
 
