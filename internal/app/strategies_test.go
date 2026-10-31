@@ -141,8 +141,10 @@ func TestGetStrategiesListsApplicableMethodsAndSavedChoice(t *testing.T) {
 		if opt.Name == "" || opt.Description == "" {
 			t.Errorf("方法 %s 缺面向用户的文案", opt.ID)
 		}
-		// 那一个真方法三个能力全带上，所以三位都该是 true；能力位没摊平就会在这里红。
-		if !opt.CanLookup || !opt.KeepsTLSName || !opt.SystemDNS {
+		// 能力位摊平：DNS 方法带全三位；公共源方法根本不碰解析器，
+		// 没有只走系统 DNS 那一位——两种方法各按各的形状核。
+		wantSystemDNS := opt.ID == strategies.StrategyIDDNSHosts
+		if !opt.CanLookup || !opt.KeepsTLSName || opt.SystemDNS != wantSystemDNS {
 			t.Errorf("方法 %s 的能力位没摊平：%+v", opt.ID, opt)
 		}
 		if opt.Selected {

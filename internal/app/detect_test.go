@@ -163,7 +163,7 @@ func detectStore(t *testing.T, defaults map[string]string) *config.Store {
 // 要用例关心它时再改 exec.appliedIPs。
 func newDetectExecutorForTest(t *testing.T, store *config.Store, probe accelerator.ProbeFunc) *detectExecutor {
 	t.Helper()
-	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil, nil, nil, nil, nil)
+	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil, nil, nil, nil, nil, nil)
 }
 
 func detectCandidates() map[string][]strategies.Candidate {
@@ -255,7 +255,7 @@ func TestDetectExecutorHandsRoundToLedger(t *testing.T) {
 		saved = append(saved, taskRound+"|"+scopeID+"|"+strategyID+"|"+r.ItemID)
 	}
 	exec := newDetectExecutor(detectCatalog(), detectStore(t, nil), availableProbe,
-		newDetectResultStore(), nil, nil, nil, nil, save)
+		newDetectResultStore(), nil, nil, nil, nil, save, nil)
 	exec.strategyFor = lookup.table(lookup.strategy(detectMethodGitHub, []string{detectScopeGitHub}))
 
 	out := exec.Execute(context.Background(),
@@ -278,6 +278,40 @@ func TestDetectExecutorHandsRoundToLedger(t *testing.T) {
 		func(string, string, int) {})
 	if out.Status != task.StatusDone {
 		t.Fatalf("没底账也要能跑完，实际 %+v", out)
+	}
+}
+
+// 任务和设置都没指方法时，出厂默认兜底（GitHub 范围 → 全部公共源）；
+// 出厂默认声明不适用于这个范围就仍然拒绝。
+func TestDetectExecutorFallsBackToFactoryDefault(t *testing.T) {
+	lookup := &detectLookup{cands: detectCandidates()}
+	exec := newDetectExecutor(detectCatalog(), detectStore(t, nil), availableProbe,
+		newDetectResultStore(), nil, nil, nil, nil, nil,
+		func(scopeID string) (string, bool) {
+			if scopeID == detectScopeGitHub {
+				return detectMethodGitHub, true
+			}
+			return "", false
+		})
+	exec.strategyFor = lookup.table(lookup.strategy(detectMethodGitHub, []string{detectScopeGitHub}))
+
+	out := exec.Execute(context.Background(),
+		task.Task{Kind: task.KindDetect, ItemID: "api", ScopeID: detectScopeGitHub},
+		func(string, string, int) {})
+	if out.Status != task.StatusDone {
+		t.Fatalf("出厂默认该兜住这轮，实际 %+v", out)
+	}
+	_, methods, _ := lookup.calls()
+	if len(methods) == 0 || methods[0] != detectMethodGitHub {
+		t.Errorf("该用出厂默认的方法，实际 %v", methods)
+	}
+
+	// 出厂默认不适用 steam：还是明确拒绝。
+	refused := exec.Execute(context.Background(),
+		task.Task{Kind: task.KindDetect, ItemID: "steam", ScopeID: detectScopeSteam},
+		func(string, string, int) {})
+	if refused.Status != task.StatusFailed || !strings.Contains(refused.Message, "还没选检测方法") {
+		t.Errorf("没有适用的默认要拒绝，实际 %+v", refused)
 	}
 }
 

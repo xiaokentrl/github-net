@@ -49,12 +49,15 @@ type detectExecutor struct {
 	// save 把跑完的一轮写进候选底账（SQLite）。留成接缝：nil 表示没有底账
 	// （库打不开或纯测试场景），照跑不落盘。写失败也不许影响检测结果——底账是「发生过什么的记录」，不是检测结果本身。
 	save func(taskRound, scopeID, strategyID string, r *accelerator.Result)
+	// defaultFor 给「用户还没选过方法」的范围一个出厂默认（GitHub 范围 → 全部公共源，拍板 2026-10-31）。
+	// 留成接缝：nil 表示没有出厂默认，没选过就明确拒绝，不从注册表里随便挑一个。
+	defaultFor func(scopeID string) (string, bool)
 }
 
 // newDetectExecutor 建检测执行器。调用方必须在产品目录和设置服务都准备好之后再来建：
 // 目录读不出来时任何检测都没有可查的项目，那种情况队列该继续用 pendingExecutor。
-func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter, gate chan struct{}, rounds *roundBudgets, appliedIPs func(hostnames []string) map[string][]string, save func(taskRound, scopeID, strategyID string, r *accelerator.Result)) *detectExecutor {
-	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub, gate: gate, rounds: rounds, appliedIPs: appliedIPs, save: save}
+func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter, gate chan struct{}, rounds *roundBudgets, appliedIPs func(hostnames []string) map[string][]string, save func(taskRound, scopeID, strategyID string, r *accelerator.Result), defaultFor func(scopeID string) (string, bool)) *detectExecutor {
+	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub, gate: gate, rounds: rounds, appliedIPs: appliedIPs, save: save, defaultFor: defaultFor}
 }
 
 // appliedFor 取出这些主机名当前已经写在管理区段里的地址，作为本轮的已知地址交给检测编排。
@@ -185,14 +188,18 @@ func (e *detectExecutor) item(itemID string) (detectItem, bool) {
 	return detectItem{}, false
 }
 
-// strategyID 定这一轮用哪个加速方法：任务上带的优先，其次取这个范围的默认方法。
-// 两个都没有就明确拒绝，绝不从注册表里随便挑一个——用哪个方法查候选是用户定的事。
+// strategyID 定这一轮用哪个加速方法：任务上带的优先，其次取这个范围的默认方法，
+// 再其次取出厂默认（GitHub 范围 → 全部公共源）。三个都没有就明确拒绝，
+// 绝不从注册表里随便挑一个——用哪个方法查候选是用户定的事。
 func (e *detectExecutor) strategyID(fromTask, scopeID string, cfg config.Config) (string, bool) {
 	if id := strings.TrimSpace(fromTask); id != "" {
 		return id, true
 	}
 	if id := strings.TrimSpace(cfg.Accelerator.DefaultStrategyByScope[scopeID]); id != "" {
 		return id, true
+	}
+	if e.defaultFor != nil {
+		return e.defaultFor(scopeID)
 	}
 	return "", false
 }

@@ -126,7 +126,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	if err == nil {
 		s.settings, s.settingsErr = newSettingsStore(c)
 		if s.settings != nil {
-			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit), probeGate, rounds, s.appliedIPsFor, s.saveDetectRound)
+			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit), probeGate, rounds, s.appliedIPsFor, s.saveDetectRound, factoryDefaultStrategy)
 			s.detectReady = true
 		}
 	}
@@ -145,6 +145,24 @@ func (s *Service) saveDetectRound(taskRound, scopeID, strategyID string, r *acce
 		return
 	}
 	_ = s.candidateStore.SaveRound(taskRound, scopeID, strategyID, r)
+}
+
+// factoryDefaultStrategy 是「用户还没选过方法」时的出厂默认（拍板 2026-10-31）：
+// 「全部公共源」声明适用的范围（现在就是 github）直接用它。
+// 从注册表现查「全部」自己声明的范围，不抄死范围清单；方法没注册或范围不适用就没有默认。
+// 这个默认放装配层而不是 config.Default()：配置包不该认识「github」这个范围名，
+// 否则默认值自己都过不了「空集合一律拒绝」的校验门。
+func factoryDefaultStrategy(scopeID string) (string, bool) {
+	s, ok := strategies.Get(strategies.StrategyIDAllSources)
+	if !ok {
+		return "", false
+	}
+	for _, got := range s.ScopeIDs {
+		if got == scopeID {
+			return s.ID, true
+		}
+	}
+	return "", false
 }
 
 // newSettingsStore 用目录里的 scopeID 和方法注册表里的已注册方法作为校验集合。

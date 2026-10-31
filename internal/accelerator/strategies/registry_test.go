@@ -196,25 +196,25 @@ func TestErrorsSliceIsCopy(t *testing.T) {
 	}
 }
 
-// 首期真实注册表的状态：只有一个方法、注册零错误、范围和产品目录完全对齐。
-// 这一条同时也是 init 的自检——注册静默失败会在这里暴露。
+// 真实注册表的基线：DNS 方法覆盖全部范围，四个公共源方法只覆盖 github 范围，
+// 注册零错误、范围和产品目录完全对齐。这一条同时也是 init 的自检——注册静默失败会在这里暴露。
 func TestGlobalRegistryBaseline(t *testing.T) {
 	if errs := Errors(); len(errs) != 0 {
 		t.Fatalf("init 注册有错误：%v", errs)
 	}
 	all := All()
-	if len(all) != 1 {
-		t.Fatalf("首期应有 1 个方法，实得 %d：%v", len(all), strategyIDs(all))
+	if len(all) != 5 {
+		t.Fatalf("应有 5 个方法（DNS + 三源 + 全部），实得 %d：%v", len(all), strategyIDs(all))
 	}
-	s := all[0]
-	if s.ID != StrategyIDDNSHosts {
-		t.Fatalf("稳定 ID 应为 %s，实得 %s", StrategyIDDNSHosts, s.ID)
+	s, ok := Get(StrategyIDDNSHosts)
+	if !ok {
+		t.Fatalf("DNS 方法不在表里")
 	}
 	if s.Name != "自动查找可用 IP" {
 		t.Fatalf("用户可见名称不对：%q", s.Name)
 	}
 	if !s.Caps.has(CapabilitySystemDNSOnly) {
-		t.Fatal("首期方法必须声明只走系统 DNS")
+		t.Fatal("DNS 方法必须声明只走系统 DNS")
 	}
 	if s.Lookup == nil {
 		t.Fatal("没有实现")
@@ -239,8 +239,12 @@ func TestGlobalRegistryBaseline(t *testing.T) {
 	if errs := UnknownScopes(scopes); len(errs) != 0 {
 		t.Fatalf("范围和目录对不上：%v", errs)
 	}
-	if got := ForScope("github"); len(got) != 1 {
-		t.Fatalf("github 范围应能取到方法：%v", got)
+	// github 范围：DNS + 三源 + 全部，共 5 个；别的范围（如 steam）只有 DNS。
+	if got := ForScope("github"); len(got) != 5 {
+		t.Fatalf("github 范围应有 5 个方法，实得 %v", strategyIDs(got))
+	}
+	if got := ForScope("steam"); len(got) != 1 || got[0].ID != StrategyIDDNSHosts {
+		t.Fatalf("steam 范围该只有 DNS 方法，实得 %v", strategyIDs(got))
 	}
 	if _, ok := Get("不存在的Id"); ok {
 		t.Fatal("查不到 ID 却返回了真")
