@@ -159,6 +159,8 @@ func Default() Config {
 		Appearance:  AppearanceConfig{Language: "zh-CN", Theme: "light", Zoom: 1},
 		// 队列高度默认取「小」档（拍板 2026-10-31）：主区先让给项目树，要看队列再拖大。
 		Layout: LayoutConfig{SidebarWidth: 240, QueueHeight: QueueHeightSmall, QueueListWidth: 220},
+		// 两个焦点跟随出厂默认打开（拍板 2026-10-31）：队列跟着正在跑的项目走是这功能的本意。
+		TreeBehavior: TreeBehaviorConfig{DetectFocusFollow: true, ApplyFocusFollow: true},
 	}
 }
 
