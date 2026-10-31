@@ -220,7 +220,8 @@
   overflow-y: auto;
 }
 
-/* 侧栏底部按钮条，抄原型 .sidebar-footer(130)；「重算演示状态」那颗没搬，所以这里只有一颗按钮。 */
+/* 侧栏底部按钮条，抄原型 .sidebar-footer(130)；槽里现在是「同步状态」＋「设置中心」两颗，
+   原型那颗「重算演示状态」属于演示逻辑，没搬。 */
 .sideFoot {
   display: flex;
   flex: none;

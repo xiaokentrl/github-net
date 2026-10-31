@@ -108,6 +108,15 @@ export function GetAppStatus(): $CancellablePromise<$models.AppStatus> {
 }
 
 /**
+ * GetCandidatePool 读整份候选池（缓存语义：每个域名只有最近一轮的地址），
+ * 按延迟升序排（没测出延迟的按域名+地址顺序垫底），归属菜单按目录顺序。
+ * 池子打不开不是错误：给空列表，界面显示「还没有候选」。
+ */
+export function GetCandidatePool(): $CancellablePromise<$models.PoolEntryView[] | null> {
+    return $Call.ByID(806534357);
+}
+
+/**
  * GetDetectResult 返回一个项目最近一轮检测的候选结论；没有记录时给空形状，
  * 「还没测过」不是错误。详情页先进这里拿现状，再用 detect:progress 事件追更新。
  */

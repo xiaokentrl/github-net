@@ -20,6 +20,7 @@ export type {
     DetectResultView,
     HostsState,
     ItemsSnapshot,
+    PoolEntryView,
     RuntimeInfo,
     StrategyOption,
     StrategySnapshot,

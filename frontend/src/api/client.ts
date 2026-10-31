@@ -9,6 +9,7 @@ import {
   ClearQueue,
   DetectItems,
   GetAppStatus,
+  GetCandidatePool,
   GetDetectResult,
   GetItems,
   GetSettings,
@@ -26,7 +27,7 @@ import {
   SelectStrategy,
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/service'
 import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
-import type { AppStatus, DetectBudgetPreview, DetectResultView, ItemsSnapshot, StrategySnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { AppStatus, DetectBudgetPreview, DetectResultView, ItemsSnapshot, PoolEntryView, StrategySnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { RetryResult, Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { Info as UpdateInfo } from '../../bindings/github.com/xiaokentrl/github-net/internal/updater/models'
@@ -109,6 +110,12 @@ export function selectStrategy(scopeId: string, strategyId: string, expectedRevi
 // 已在队列里的项目返回同一条任务，不会重复排队。
 export function detectItems(itemIds: string[], strategyId = ''): Promise<Task[] | null> {
   return DetectItems(itemIds, strategyId)
+}
+
+// 取整份候选池（缓存：每个域名最近一轮的地址），后端已按延迟升序排好、行带二级菜单归属。
+// 没检测过时是空数组，不是错误。
+export function getCandidatePool(): Promise<PoolEntryView[]> {
+  return GetCandidatePool().then((rows) => rows ?? [])
 }
 
 // 取一个项目最近一轮的检测结论；没测过时后端给空形状，不是错误。

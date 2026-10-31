@@ -1,7 +1,9 @@
+import { useEffect, useRef, useState } from 'react'
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { formatDateTime } from '../../i18n/formatters'
-import type { CatalogCategory, CatalogItem, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { CatalogCategory, CatalogItem, HostsState, PoolEntryView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
+import { getCandidatePool } from '../../api/client'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import uiStyles from '../../components/ui/ui.module.css'
@@ -79,6 +81,30 @@ export function ItemDetail({
   onStrategySaved: () => void
 }) {
   const state = useTaskQueue()
+  // 候选池（缓存：每个域名最近一轮的地址）跨全部二级菜单，挂载和每轮检测收尾时各读一次。
+  const [pool, setPool] = useState<PoolEntryView[]>([])
+  const [submenuFilter, setSubmenuFilter] = useState('')
+  const prevDetectingRef = useRef(false)
+  // 本项目是否正在检测：池子要等它收尾才刷新，钩子必须在早退之前挂，这里先算出来。
+  const detecting = state.tasks.some(
+    (task) => item !== null && task.itemId === item.id && task.kind === 'detect' && (task.status === 'running' || task.status === 'waiting'),
+  )
+  useEffect(() => {
+    let alive = true
+    getCandidatePool().then((rows) => {
+      if (alive) setPool(rows)
+    }).catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+  useEffect(() => {
+    // 刚从检测中收尾：池子刚被清旧写新，重读一次。
+    if (prevDetectingRef.current && !detecting) {
+      getCandidatePool().then(setPool).catch(() => {})
+    }
+    prevDetectingRef.current = detecting
+  }, [detecting])
   if (!item || !category) return <EmptyState message={t('detail.empty')} />
 
   const status = hosts?.status ?? HostsStatus.HostsUnknown
@@ -88,7 +114,6 @@ export function ItemDetail({
   const selfDetectable = !item.userSupplied && hostnames.length > 0
   const result = state.results[item.id]
   const live = state.live[item.id]
-  const detecting = state.tasks.some((task) => task.itemId === item.id && task.kind === 'detect' && (task.status === 'running' || task.status === 'waiting'))
 
   const rows = result?.hosts ?? []
   const candidates = rows.flatMap((host) => host.candidates ?? [])
@@ -98,16 +123,10 @@ export function ItemDetail({
   const restorable = status === HostsStatus.HostsApplied || status === HostsStatus.HostsPartial
   const canApply = candidates.some((c) => c.status === 'available')
 
-  // 所有候选共用一张表（拍板 2026-10-31）：不再按域名分块，域名是行里的一列；
-  // 排序按延迟升序，没测出延迟（0）的按原顺序排在后面。
-  const flatCandidates = rows
-    .flatMap((host) => (host.candidates ?? []).map((candidate) => ({ host, candidate })))
-    .map((row, order) => ({ ...row, order }))
-    .sort((a, b) => {
-      const la = a.candidate.latencyMs > 0 ? a.candidate.latencyMs : Number.MAX_SAFE_INTEGER
-      const lb = b.candidate.latencyMs > 0 ? b.candidate.latencyMs : Number.MAX_SAFE_INTEGER
-      return la - lb || a.order - b.order
-    })
+  // 所有候选共用一张表，数据源是候选池（跨全部二级菜单，拍板 2026-10-31）；
+  // 后端已按延迟升序排好（没延迟的垫底），这里只按二级菜单筛选。
+  const submenuOptions = [...new Set(pool.flatMap((entry) => entry.itemNames ?? []))]
+  const visiblePool = submenuFilter === '' ? pool : pool.filter((entry) => (entry.itemNames ?? []).includes(submenuFilter))
   // 解析失败的域名没有候选行，单独在表上方说一句，不混进表里冒充候选。
   const failedHosts = rows.filter((h) => !h.resolved)
 
@@ -221,7 +240,22 @@ export function ItemDetail({
       <div className={styles.card}>
         <div className={styles.cardHead}>
           <h3 className={styles.title}>{t('detail.candidates.title')}</h3>
-          <span className={styles.countPill}>{t('detail.candidates.count', { count: candidates.length })}</span>
+          <span className={styles.countPill}>{t('detail.candidates.count', { count: visiblePool.length })}</span>
+          {pool.length > 0 ? (
+            <select
+              className={detectStyles.submenuFilter}
+              value={submenuFilter}
+              aria-label={t('pool.filter.aria')}
+              onChange={(event) => setSubmenuFilter(event.target.value)}
+            >
+              <option value="">{t('pool.filter.all')}</option>
+              {submenuOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <div className={detectStyles.candidateActions}>
             {detectReady && selfDetectable ? (
               <button
@@ -279,7 +313,7 @@ export function ItemDetail({
           </p>
         ) : null}
 
-        {rows.length === 0 ? (
+        {pool.length === 0 ? (
           <p className={styles.hint}>{t('detect.empty')}</p>
         ) : (
           <>
@@ -294,51 +328,41 @@ export function ItemDetail({
                 ))}
               </p>
             ) : null}
-            {flatCandidates.length === 0 ? (
-              <table className={detectStyles.cands}>
-                <tbody>
-                  <tr className={detectStyles.emptyRow}>
-                    <td colSpan={6}>{t('detect.noCandidates')}</td>
+            <table className={detectStyles.cands}>
+              <thead>
+                <tr>
+                  <th scope="col">{t('detect.col.index')}</th>
+                  <th scope="col">{t('detect.col.ip')}</th>
+                  <th scope="col">{t('detect.col.hostname')}</th>
+                  <th scope="col">{t('detect.col.submenu')}</th>
+                  <th scope="col">{t('detect.col.mark')}</th>
+                  <th scope="col">{t('detect.col.latency')}</th>
+                  <th scope="col">{t('detect.col.score')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visiblePool.map((entry, index) => (
+                  <tr key={`${entry.hostname}-${entry.ip}`}>
+                    <td>{index + 1}</td>
+                    <td className={detectStyles.ipCell}>
+                      {entry.ip}
+                      {entry.ipv6 ? <span className={detectStyles.v6}> · {t('detect.ipv6')}</span> : null}
+                    </td>
+                    <td className={detectStyles.hostCell}>{entry.hostname}</td>
+                    <td className={detectStyles.hostCell}>{(entry.itemNames ?? []).join('、')}</td>
+                    <td>
+                      <span className={`${detectStyles.tag} ${CANDIDATE_TONE[entry.status] ?? ''}`}>
+                        {t(CANDIDATE_KEY[entry.status] ?? 'detect.candidate.unknown')}
+                      </span>
+                    </td>
+                    <td className={entry.latencyMs > 0 ? detectStyles.latency : detectStyles.latencyNone}>
+                      {entry.latencyMs > 0 ? t('detect.latency', { ms: entry.latencyMs }) : '—'}
+                    </td>
+                    <td className={detectStyles.none}>{t('detail.metric.unprovided.short')}</td>
                   </tr>
-                </tbody>
-              </table>
-            ) : (
-              <table className={detectStyles.cands}>
-                <thead>
-                  <tr>
-                    <th scope="col">{t('detect.col.index')}</th>
-                    <th scope="col">{t('detect.col.ip')}</th>
-                    <th scope="col">{t('detect.col.hostname')}</th>
-                    <th scope="col">{t('detect.col.mark')}</th>
-                    <th scope="col">{t('detect.col.latency')}</th>
-                    <th scope="col">{t('detect.col.score')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {flatCandidates.map(({ candidate, host }, index) => (
-                    <tr key={candidate.id} className={candidate.applied ? detectStyles.currentRow : undefined}>
-                      <td>{index + 1}</td>
-                      <td className={detectStyles.ipCell}>
-                        {candidate.ip}
-                        {candidate.ipv6 ? <span className={detectStyles.v6}> · {t('detect.ipv6')}</span> : null}
-                        {candidate.applied ? <span className={detectStyles.currentTag}>{t('detect.current')}</span> : null}
-                      </td>
-                      <td className={detectStyles.hostCell}>{host.hostname}</td>
-                      <td>
-                        <span className={`${detectStyles.tag} ${CANDIDATE_TONE[candidate.status] ?? ''}`}>
-                          {t(CANDIDATE_KEY[candidate.status] ?? 'detect.candidate.unknown')}
-                        </span>
-                        {candidate.reason ? <span className={detectStyles.reason}>{candidate.reason}</span> : null}
-                      </td>
-                      <td className={candidate.latencyMs > 0 ? detectStyles.latency : detectStyles.latencyNone}>
-                        {candidate.latencyMs > 0 ? t('detect.latency', { ms: candidate.latencyMs }) : '—'}
-                      </td>
-                      <td className={detectStyles.none}>{t('detail.metric.unprovided.short')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                ))}
+              </tbody>
+            </table>
           </>
         )}
       </div>

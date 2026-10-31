@@ -103,6 +103,18 @@
   white-space: nowrap;
 }
 
+/* 表头的二级菜单筛选下拉：矮一颗，贴着标题行。 */
+.submenuFilter {
+  height: 24px;
+  max-width: 160px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--ctl);
+  color: var(--text);
+  font-size: 11.5px;
+}
+
 /* 这一条当时已经写在这个域名上：整行淡绿底，IP 后跟一句小字（原型 tr.current 第 285 行、.cur-tag 第 293 行）。 */
 .currentRow td {
   background: var(--green-soft);

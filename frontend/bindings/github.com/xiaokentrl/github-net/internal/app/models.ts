@@ -195,6 +195,23 @@ export interface ItemsSnapshot {
 }
 
 /**
+ * PoolEntryView 是候选池给前端的一行：一个「域名 + IP」的最新已知状态，
+ * 加上它归属的二级菜单（目录里哪些项目的域名正好是这个主机名）。
+ * 一个域名可能同时写在多个二级菜单里（比如 github.com 同属主站和镜像项），
+ * 归属给成数组，筛选时命中任意一个就算。
+ */
+export interface PoolEntryView {
+    "hostname": string;
+    "ip": string;
+    "ipv6": boolean;
+    "status": string;
+    "latencyMs": number;
+    "sourceId": string;
+    "updatedAt": string;
+    "itemNames": string[] | null;
+}
+
+/**
  * RuntimeInfo 是后端交给前端的真实运行环境信息，不含任何演示数据。
  */
 export interface RuntimeInfo {
