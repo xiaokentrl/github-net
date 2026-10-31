@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import { applyItems, detectBudget, detectItems, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile } from '../api/client'
-import { subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
+import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
+import { applyItems, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
+import { subscribeAutomationStatus, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
 import { SettingsEntry } from '../components/layout/SettingsEntry'
@@ -75,12 +76,16 @@ export function App() {
   // 启动自动检查发现的最新版本；空串表示没有已知更新（没查过、没新版本或检查失败）。
   const [updateLatest, setUpdateLatest] = useState('')
 
+  // 启动后那条自动链最近一次的结论；null 表示这一轮还没跑过，状态栏那一格就不出现。
+  const [automation, setAutomation] = useState<AutomationStatus | null>(null)
+
   // 收到的最新序号存在 ref 里，订阅回调才不会读到旧值。
   const sequenceRef = useRef(0)
   // 只认最后一次请求的结果，重试和 StrictMode 重复挂载都不会串台。
   const statusRequestRef = useRef(0)
   const settingsRequestRef = useRef(0)
   const catalogRequestRef = useRef(0)
+  const automationRequestRef = useRef(0)
 
   const loadStatus = useCallback(() => {
     const request = statusRequestRef.current + 1
@@ -145,11 +150,26 @@ export function App() {
       })
   }, [])
 
+  // 自动化结论的补读：这条链可能在窗口刚起来那一刻就跑完了，事件整个错过。
+  // 后端把最近一份留在内存里，挂载时先读一次再订阅，读到的 stage 是空串就当没跑过。
+  const loadAutomation = useCallback(() => {
+    const request = automationRequestRef.current + 1
+    automationRequestRef.current = request
+    getAutomationStatus()
+      .then((latest) => {
+        if (automationRequestRef.current !== request) return
+        if (latest && latest.stage !== '') setAutomation(latest)
+      })
+      .catch(() => {
+        // 读不到就只靠事件；这一格本来就是可选信息，不弹错误条。
+      })
+  }, [])
+
   useEffect(() => {
     loadStatus()
     loadSettings()
     loadCatalog()
-
+    loadAutomation()
     const unsubscribe = subscribeRuntimeStatus((payload) => {
       if (payload.sequence <= sequenceRef.current) {
         setDropped((count) => count + 1)
@@ -177,17 +197,24 @@ export function App() {
       applyConfig(config)
     })
 
+    // 启动自动化每一步推来的结论：后到的一份覆盖前一份，界面只显示手上这最新一句。
+    const unsubscribeAutomation = subscribeAutomationStatus((payload) => {
+      setAutomation(payload)
+    })
+
     return () => {
       // 让仍在路上的响应作废，并退订事件；退订必须调用，否则回调会一直堆积。
       statusRequestRef.current += 1
       settingsRequestRef.current += 1
       catalogRequestRef.current += 1
+      automationRequestRef.current += 1
       unsubscribe()
       unsubscribeTasks()
       unsubscribeUpdate()
       unsubscribeSettings()
+      unsubscribeAutomation()
     }
-  }, [loadStatus, loadSettings, loadCatalog])
+  }, [loadStatus, loadSettings, loadCatalog, loadAutomation, applyConfig])
 
   // 后端每次 GetItems 都现读一遍 Hosts，这里只留最新一份：itemId → 那次读出来的整条状态。
   const hostsOf: HostsLookup = useMemo(() => {
@@ -264,6 +291,18 @@ export function App() {
       }
     }
     return { categories: categories.length, items, hostnames: hostnames.size }
+  }, [snapshot])
+
+  // 一级菜单清单：设置屏那张「启动后自动检测哪些主菜单」的选项，和自动化状态行把菜单 ID
+  // 换成名字，用的都是目录里这一份，不另列一份菜单名。
+  const menuOptions = useMemo(
+    () => (snapshot?.categories ?? []).map((cat) => ({ value: cat.id, label: cat.name })),
+    [snapshot],
+  )
+  const menuNamesById = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const cat of snapshot?.categories ?? []) map[cat.id] = cat.name
+    return map
   }, [snapshot])
 
   const selected = useMemo(() => {
@@ -374,6 +413,42 @@ export function App() {
     (enabled: boolean) => {
       if (!settings || settings.startup.autoStart === enabled) return
       submit({ autoStart: enabled }, t('settings.subject.autoStart'), 'autoStart')
+    },
+    [settings, submit],
+  )
+
+  // 启动自动化三张卡。下游开关在上游不成立时同一次保存里一起落回关闭：
+  // 后端的校验是「自动应用必须有勾中的菜单」「自动退出必须开自动应用」，
+  // 分两次保存会让界面短暂停在一个自相矛盾的配置上，读到就报错。
+  const changeAutoDetectMenus = useCallback(
+    (menus: string[]) => {
+      if (!settings) return
+      const current = settings.startup.autoDetectMenus ?? []
+      if (menus.length === current.length && menus.every((id, index) => id === current[index])) return
+      const patch: SettingsPatch = { autoDetectMenus: menus }
+      if (menus.length === 0) {
+        patch.autoApplyOnStartup = false
+        patch.autoCloseAfterApply = false
+      }
+      submit(patch, t('settings.subject.autoDetectMenus'), 'autoDetectMenus')
+    },
+    [settings, submit],
+  )
+
+  const changeAutoApply = useCallback(
+    (enabled: boolean) => {
+      if (!settings || settings.startup.autoApplyOnStartup === enabled) return
+      const patch: SettingsPatch = { autoApplyOnStartup: enabled }
+      if (!enabled) patch.autoCloseAfterApply = false
+      submit(patch, t('settings.subject.autoApplyOnStartup'), 'autoApplyOnStartup')
+    },
+    [settings, submit],
+  )
+
+  const changeAutoClose = useCallback(
+    (enabled: boolean) => {
+      if (!settings || settings.startup.autoCloseAfterApply === enabled) return
+      submit({ autoCloseAfterApply: enabled }, t('settings.subject.autoCloseAfterApply'), 'autoCloseAfterApply')
     },
     [settings, submit],
   )
@@ -679,6 +754,8 @@ export function App() {
             counts={counts}
             sequence={sequence}
             dropped={dropped}
+            automation={automation}
+            menuNamesById={menuNamesById}
           />
         }
       />
@@ -702,6 +779,10 @@ export function App() {
           onCloseToTray={changeCloseToTray}
           onStartMinimized={changeStartMinimized}
           onAutoStart={changeAutoStart}
+          menus={menuOptions}
+          onAutoDetectMenus={changeAutoDetectMenus}
+          onAutoApply={changeAutoApply}
+          onAutoClose={changeAutoClose}
           onDetectFocusFollow={changeDetectFocusFollow}
           onApplyFocusFollow={changeApplyFocusFollow}
         />

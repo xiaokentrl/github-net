@@ -15,6 +15,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as config$0 from "../config/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as event$0 from "../event/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as task$0 from "../task/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -105,6 +108,15 @@ export function DownloadUpdate(info: updater$0.Info): $CancellablePromise<$model
  */
 export function GetAppStatus(): $CancellablePromise<$models.AppStatus> {
     return $Call.ByID(645086831);
+}
+
+/**
+ * GetAutomationStatus 返回这条链最近一次的结论；还没跑过时 stage 是空串。
+ * 界面挂载时先读这一份再订阅事件：自动化可能在窗口刚起来那一刻就跑完了，
+ * 只靠事件会漏掉前面几句，用户看到的是「勾了设置却什么都没发生」。
+ */
+export function GetAutomationStatus(): $CancellablePromise<event$0.AutomationStatus> {
+    return $Call.ByID(2942693955);
 }
 
 /**

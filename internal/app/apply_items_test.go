@@ -71,7 +71,7 @@ func newApplyService(t *testing.T, priv privilege.Caller) *Service {
 		strategyTable:  table,
 		settings: config.NewStore(
 			filepath.Join(t.TempDir(), "config", "config.json"),
-			c.ScopeIDs(), map[string]bool{"live.one": true}),
+			c.ScopeIDs(), map[string]bool{"live.one": true}, c.CategoryIDs()),
 		priv:          priv,
 		detectResults: results,
 		tasks:         task.NewQueue(newDispatchExecutor(newGatedExecutor(), priv, results, nil), nil),

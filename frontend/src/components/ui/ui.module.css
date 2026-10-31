@@ -83,6 +83,121 @@
   line-height: 1.5;
 }
 
+/* 下拉多选（启动自动化选主菜单用）：按钮抄 .btn 配方，面板抄设置对话框弹层同一批令牌。
+   面板是控件正下方的一块绝对定位区域，最高 220px 内部滚动，超出靠对话框自己滚。 */
+.msWrap {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.msButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 180px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--ctl);
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.msButton:hover:not(:disabled) {
+  background: var(--hov);
+}
+
+.msButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.msSummary {
+  flex: 1;
+  text-align: left;
+}
+
+.msCaret {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.msPanel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 220px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--ctl);
+  box-shadow: var(--pop);
+}
+
+.msTools {
+  display: flex;
+  gap: 6px;
+  padding: 0 2px 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.msTool {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--ctl);
+  color: var(--text-2);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.msTool:hover {
+  background: var(--hov);
+  color: var(--text);
+}
+
+.msOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.msOption:hover {
+  background: var(--hov);
+}
+
+.msOption input {
+  accent-color: var(--primary);
+  width: 16px;
+  height: 16px;
+  flex: none;
+  cursor: pointer;
+}
+
+.msNone {
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
 /* 预设组，抄原型 .seg（430–434 行）：28px 高、0 12px 内边距、选中反白成主色。 */
 .segGroup {
   display: flex;

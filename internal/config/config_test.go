@@ -14,13 +14,14 @@ func newPath(t *testing.T) string {
 	return filepath.Join(t.TempDir(), "config", "config.json")
 }
 
-func str(s string) *string { return &s }
-func num(i int) *int       { return &i }
-func flag(b bool) *bool    { return &b }
+func str(s string) *string       { return &s }
+func num(i int) *int             { return &i }
+func flag(b bool) *bool          { return &b }
+func menus(v []string) *[]string { return &v }
 
 func TestDefaultIsValidAndUnsaved(t *testing.T) {
 	c := Default()
-	if err := c.Validate(map[string]bool{"github": true}, nil); err != nil {
+	if err := c.Validate(map[string]bool{"github": true}, nil, nil); err != nil {
 		t.Fatalf("默认值应通过校验: %v", err)
 	}
 	if c.Revision != 0 {
@@ -38,7 +39,7 @@ func TestDefaultIsValidAndUnsaved(t *testing.T) {
 
 func TestSnapshotWritesNothingWhenFileMissing(t *testing.T) {
 	path := newPath(t)
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Snapshot(); err != nil {
 		t.Fatalf("读取默认值不该失败: %v", err)
 	}
@@ -52,7 +53,7 @@ func TestSnapshotWritesNothingWhenFileMissing(t *testing.T) {
 
 func TestSaveWritesFileAndBumpsRevision(t *testing.T) {
 	path := newPath(t)
-	s := NewStore(path, map[string]bool{"github": true}, nil)
+	s := NewStore(path, map[string]bool{"github": true}, nil, nil)
 	saved, err := s.Save(Patch{NetworkProfile: str(ProfileStandard)}, 0, "m1")
 	if err != nil {
 		t.Fatalf("保存失败: %v", err)
@@ -90,7 +91,7 @@ func TestSaveWritesFileAndBumpsRevision(t *testing.T) {
 
 func TestPatchOnlyTouchesSubmittedFields(t *testing.T) {
 	path := newPath(t)
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Save(Patch{Theme: str("oled")}, 0, "m1"); err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +108,7 @@ func TestPatchOnlyTouchesSubmittedFields(t *testing.T) {
 }
 
 func TestRepeatedMutationIDIsIdempotent(t *testing.T) {
-	s := NewStore(newPath(t), nil, nil)
+	s := NewStore(newPath(t), nil, nil, nil)
 	first, err := s.Save(Patch{NetworkProfile: str(ProfileStandard)}, 0, "same")
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +127,7 @@ func TestRepeatedMutationIDIsIdempotent(t *testing.T) {
 
 func TestEmptyMutationIDRejected(t *testing.T) {
 	path := newPath(t)
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Save(Patch{Theme: str("oled")}, 0, "  "); err == nil {
 		t.Fatal("没带幂等键的保存必须被拒")
 	} else if !errors.Is(err, ErrEmptyMutationID) {
@@ -139,7 +140,7 @@ func TestEmptyMutationIDRejected(t *testing.T) {
 
 func TestRevisionConflictDoesNotWrite(t *testing.T) {
 	path := newPath(t)
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Save(Patch{Theme: str("oled")}, 0, "m1"); err != nil {
 		t.Fatal(err)
 	}
@@ -175,13 +176,14 @@ func TestInvalidValuesRejected(t *testing.T) {
 		{"队列过矮", Patch{QueueHeight: num(60)}},
 		{"任务列表过窄", Patch{QueueListWidth: num(149)}},
 		{"任务列表过宽", Patch{QueueListWidth: num(1201)}},
-		{"自动应用没开检测", Patch{AutoApplyOnStartup: flag(true)}},
+		{"自动应用没选主菜单", Patch{AutoApplyOnStartup: flag(true)}},
+		{"自动退出没开自动应用", Patch{AutoCloseAfterApply: flag(true)}},
 		{"范围不在目录里", Patch{DefaultStrategyByScope: &map[string]string{"nope": "dns-hosts"}}},
 		{"方法还没注册", Patch{DefaultStrategyByScope: &map[string]string{"github": "dns-hosts"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := NewStore(newPath(t), scopeIDs, nil)
+			s := NewStore(newPath(t), scopeIDs, nil, nil)
 			if _, err := s.Save(tc.patch, 0, "m-"+tc.name); err == nil {
 				t.Fatalf("%s 应被拒绝", tc.name)
 			} else if !errors.Is(err, ErrInvalid) {
@@ -195,7 +197,7 @@ func TestInvalidValuesRejected(t *testing.T) {
 // 卡在边界上被拒，等于把「最大档位配满」这条路堵死，而界面输入框的 max 正是它。
 func TestCandidateBudgetBoundaryValuesAreAccepted(t *testing.T) {
 	for _, value := range []int{MinCandidateProbes, 126, 1008} {
-		s := NewStore(newPath(t), nil, nil)
+		s := NewStore(newPath(t), nil, nil, nil)
 		got, err := s.Save(Patch{MaxCandidateProbesPerRun: num(value)}, 0, "m-boundary")
 		if err != nil {
 			t.Fatalf("总上限 %d 应能保存: %v", value, err)
@@ -212,7 +214,7 @@ func TestCandidateBudgetBoundaryValuesAreAccepted(t *testing.T) {
 func TestQueueListWidthBoundsAndRoundTrip(t *testing.T) {
 	for _, value := range []int{QueueListWidthMin, 220, QueueListWidthMax} {
 		path := newPath(t)
-		s := NewStore(path, nil, nil)
+		s := NewStore(path, nil, nil, nil)
 		got, err := s.Save(Patch{QueueListWidth: num(value)}, 0, "m-width")
 		if err != nil {
 			t.Fatalf("任务列表宽度 %d 应能保存: %v", value, err)
@@ -221,7 +223,7 @@ func TestQueueListWidthBoundsAndRoundTrip(t *testing.T) {
 			t.Errorf("保存回包里的宽度 = %d，期望 %d", got.Layout.QueueListWidth, value)
 		}
 		// 重新打开一份 store 读同一份盘：宽度必须还在，不能只活在内存里。
-		reopened := NewStore(path, nil, nil)
+		reopened := NewStore(path, nil, nil, nil)
 		again, err := reopened.Snapshot()
 		if err != nil {
 			t.Fatalf("重读配置失败: %v", err)
@@ -232,7 +234,7 @@ func TestQueueListWidthBoundsAndRoundTrip(t *testing.T) {
 	}
 	// 没提交这个字段时不许多写一刀：宽度保持上一次保存的值。
 	path := newPath(t)
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Save(Patch{QueueListWidth: num(300)}, 0, "m1"); err != nil {
 		t.Fatalf("先存一个宽度: %v", err)
 	}
@@ -245,29 +247,83 @@ func TestQueueListWidthBoundsAndRoundTrip(t *testing.T) {
 	}
 }
 
-func TestAutoApplyRequiresAutoDetectAndIsNotSilentlyRewritten(t *testing.T) {
-	s := NewStore(newPath(t), nil, nil)
-	if _, err := s.Save(Patch{AutoDetectOnStartup: flag(true), AutoApplyOnStartup: flag(true)}, 0, "m1"); err != nil {
-		t.Fatalf("两个一起开应通过: %v", err)
+func TestStartupAutomationChainIsRejectedAndNeverSilentlyRewritten(t *testing.T) {
+	// 启动自动化是一条链：菜单清单 → 自动应用 → 自动退出，下游依赖上游。
+	// 后端从不替用户顺手关掉下游——矛盾组合整批拒，让用户在同一批里处理干净。
+	menuIDs := map[string]bool{"github": true, "steam": true}
+	path := newPath(t)
+	s := NewStore(path, nil, nil, menuIDs)
+
+	if _, err := s.Save(Patch{
+		AutoDetectMenus:     menus([]string{"github", "steam"}),
+		AutoApplyOnStartup:  flag(true),
+		AutoCloseAfterApply: flag(true),
+	}, 0, "m1"); err != nil {
+		t.Fatalf("三级一起开应通过: %v", err)
 	}
-	// 只关检测：后端不把自动应用顺手关掉，而是明确拒绝，让用户在同一批里处理干净。
-	if _, err := s.Save(Patch{AutoDetectOnStartup: flag(false)}, 1, "m2"); err == nil {
-		t.Fatal("依赖没解开就保存应被拒绝")
+	// 只关中间那环：自动退出还开着，依赖断了就拒。
+	if _, err := s.Save(Patch{AutoApplyOnStartup: flag(false)}, 1, "m2"); err == nil {
+		t.Fatal("自动退出没跟着关就改自动应用应被拒绝")
 	} else if !errors.Is(err, ErrInvalid) {
 		t.Errorf("错误类型不对: %v", err)
-	} else if !strings.Contains(err.Error(), "自动检测") {
+	} else if !strings.Contains(err.Error(), "自动应用") {
 		t.Errorf("消息没说清是哪条依赖: %v", err)
+	}
+	// 只清空清单：下游两个还开着，同样拒。
+	if _, err := s.Save(Patch{AutoDetectMenus: menus([]string{})}, 1, "m3"); err == nil {
+		t.Fatal("清空清单而下游没关应被拒绝")
 	}
 	got, err := s.Snapshot()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.Startup.AutoDetectOnStartup || !got.Startup.AutoApplyOnStartup {
+	if len(got.Startup.AutoDetectMenus) != 2 || !got.Startup.AutoApplyOnStartup || !got.Startup.AutoCloseAfterApply {
 		t.Errorf("被拒的保存在内存里生效了: %+v", got.Startup)
 	}
-	// 两个一起关是合法提交。
-	if _, err := s.Save(Patch{AutoDetectOnStartup: flag(false), AutoApplyOnStartup: flag(false)}, 1, "m3"); err != nil {
+	// 一次把三级都关掉是合法提交；重新开档读同一份盘，关掉的确实是关掉的。
+	if _, err := s.Save(Patch{
+		AutoDetectMenus:     menus([]string{}),
+		AutoApplyOnStartup:  flag(false),
+		AutoCloseAfterApply: flag(false),
+	}, 1, "m4"); err != nil {
 		t.Errorf("一起关应能保存: %v", err)
+	}
+	again, err := NewStore(path, nil, nil, menuIDs).Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again.Startup.AutoDetectMenus) != 0 || again.Startup.AutoApplyOnStartup || again.Startup.AutoCloseAfterApply {
+		t.Errorf("落盘再读没关上: %+v", again.Startup)
+	}
+}
+
+func TestAutoDetectMenusMustComeFromCatalog(t *testing.T) {
+	// 清单里的 ID 必须是目录里真有的主菜单；校验取原样字符串，
+	// 所以带空格的、重复的、空的、不存在的都一律拒。
+	menuIDs := map[string]bool{"github": true}
+	cases := []struct {
+		name string
+		list []string
+	}{
+		{"不在目录里", []string{"nope"}},
+		{"重复出现", []string{"github", "github"}},
+		{"空项", []string{""}},
+		{"带空格的 ID", []string{" github "}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewStore(newPath(t), nil, nil, menuIDs)
+			if _, err := s.Save(Patch{AutoDetectMenus: menus(tc.list)}, 0, "m-"+tc.name); err == nil {
+				t.Fatalf("%s 应被拒绝", tc.name)
+			} else if !errors.Is(err, ErrInvalid) {
+				t.Errorf("错误应为 ErrInvalid，得到 %v", err)
+			}
+		})
+	}
+	// 校验集合传空就是「一个菜单都不认」——装配漏传目录时这道门不会静默放行。
+	empty := NewStore(newPath(t), nil, nil, nil)
+	if _, err := empty.Save(Patch{AutoDetectMenus: menus([]string{"github"})}, 0, "m-no-set"); err == nil {
+		t.Fatal("校验集合为空时任何主菜单都应被拒")
 	}
 }
 
@@ -279,7 +335,7 @@ func TestCorruptConfigIsQuarantinedAndDefaultsUsed(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{ 这不是 JSON"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	got, err := s.Snapshot()
 	if err != nil {
 		t.Fatalf("坏配置应回退默认值继续运行，不是报错: %v", err)
@@ -313,7 +369,7 @@ func TestInvalidConfigContentIsQuarantined(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	got, err := s.Snapshot()
 	if err != nil {
 		t.Fatal(err)
@@ -337,7 +393,7 @@ func TestHigherSchemaVersionIsRefusedNotRewritten(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Snapshot(); err == nil {
 		t.Fatal("高于当前版本的配置应明确报错")
 	} else if !errors.Is(err, ErrSchemaTooNew) {
@@ -357,11 +413,11 @@ func TestHigherSchemaVersionIsRefusedNotRewritten(t *testing.T) {
 
 func TestReloadFromDiskKeepsSavedValues(t *testing.T) {
 	path := newPath(t)
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Save(Patch{SidebarWidth: num(340), NetworkProfile: str(ProfileStandard)}, 0, "m1"); err != nil {
 		t.Fatal(err)
 	}
-	reopened := NewStore(path, nil, nil)
+	reopened := NewStore(path, nil, nil, nil)
 	got, err := reopened.Snapshot()
 	if err != nil {
 		t.Fatal(err)
@@ -385,7 +441,7 @@ func TestProfileCandidateLimits(t *testing.T) {
 
 func TestZeroValuePatchFieldsAreDistinguishable(t *testing.T) {
 	// 提交 false / 0 这类零值必须真的生效，不能被当成「没提交」。
-	s := NewStore(newPath(t), nil, nil)
+	s := NewStore(newPath(t), nil, nil, nil)
 	got, err := s.Save(Patch{ConfirmUpdateDownloadOnMetered: flag(false), MaxCandidateProbesPerRun: num(1)}, 0, "m1")
 	if err != nil {
 		t.Fatal(err)

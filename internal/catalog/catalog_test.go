@@ -124,6 +124,24 @@ func TestScopeMapping(t *testing.T) {
 	}
 }
 
+// TestCategoryIDsAreTheMenuIDs 主菜单 ID 是「启动后自动检测」清单的合法集合，
+// 配置层只认这里给出的值：少一个就拒掉用户真能勾到的菜单，多一个就等于放进目录外的 ID。
+func TestCategoryIDsAreTheMenuIDs(t *testing.T) {
+	c := mustLoad(t)
+	ids := c.CategoryIDs()
+	if len(ids) != wantCategories {
+		t.Errorf("主菜单 ID 有 %d 个，期望 %d 个", len(ids), wantCategories)
+	}
+	for _, category := range c.Categories {
+		if !ids[category.ID] {
+			t.Errorf("主菜单 %s 没进集合", category.ID)
+		}
+	}
+	if ids["nope"] || ids[""] {
+		t.Error("集合里混进了目录之外的 ID")
+	}
+}
+
 // TestUserSuppliedItemHasNoHostname 手动映射由用户填域名，目录里不能伪造预设值。
 func TestUserSuppliedItemHasNoHostname(t *testing.T) {
 	c := mustLoad(t)

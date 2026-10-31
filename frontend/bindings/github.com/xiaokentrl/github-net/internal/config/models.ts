@@ -73,20 +73,28 @@ export interface Patch {
     "autoStart": boolean | null;
     "startMinimized": boolean | null;
     "closeToTray": boolean | null;
-    "autoDetectOnStartup": boolean | null;
+    "autoDetectMenus": string[] | null;
     "autoApplyOnStartup": boolean | null;
+    "autoCloseAfterApply": boolean | null;
 }
 
 /**
- * StartupConfig 是启动相关开关；自动应用依赖自动检测。
- * CloseToTray 是关窗行为：true 时点关闭是把窗口收进托盘（应用继续跑），false 时直接退出。
+ * StartupConfig 是启动相关开关。自动检测→自动应用→自动退出是一条链，下游依赖上游：
+ * 清单为空就不检测，没检测就谈不上应用，没应用就谈不上退出。
+ * CloseToTray 只管「人自己点关闭」那条路；自动退出是无人值守跑完就走，直接结束进程，不看这个开关。
  */
 export interface StartupConfig {
     "autoStart": boolean;
     "startMinimized": boolean;
     "closeToTray": boolean;
-    "autoDetectOnStartup": boolean;
+    "autoDetectMenus": string[] | null;
     "autoApplyOnStartup": boolean;
+
+    /**
+     * AutoCloseAfterApply 是「自动应用那一轮跑完后真退出」：结束整个进程，
+     * 不是收进托盘，也不是只关窗口。
+     */
+    "autoCloseAfterApply": boolean;
 }
 
 /**

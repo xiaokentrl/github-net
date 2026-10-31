@@ -987,3 +987,192 @@ func TestRetryFailedOpensItsOwnRound(t *testing.T) {
 	}
 	drain(t, q)
 }
+
+// --- WaitRound：等一轮跑完 ---
+
+// roundErr 等 WaitRound 给结果；超时说明等待方叫不醒。
+func roundErr(t *testing.T, ch chan error) error {
+	t.Helper()
+	select {
+	case err := <-ch:
+		return err
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitRound 两秒内没有返回")
+		return nil
+	}
+}
+
+// stillWaiting 确认这段时间里 WaitRound 没有返回。
+func stillWaiting(t *testing.T, ch chan error, d time.Duration) {
+	t.Helper()
+	select {
+	case err := <-ch:
+		t.Fatalf("这一轮还没收口就返回了: %v", err)
+	case <-time.After(d):
+	}
+}
+
+// settledCtx 给同步调用的 WaitRound 一个时间上限：判据写反时它带着 ctx 的错误回来，
+// 而不是把整包测试挂到超时。收口正常时这点时间用不到。
+func settledCtx(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	t.Cleanup(cancel)
+	return ctx
+}
+
+func TestWaitRoundSettlesWhenNothingIsRunning(t *testing.T) {
+	q, _ := newEnv(successExecutor())
+	round := q.BeginRound(KindDetect, "github", "检测 GitHub · 1 项")
+	tk := mustEnqueue(t, q, NewRequest{Kind: KindDetect, ItemID: "gh", ScopeID: "github", RoundID: round})
+	drain(t, q)
+	if got, ok := statusOf(q, tk.ID); !ok || got.Status != StatusDone {
+		t.Fatalf("终态记录应还留在队列里等用户清理: %+v ok=%v", got, ok)
+	}
+	// 谓词是「这一轮没有在途任务」，不是「这一轮没有任务」：
+	// 已完成的记录没清理也照样算收口，否则照后者等会永久卡死。
+	if err := q.WaitRound(settledCtx(t), round); err != nil {
+		t.Errorf("这一轮已经没有在途任务，应返回 nil, 实际 %v", err)
+	}
+	// 空轮 ID、不存在的轮 ID 都算已收口，不报错也不阻塞。
+	// 先排一条不带轮 ID 的等待任务：空轮 ID 不能把它认成「我要等的这一轮」，
+	// 否则手动检测那种不入轮的任务会把等待方永久挂住。
+	q.Pause()
+	if _, err := q.Enqueue(NewRequest{Kind: KindDetect, ItemID: "noretry", ScopeID: "github"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"", "r99"} {
+		if err := q.WaitRound(settledCtx(t), id); err != nil {
+			t.Errorf("轮 ID %q 不该有可等的东西, 实际 %v", id, err)
+		}
+	}
+}
+
+func TestWaitRoundBlocksUntilTheLastTaskOfTheRoundFinishes(t *testing.T) {
+	g := newGate()
+	defer g.open()
+	f := &fakeExecutor{
+		started: make(chan Task, 8),
+		decide: func(ctx context.Context, tk Task, report Report) Outcome {
+			if tk.ItemID == "b" {
+				g.wait(ctx)
+			}
+			return Outcome{}
+		},
+	}
+	q, _ := newEnv(f)
+	round := q.BeginRound(KindApply, "github", "应用队列 · 2 项")
+	mustEnqueue(t, q, NewRequest{Kind: KindApply, ItemID: "a", ScopeID: "github", RoundID: round})
+	bID := mustEnqueue(t, q, NewRequest{Kind: KindApply, ItemID: "b", ScopeID: "github", RoundID: round}).ID
+	startedTask(t, f)
+	if got := waitForTask(t, q, bID, StatusRunning); got.Status != StatusRunning {
+		t.Fatalf("第二条应已在执行中: %+v", got)
+	}
+
+	ch := make(chan error, 1)
+	go func() { ch <- q.WaitRound(context.Background(), round) }()
+	// 第一条已完成、第二条还在跑：这一轮没资格算收口。
+	stillWaiting(t, ch, 80*time.Millisecond)
+	g.open()
+	if err := roundErr(t, ch); err != nil {
+		t.Errorf("一轮跑完应返回 nil, 实际 %v", err)
+	}
+	drain(t, q)
+}
+
+func TestWaitRoundIsScopedToItsOwnRound(t *testing.T) {
+	g := newGate()
+	defer g.open()
+	q, _ := newEnv(gateExecutor(g))
+	q.Pause()
+	roundA := q.BeginRound(KindDetect, "github", "检测 GitHub")
+	roundB := q.BeginRound(KindDetect, "steam", "检测 Steam")
+	a := mustEnqueue(t, q, NewRequest{Kind: KindDetect, ItemID: "gh", ScopeID: "github", RoundID: roundA})
+	mustEnqueue(t, q, NewRequest{Kind: KindDetect, ItemID: "st", ScopeID: "steam", RoundID: roundB})
+	if _, err := q.Cancel(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	// A 轮只剩一条已取消的记录：不该陪着 B 轮一起等。
+	if err := q.WaitRound(settledCtx(t), roundA); err != nil {
+		t.Errorf("A 轮已收口却返回错误: %v", err)
+	}
+	ch := make(chan error, 1)
+	go func() { ch <- q.WaitRound(context.Background(), roundB) }()
+	// 暂停不影响「还在途」的判断：等待中的任务没跑完就不能返回。
+	stillWaiting(t, ch, 80*time.Millisecond)
+	q.Resume()
+	g.open()
+	if err := roundErr(t, ch); err != nil {
+		t.Errorf("B 轮跑完应返回 nil, 实际 %v", err)
+	}
+}
+
+func TestWaitRoundHonoursContextCancel(t *testing.T) {
+	g := newGate()
+	defer g.open()
+	q, _ := newEnv(gateExecutor(g))
+	round := q.BeginRound(KindDetect, "github", "检测 GitHub")
+	mustEnqueue(t, q, NewRequest{Kind: KindDetect, ItemID: "gh", ScopeID: "github", RoundID: round})
+	startedTask(t, q.exec.(*fakeExecutor))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	if err := q.WaitRound(ctx, round); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("ctx 到期应返回 ctx 的错误, 实际 %v", err)
+	}
+}
+
+func TestWaitRoundReleasesWhenQueueStops(t *testing.T) {
+	q, _ := newEnv(successExecutor())
+	q.Pause()
+	round := q.BeginRound(KindApply, "github", "应用队列 · 1 项")
+	mustEnqueue(t, q, NewRequest{Kind: KindApply, ItemID: "gh", ScopeID: "github", RoundID: round})
+	ch := make(chan error, 1)
+	go func() { ch <- q.WaitRound(context.Background(), round) }()
+	stillWaiting(t, ch, 80*time.Millisecond)
+	// 队列停了，等待中的任务永远不会再被领取：给明确错误，不假装收口成功。
+	q.Shutdown()
+	if err := roundErr(t, ch); !errors.Is(err, ErrQueueStopped) {
+		t.Errorf("队列停了还有没跑完的任务应返回 ErrQueueStopped, 实际 %v", err)
+	}
+}
+
+func TestClearQueueReleasesWaitRound(t *testing.T) {
+	q, _ := newEnv(successExecutor())
+	q.Pause()
+	round := q.BeginRound(KindDetect, "github", "检测 GitHub")
+	mustEnqueue(t, q, NewRequest{Kind: KindDetect, ItemID: "gh", ScopeID: "github", RoundID: round})
+	ch := make(chan error, 1)
+	go func() { ch <- q.WaitRound(context.Background(), round) }()
+	stillWaiting(t, ch, 80*time.Millisecond)
+	// 清空队列不发进度事件，但要把等待方叫醒：这一轮已经没东西可等了。
+	if n, err := q.ClearQueue(); err != nil || n != 1 {
+		t.Fatalf("清空应移除 1 条: 条数 %d 错误 %v", n, err)
+	}
+	if err := roundErr(t, ch); err != nil {
+		t.Errorf("任务清掉了算收口，不该给错误: %v", err)
+	}
+}
+
+func TestWaitRoundReleasesEveryWaiter(t *testing.T) {
+	g := newGate()
+	defer g.open()
+	q, _ := newEnv(gateExecutor(g))
+	round := q.BeginRound(KindDetect, "github", "检测 GitHub")
+	mustEnqueue(t, q, NewRequest{Kind: KindDetect, ItemID: "gh", ScopeID: "github", RoundID: round})
+	startedTask(t, q.exec.(*fakeExecutor))
+	// 广播用的是「关掉旧的、换一个新的」，不是发一个信号：几个等待方都得被叫醒。
+	const waiters = 5
+	ch := make(chan error, waiters)
+	for i := 0; i < waiters; i++ {
+		go func() { ch <- q.WaitRound(context.Background(), round) }()
+	}
+	settleAfter(80 * time.Millisecond)
+	g.open()
+	drain(t, q)
+	for i := 0; i < waiters; i++ {
+		if err := roundErr(t, ch); err != nil {
+			t.Errorf("第 %d 个等待方没被叫醒: %v", i+1, err)
+		}
+	}
+}

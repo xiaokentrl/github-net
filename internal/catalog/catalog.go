@@ -187,6 +187,17 @@ func (c *Catalog) ScopeIDs() map[string]bool {
 	return ids
 }
 
+// CategoryIDs 返回目录里全部主菜单 ID，供配置校验「启动后自动检测哪些主菜单」时查表。
+// 它和 ScopeIDs 现在装的是同一批字符串，但含义不同：一个是界面上的菜单，
+// 一个是共享加速方法选择的范围。目录以后要让两者分家，校验不会跟着漂。
+func (c *Catalog) CategoryIDs() map[string]bool {
+	ids := make(map[string]bool, len(c.Categories))
+	for _, cat := range c.Categories {
+		ids[cat.ID] = true
+	}
+	return ids
+}
+
 // UniqueHostnames 返回整份目录去重、排序后的主机名，供探测预算核算使用。
 func (c *Catalog) UniqueHostnames() []string {
 	set := make(map[string]bool, 64)

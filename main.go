@@ -240,6 +240,19 @@ func main() {
 		platformApp.Event.Emit(event.UpdateStatusName, notice)
 	}()
 
+	// 启动后自动检测 → 自动应用 → 自动退出（设置中心那三个开关）。
+	// 同样等窗口起来再跑：链上的每一步都往事件总线推状态，总线得先在。
+	// 一个主菜单都没勾时这条链整个不开；结论另存一份在 GetAutomationStatus 里，
+	// 界面挂载晚了也能补读到「刚才跑过什么、为什么没退出」。
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-windowReady:
+		}
+		appsvc.StartStartupAutomation(ctx, service, platformApp.Quit, emitProgress)
+	}()
+
 	// Go 侧也订阅一次并保存取消函数，用来证明订阅不会随窗口关闭或重启泄漏。
 	unsubscribeStatus := platformApp.Event.On(event.RuntimeStatusName, func(e *application.CustomEvent) {
 		platformApp.Logger.Info("已收到运行时状态事件", "name", e.Name)

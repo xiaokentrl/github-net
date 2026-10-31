@@ -33,7 +33,7 @@ func newStrategyService(t *testing.T, table strategyTable, allowed ...string) (*
 		version:        "0.1.0",
 		productCatalog: c,
 		strategyTable:  table,
-		settings:       config.NewStore(path, c.ScopeIDs(), ids),
+		settings:       config.NewStore(path, c.ScopeIDs(), ids, c.CategoryIDs()),
 	}, path
 }
 

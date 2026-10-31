@@ -44,7 +44,7 @@ func TestSaveFailsWhenConfigDirIsReplacedByFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Save(Patch{Theme: str("forest")}, 0, "m1"); err == nil {
 		t.Fatal("写不进去还报成功，界面上就会出现「已保存」的假象")
 	} else if !errors.Is(err, ErrSaveFailed) {
@@ -78,7 +78,7 @@ func TestFailedSaveDoesNotConsumeMutationID(t *testing.T) {
 	if err := os.WriteFile(dir, []byte("占位"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Save(Patch{Theme: str("forest")}, 0, "m1"); !errors.Is(err, ErrSaveFailed) {
 		t.Fatalf("路径不可用应报写盘失败，得到 %v", err)
 	}
@@ -154,7 +154,7 @@ func TestFailedQuarantineKeepsOriginalFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	got, err := s.Snapshot()
 	if err != nil {
 		t.Fatalf("备份失败不该让程序起不来: %v", err)
@@ -198,7 +198,7 @@ func TestQuarantineBackupIsUserOnly(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{ 这不是 JSON"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Snapshot(); err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestQuarantineBackupIsUserOnly(t *testing.T) {
 // 也只能当前用户可进入，不能顺手给同组和其他人开权限。
 func TestWriteCreatesUserOnlyDirectory(t *testing.T) {
 	path := newPath(t)
-	s := NewStore(path, nil, nil)
+	s := NewStore(path, nil, nil, nil)
 	if _, err := s.Save(Patch{Theme: str("oled")}, 0, "m1"); err != nil {
 		t.Fatal(err)
 	}

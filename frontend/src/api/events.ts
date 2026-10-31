@@ -1,6 +1,7 @@
 import { Events } from '@wailsio/runtime'
 import type { Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
+import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { CandidateStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
 
 // 事件名必须和 Go 侧 internal/event 的常量一致，改一边就要改另一边。
@@ -9,6 +10,7 @@ const TASK_EVENT = 'task:progress'
 const DETECT_EVENT = 'detect:progress'
 const SETTINGS_EVENT = 'settings:changed'
 const UPDATE_EVENT = 'update:status'
+const AUTOMATION_EVENT = 'automation:status'
 
 export type RuntimeStatusPayload = {
   sequence: number
@@ -107,6 +109,17 @@ export function subscribeDetectProgress(onPayload: (payload: DetectProgressPaylo
   return Events.On(DETECT_EVENT, (event: Events.WailsEvent) => {
     const payload = event.data as DetectProgressPayload | undefined
     if (!payload || typeof payload.sequence !== 'number' || !payload.itemId) return
+    onPayload(payload)
+  })
+}
+
+// ===== 启动自动化 =====
+// 载荷的字段和 GetAutomationStatus 返回的是同一份（internal/event.AutomationStatus），
+// 所以类型直接用绑定生成的那一份，不再手抄。stage 是机器码，句子由界面按语言拼。
+export function subscribeAutomationStatus(onPayload: (payload: AutomationStatus) => void): () => void {
+  return Events.On(AUTOMATION_EVENT, (event: Events.WailsEvent) => {
+    const payload = event.data as AutomationStatus | undefined
+    if (!payload || typeof payload.stage !== 'string' || payload.stage === '') return
     onPayload(payload)
   })
 }

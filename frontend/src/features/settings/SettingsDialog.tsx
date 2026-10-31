@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { AppStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { NetworkProfile } from '../../api/client'
+import type { MultiSelectOption } from '../../components/ui/MultiSelect'
 import { t } from '../../i18n'
 import type { SaveState } from '../../hooks/useSettingsSave'
 import { AboutPane } from './AboutPane'
@@ -58,6 +59,10 @@ export function SettingsDialog({
   onCloseToTray,
   onStartMinimized,
   onAutoStart,
+  menus,
+  onAutoDetectMenus,
+  onAutoApply,
+  onAutoClose,
   onDetectFocusFollow,
   onApplyFocusFollow,
 }: {
@@ -79,6 +84,11 @@ export function SettingsDialog({
   onCloseToTray: (enabled: boolean) => void
   onStartMinimized: (enabled: boolean) => void
   onAutoStart: (enabled: boolean) => void
+  // 启动自动化的三张卡：一级菜单选项来自目录，改哪张卡都由 App 拼那一次保存。
+  menus: MultiSelectOption[]
+  onAutoDetectMenus: (menus: string[]) => void
+  onAutoApply: (enabled: boolean) => void
+  onAutoClose: (enabled: boolean) => void
   onDetectFocusFollow: (enabled: boolean) => void
   onApplyFocusFollow: (enabled: boolean) => void
 }) {
@@ -158,7 +168,17 @@ export function SettingsDialog({
             {pane === 'zoom' && <ZoomPane settings={settings} save={save} onZoom={onZoom} />}
             {pane === 'appearance' && <AppearancePane settings={settings} save={save} onTheme={onTheme} onLanguage={onLanguage} />}
             {pane === 'tray' && <TrayPane settings={settings} save={save} onCloseToTray={onCloseToTray} onStartMinimized={onStartMinimized} />}
-            {pane === 'startup' && <StartupPane settings={settings} save={save} onAutoStart={onAutoStart} />}
+            {pane === 'startup' && (
+              <StartupPane
+                settings={settings}
+                save={save}
+                menus={menus}
+                onAutoStart={onAutoStart}
+                onAutoDetectMenus={onAutoDetectMenus}
+                onAutoApply={onAutoApply}
+                onAutoClose={onAutoClose}
+              />
+            )}
             {pane === 'updates' && <UpdatesPane status={status} />}
             {pane === 'about' && <AboutPane status={status} />}
           </div>

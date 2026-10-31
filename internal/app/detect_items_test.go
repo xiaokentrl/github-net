@@ -21,7 +21,7 @@ func newDetectEntryService(t *testing.T, table strategyTable, exec task.Executor
 		strategyTable:  table,
 		settings: config.NewStore(
 			filepath.Join(t.TempDir(), "config", "config.json"),
-			c.ScopeIDs(), map[string]bool{"live.one": true}),
+			c.ScopeIDs(), map[string]bool{"live.one": true}, c.CategoryIDs()),
 		tasks:         task.NewQueue(exec, nil),
 		detectResults: newDetectResultStore(),
 	}

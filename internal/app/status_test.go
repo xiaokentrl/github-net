@@ -19,7 +19,7 @@ func newServiceWithStore(t *testing.T, scopeIDs, strategies map[string]bool) (*S
 	s := &Service{
 		appName:  "GitHub Net",
 		version:  "0.1.0",
-		settings: config.NewStore(path, scopeIDs, strategies),
+		settings: config.NewStore(path, scopeIDs, strategies, nil),
 	}
 	return s, path
 }
@@ -179,7 +179,7 @@ func TestSaveSettingsFailureKeepsUnsaved(t *testing.T) {
 		t.Skip("root 不受目录权限位约束")
 	}
 
-	s := &Service{appName: "GitHub Net", version: "0.1.0", settings: config.NewStore(path, nil, nil)}
+	s := &Service{appName: "GitHub Net", version: "0.1.0", settings: config.NewStore(path, nil, nil, nil)}
 	_, err := s.SaveSettings(config.Patch{NetworkProfile: strPtr(config.ProfileFull)}, 0, "m1")
 	if err == nil {
 		t.Fatal("写盘失败必须报错")
@@ -218,7 +218,7 @@ func TestGetSettingsRefusesNewerSchemaWithStableCode(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := &Service{appName: "GitHub Net", version: "0.1.0", settings: config.NewStore(path, nil, nil)}
+	s := &Service{appName: "GitHub Net", version: "0.1.0", settings: config.NewStore(path, nil, nil, nil)}
 	if _, err := s.GetSettings(); err == nil {
 		t.Fatal("高版本配置应明确报错，不能静默当默认值")
 	} else {

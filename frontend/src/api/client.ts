@@ -1,5 +1,5 @@
 // 组件不直接调用 Wails 绑定，只走这一层；这里也不写业务规则。
-// 后端 22 条命令这层已全部登记（绑定另有 Ping、RuntimeInfo 两条界面没用到）。
+// 后端 27 条命令，这层登记界面用得上的 24 条（另有 Ping、RuntimeInfo、SettingsStore 三条没用到）。
 // 登记不等于界面都在用：加速方法这 2 条从本轮起由详情页的选择区调用。
 import {
   ApplyItems,
@@ -9,6 +9,7 @@ import {
   ClearQueue,
   DetectItems,
   GetAppStatus,
+  GetAutomationStatus,
   GetCandidatePool,
   GetDetectResult,
   GetItems,
@@ -29,6 +30,7 @@ import {
 import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { AppStatus, DetectBudgetPreview, DetectResultView, ItemsSnapshot, PoolEntryView, StrategySnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
+import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { RetryResult, Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { Info as UpdateInfo } from '../../bindings/github.com/xiaokentrl/github-net/internal/updater/models'
 import type { UpdateDownloadResult } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
@@ -49,6 +51,9 @@ export type SettingsPatch = {
   closeToTray?: boolean
   startMinimized?: boolean
   autoStart?: boolean
+  autoDetectMenus?: string[]
+  autoApplyOnStartup?: boolean
+  autoCloseAfterApply?: boolean
   detectFocusFollow?: boolean
   applyFocusFollow?: boolean
 }
@@ -63,6 +68,12 @@ export function getItems(): Promise<ItemsSnapshot> {
 
 export function getSettings(): Promise<Config> {
   return GetSettings()
+}
+
+// 启动自动化最近一次的结论。没跑过时后端给的是 stage 为空串的一份空值，
+// 由调用方判空——界面不该把「还没发生」显示成一句失败。
+export function getAutomationStatus(): Promise<AutomationStatus> {
+  return GetAutomationStatus()
 }
 
 // 保存必须带「你手上那份的 revision」和幂等键；后端比完版本才写，失败会明确 reject。
@@ -84,8 +95,9 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     autoStart: patch.autoStart ?? null,
     detectFocusFollow: patch.detectFocusFollow ?? null,
     applyFocusFollow: patch.applyFocusFollow ?? null,
-    autoDetectOnStartup: null,
-    autoApplyOnStartup: null,
+    autoDetectMenus: patch.autoDetectMenus ?? null,
+    autoApplyOnStartup: patch.autoApplyOnStartup ?? null,
+    autoCloseAfterApply: patch.autoCloseAfterApply ?? null,
   }
   return SaveSettings(body, expectedRevision, mutationID)
 }

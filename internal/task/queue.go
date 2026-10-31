@@ -41,7 +41,11 @@ type Queue struct {
 	detectLane    int
 	// stopped 之后不再领取新任务，也不再接受入队。
 	stopped bool
-	wg      sync.WaitGroup
+	// wake 是「队列状态变了」的广播：每有一次状态变化就关掉旧的、换一个新的。
+	// 用关闭而不是发送，是因为等待方可能有好几个，谁都不该被别人抢走信号；
+	// 等待方被叫醒后自己重看条件，所以多叫几次没有副作用。
+	wake chan struct{}
+	wg   sync.WaitGroup
 }
 
 type entry struct {
@@ -71,6 +75,7 @@ func NewQueueLaned(exec Executor, pub Publisher, detectLane int) *Queue {
 		rounds:        make(map[string]*Round),
 		detectRunning: make(map[string]context.CancelFunc),
 		detectLane:    detectLane,
+		wake:          make(chan struct{}),
 	}
 }
 
@@ -259,6 +264,8 @@ func (q *Queue) ClearQueue() (int, error) {
 	// 任务全没了，轮也不留。轮号继续往后发，不清零、不复用。
 	q.rounds = make(map[string]*Round)
 	q.roundIDs = nil
+	// 这里没有逐条状态变化可以发事件，但等待方要被告知「你要等的那批任务已经不在了」。
+	q.broadcastLocked()
 	return removed, nil
 }
 
@@ -412,8 +419,59 @@ func (q *Queue) Shutdown() {
 	for _, cancel := range q.detectRunning {
 		cancel()
 	}
+	q.broadcastLocked()
 	q.mu.Unlock()
 	q.wg.Wait()
+}
+
+// WaitRound 阻塞到 roundID 这一轮不再有在途任务（等待中、执行中、恢复中都算在途）。
+//
+// 谓词是「这一轮没有在途任务」，不是「这一轮没有任务」：终态任务要等用户点「清理已结束」
+// 才从队列里消失，照后者等会永久卡死。轮 ID 为空、这一轮没任务、整轮已经清理掉，
+// 都算已收口，直接返回 nil——所以调用方要先把自己那批任务排进来再来等。
+//
+// ctx 取消返回 ctx.Err()；队列停了但这一轮还有没跑完的任务返回 ErrQueueStopped，
+// 因为那些任务永远不会再动了，继续等没有意义。
+func (q *Queue) WaitRound(ctx context.Context, roundID string) error {
+	if roundID == "" {
+		return nil
+	}
+	for {
+		q.mu.Lock()
+		settled := !q.roundHasActiveLocked(roundID)
+		stopped := q.stopped
+		ch := q.wake
+		q.mu.Unlock()
+		if settled {
+			return nil
+		}
+		if stopped {
+			return ErrQueueStopped
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ch:
+		}
+	}
+}
+
+// roundHasActiveLocked 假定调用方已持锁：这一轮里还有没有没跑完的任务。
+func (q *Queue) roundHasActiveLocked(roundID string) bool {
+	for _, id := range q.order {
+		e, ok := q.entries[id]
+		if ok && e.task.RoundID == roundID && IsActive(e.task.Status) {
+			return true
+		}
+	}
+	return false
+}
+
+// broadcastLocked 假定调用方已持锁：叫醒全部 WaitRound 的等待方，让它们自己重看条件。
+// 条件不满足时被叫醒会接着睡，所以多叫几次没有副作用；不调用方也不需要知道谁在等。
+func (q *Queue) broadcastLocked() {
+	close(q.wake)
+	q.wake = make(chan struct{})
 }
 
 // normalize 校验排队请求：类型必须认识，项目 ID 必须有；Name 空时用项目 ID 顶上。
@@ -585,9 +643,12 @@ func (q *Queue) settle(id string, out Outcome) bool {
 
 // publishLocked 假定调用方已持锁：占用下一个序号并投递一条进度事件。
 // 序号在这里递增，快照的 Sequence 读的是同一个计数器，两者不会各走各的。
+// 每条任务的状态都经过这里，所以叫醒等待方的广播也挂在这里：状态一变就通知，
+// 不用在每个改动点各写一遍、也不会漏掉哪条路径。
 func (q *Queue) publishLocked(e *entry) {
 	q.sequence++
 	q.pub.PublishProgress(Progress{Sequence: q.sequence, Task: e.task})
+	q.broadcastLocked()
 }
 
 // finish 记录结束时间和耗时。没开始过的任务（等待中被取消）耗时留空，

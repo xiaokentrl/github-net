@@ -9,7 +9,7 @@ import (
 
 func TestSetThemeFromTray(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config", "config.json")
-	ctl := NewThemeController(config.NewStore(path, map[string]bool{}, map[string]bool{}))
+	ctl := NewThemeController(config.NewStore(path, map[string]bool{}, map[string]bool{}, map[string]bool{}))
 
 	// 合法主题：保存成功且读回一致
 	cfg, err := ctl.Set("midnight")

@@ -86,6 +86,10 @@ type Service struct {
 
 	// stamp 是这份构建自带的 VCS 标记，进程活着就不会变，所以构造时读一次。
 	stamp buildStamp
+
+	// automationStatus 是启动自动化最近一次推出去的结论，只留在内存里。
+	// 界面挂载时补读它，避免自动化在窗口起来那一刻就跑完、事件整个错过。
+	automationStatus atomic.Pointer[event.AutomationStatus]
 }
 
 // NewService 建暴露给前端的门面。taskEmit 是队列进度事件的投递出口，
@@ -182,9 +186,10 @@ func factoryDefaultStrategy(scopeID string) (string, bool) {
 	return "", false
 }
 
-// newSettingsStore 用目录里的 scopeID 和方法注册表里的已注册方法作为校验集合。
+// newSettingsStore 用目录里的 scopeID、方法注册表里的已注册方法、目录里的主菜单 ID
+// 作为三份校验集合。
 // 注册表靠各策略文件的 init 登记，所以这里必须真的引用它一次，那张表才是填好的。
-// 校验集合为空时任何「某范围默认用某方法」的保存都会被拒——不静默接受一个点不到的方法。
+// 校验集合为空时对应的保存都会被拒：不静默接受一个点不到的方法，也不接受一个不存在的主菜单。
 func newSettingsStore(c *catalog.Catalog) (*config.Store, error) {
 	path, err := config.Path()
 	if err != nil {
@@ -192,7 +197,7 @@ func newSettingsStore(c *catalog.Catalog) (*config.Store, error) {
 	}
 	// 0.1.2 起配置从数据目录搬到配置目录：开档前先搬一次家（新位置已有就不动）。
 	config.MigrateLegacy(path)
-	return config.NewStore(path, c.ScopeIDs(), strategies.IDs()), nil
+	return config.NewStore(path, c.ScopeIDs(), strategies.IDs(), c.CategoryIDs()), nil
 }
 
 // RuntimeInfo 返回当前进程的真实运行环境，供前端显示与绑定链路自检。

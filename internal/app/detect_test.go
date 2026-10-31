@@ -148,7 +148,7 @@ func detectStore(t *testing.T, defaults map[string]string) *config.Store {
 	t.Helper()
 	store := config.NewStore(filepath.Join(t.TempDir(), "config.json"),
 		map[string]bool{detectScopeGitHub: true, detectScopeSteam: true},
-		map[string]bool{detectMethodGitHub: true, detectMethodBoth: true, detectMethodSteam: true})
+		map[string]bool{detectMethodGitHub: true, detectMethodBoth: true, detectMethodSteam: true}, nil)
 	if defaults != nil {
 		if _, err := store.Save(config.Patch{DefaultStrategyByScope: &defaults}, 0, "detect-test-defaults"); err != nil {
 			t.Fatalf("写入默认加速方法失败：%v", err)
@@ -417,7 +417,7 @@ func TestDetectExecutorFailsWhenSettingsUnreadable(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"schemaVersion":99,"revision":1}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	store := config.NewStore(path, map[string]bool{detectScopeGitHub: true}, map[string]bool{detectMethodGitHub: true})
+	store := config.NewStore(path, map[string]bool{detectScopeGitHub: true}, map[string]bool{detectMethodGitHub: true}, nil)
 	lookup := &detectLookup{cands: detectCandidates()}
 	exec := newDetectExecutorForTest(t, store, availableProbe)
 	exec.strategyFor = lookup.table(lookup.strategy(detectMethodGitHub, []string{detectScopeGitHub}))

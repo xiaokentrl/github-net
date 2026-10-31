@@ -102,14 +102,18 @@ type TreeBehaviorConfig struct {
 	ApplyFocusFollow  bool `json:"applyFocusFollow"`
 }
 
-// StartupConfig 是启动相关开关；自动应用依赖自动检测。
-// CloseToTray 是关窗行为：true 时点关闭是把窗口收进托盘（应用继续跑），false 时直接退出。
+// StartupConfig 是启动相关开关。自动检测→自动应用→自动退出是一条链，下游依赖上游：
+// 清单为空就不检测，没检测就谈不上应用，没应用就谈不上退出。
+// CloseToTray 只管「人自己点关闭」那条路；自动退出是无人值守跑完就走，直接结束进程，不看这个开关。
 type StartupConfig struct {
-	AutoStart           bool `json:"autoStart"`
-	StartMinimized      bool `json:"startMinimized"`
-	CloseToTray         bool `json:"closeToTray"`
-	AutoDetectOnStartup bool `json:"autoDetectOnStartup"`
-	AutoApplyOnStartup  bool `json:"autoApplyOnStartup"`
+	AutoStart          bool     `json:"autoStart"`
+	StartMinimized     bool     `json:"startMinimized"`
+	CloseToTray        bool     `json:"closeToTray"`
+	AutoDetectMenus    []string `json:"autoDetectMenus"`
+	AutoApplyOnStartup bool     `json:"autoApplyOnStartup"`
+	// AutoCloseAfterApply 是「自动应用那一轮跑完后真退出」：结束整个进程，
+	// 不是收进托盘，也不是只关窗口。
+	AutoCloseAfterApply bool `json:"autoCloseAfterApply"`
 }
 
 // Config 是完整配置快照，也是磁盘上的文件内容。
@@ -142,8 +146,9 @@ type Patch struct {
 	AutoStart                      *bool              `json:"autoStart"`
 	StartMinimized                 *bool              `json:"startMinimized"`
 	CloseToTray                    *bool              `json:"closeToTray"`
-	AutoDetectOnStartup            *bool              `json:"autoDetectOnStartup"`
+	AutoDetectMenus                *[]string          `json:"autoDetectMenus"`
 	AutoApplyOnStartup             *bool              `json:"autoApplyOnStartup"`
+	AutoCloseAfterApply            *bool              `json:"autoCloseAfterApply"`
 }
 
 // Default 返回代码里定义的默认值；revision 为 0 表示「还没成功保存过」。
@@ -229,9 +234,9 @@ func MigrateLegacy(newPath string) {
 }
 
 // Validate 检查全部字段。scopeIDs 是产品目录里的合法加速范围，
-// strategies 是已注册且适用于该范围的方法；两个集合都可以为空，
-// 空集合意味着「出现这类值就一律拒绝」，不静默放行。
-func (c Config) Validate(scopeIDs map[string]bool, strategies map[string]bool) error {
+// strategies 是已注册且适用于该范围的方法，menuIDs 是产品目录里的主菜单 ID；
+// 三个集合都可以为空，空集合意味着「出现这类值就一律拒绝」，不静默放行。
+func (c Config) Validate(scopeIDs map[string]bool, strategies map[string]bool, menuIDs map[string]bool) error {
 	if c.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("%w: 配置结构版本 %d 不是当前支持的 %d", ErrInvalid, c.SchemaVersion, SchemaVersion)
 	}
@@ -259,8 +264,14 @@ func (c Config) Validate(scopeIDs map[string]bool, strategies map[string]bool) e
 	if c.Layout.QueueListWidth < QueueListWidthMin || c.Layout.QueueListWidth > QueueListWidthMax {
 		return fmt.Errorf("%w: 任务列表宽度要在 %d 到 %d 像素之间", ErrInvalid, QueueListWidthMin, QueueListWidthMax)
 	}
-	if c.Startup.AutoApplyOnStartup && !c.Startup.AutoDetectOnStartup {
-		return fmt.Errorf("%w: 启动自动应用依赖启动自动检测，请先开启后者", ErrInvalid)
+	if c.Startup.AutoApplyOnStartup && len(c.Startup.AutoDetectMenus) == 0 {
+		return fmt.Errorf("%w: 启动自动应用要先在「启动后自动检测」里选至少一个主菜单", ErrInvalid)
+	}
+	if c.Startup.AutoCloseAfterApply && !c.Startup.AutoApplyOnStartup {
+		return fmt.Errorf("%w: 自动应用完成后退出要先开启「检测完成后自动应用」", ErrInvalid)
+	}
+	if err := c.validateAutoDetectMenus(menuIDs); err != nil {
+		return err
 	}
 	for scopeID, strategyID := range c.Accelerator.DefaultStrategyByScope {
 		if !scopeIDs[scopeID] {
@@ -268,6 +279,27 @@ func (c Config) Validate(scopeIDs map[string]bool, strategies map[string]bool) e
 		}
 		if !strategies[strategyID] {
 			return fmt.Errorf("%w: 方法 %s 当前没有注册，范围 %s 的选择无法保存", ErrInvalid, strategyID, scopeID)
+		}
+	}
+	return nil
+}
+
+// validateAutoDetectMenus 校「启动后自动检测」那份主菜单清单。
+// 空项、重复、不在目录里，三条都只在这一处判。
+// 界面只会从菜单里勾，出现这三类值说明配置文件被手改过；这里拒收而不是顺手抹平，
+// 因为抹平之后界面上显示的和盘上存的就不再是同一回事。
+func (c Config) validateAutoDetectMenus(menuIDs map[string]bool) error {
+	seen := make(map[string]bool, len(c.Startup.AutoDetectMenus))
+	for _, menuID := range c.Startup.AutoDetectMenus {
+		if menuID == "" {
+			return fmt.Errorf("%w: 自动检测的主菜单清单里有空项", ErrInvalid)
+		}
+		if seen[menuID] {
+			return fmt.Errorf("%w: 自动检测的主菜单 %s 重复出现", ErrInvalid, menuID)
+		}
+		seen[menuID] = true
+		if !menuIDs[menuID] {
+			return fmt.Errorf("%w: 主菜单 %s 不在产品目录里", ErrInvalid, menuID)
 		}
 	}
 	return nil
@@ -351,6 +383,7 @@ type Store struct {
 	path       string
 	scopeIDs   map[string]bool
 	strategies map[string]bool
+	menuIDs    map[string]bool
 
 	mu           sync.Mutex
 	cfg          Config
@@ -360,15 +393,19 @@ type Store struct {
 	lastMutation string
 }
 
-// NewStore 创建配置服务；scopeIDs 与 strategies 可以传 nil，表示这类值一律不接受。
-func NewStore(path string, scopeIDs, strategies map[string]bool) *Store {
+// NewStore 创建配置服务；三个集合都可以传 nil，表示这类值一律不接受。
+// menuIDs 是产品目录里的主菜单 ID，用来校「启动后自动检测」勾了哪些菜单。
+func NewStore(path string, scopeIDs, strategies, menuIDs map[string]bool) *Store {
 	if scopeIDs == nil {
 		scopeIDs = map[string]bool{}
 	}
 	if strategies == nil {
 		strategies = map[string]bool{}
 	}
-	return &Store{path: path, scopeIDs: scopeIDs, strategies: strategies}
+	if menuIDs == nil {
+		menuIDs = map[string]bool{}
+	}
+	return &Store{path: path, scopeIDs: scopeIDs, strategies: strategies, menuIDs: menuIDs}
 }
 
 // Path 返回这个 Store 管理配置文件的位置，供状态界面显示和排障。
@@ -411,7 +448,7 @@ func (s *Store) ensureLoadedLocked() error {
 		s.loadErr = err
 		return err
 	case readOK:
-		if validateErr := c.Validate(s.scopeIDs, s.strategies); validateErr == nil {
+		if validateErr := c.Validate(s.scopeIDs, s.strategies, s.menuIDs); validateErr == nil {
 			s.cfg = c
 			return nil
 		} else {
@@ -472,7 +509,7 @@ func (s *Store) Save(p Patch, expectedRevision int64, mutationID string) (Config
 	if next.Accelerator.DefaultStrategyByScope == nil {
 		next.Accelerator.DefaultStrategyByScope = map[string]string{}
 	}
-	if err := next.Validate(s.scopeIDs, s.strategies); err != nil {
+	if err := next.Validate(s.scopeIDs, s.strategies, s.menuIDs); err != nil {
 		return Config{}, err
 	}
 	next.Revision = s.cfg.Revision + 1
@@ -530,11 +567,17 @@ func applyPatch(c *Config, p Patch) {
 	if p.StartMinimized != nil {
 		c.Startup.StartMinimized = *p.StartMinimized
 	}
-	if p.AutoDetectOnStartup != nil {
-		c.Startup.AutoDetectOnStartup = *p.AutoDetectOnStartup
+	// 清单是指针指向的切片：没带这个字段＝不改，带了空切片＝清空。
+	// 清空时界面上必须把下游两个开关一起放进同一个补丁显式关掉，
+	// 否则这份候选配置会因为依赖不成立被 Validate 整批拒掉。
+	if p.AutoDetectMenus != nil {
+		c.Startup.AutoDetectMenus = *p.AutoDetectMenus
 	}
 	if p.AutoApplyOnStartup != nil {
 		c.Startup.AutoApplyOnStartup = *p.AutoApplyOnStartup
+	}
+	if p.AutoCloseAfterApply != nil {
+		c.Startup.AutoCloseAfterApply = *p.AutoCloseAfterApply
 	}
 }
 
