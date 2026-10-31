@@ -10,6 +10,7 @@
 }
 
 .topbar {
+  position: relative;
   display: flex;
   flex: none;
   align-items: center;

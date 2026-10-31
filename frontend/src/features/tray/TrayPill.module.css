@@ -1,8 +1,13 @@
 /* 托盘胶囊与弹出菜单，照原型 .tray-pill/.tray-menu（第 736–749 行）：
    胶囊半透明、悬停变实；圆点跑任务时脉冲；菜单里主题色点一行、下面两个动作。 */
+/* 胶囊在标题栏正中（原型 .tray-pill 就是 top:9px 居中悬浮，第 736 行）；
+   弹出菜单锚在胶囊上，跟着一起居中。 */
 .root {
-  position: relative;
-  flex: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30;
 }
 
 .pill {
@@ -19,6 +24,8 @@
   cursor: pointer;
   user-select: none;
   transition: opacity 0.2s ease;
+  /* 顶栏整条是拖动区，胶囊自己标 no-drag 防误触拖动。 */
+  --wails-draggable: no-drag;
 }
 
 .pill:hover,
