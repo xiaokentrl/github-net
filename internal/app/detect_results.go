@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/xiaokentrl/github-net/internal/accelerator"
+	"github.com/xiaokentrl/github-net/internal/accelerator/strategies"
 )
 
 // detectResultStore 存每个项目最近一轮的检测结果，只在本进程内存里。
@@ -77,18 +78,20 @@ func (s *detectResultStore) view(itemID string) (DetectResultView, bool) {
 // DetectResultView 是一个项目最近一轮检测的完整快照，给详情页的候选表直接渲染。
 // 数组字段一律给空切片不给 null；没有记录时调用方自己拼空形状。
 type DetectResultView struct {
-	ItemID      string           `json:"itemId"`
-	ScopeID     string           `json:"scopeId"`
-	StrategyID  string           `json:"strategyId"`
-	StartedAt   string           `json:"startedAt,omitempty"`
-	FinishedAt  string           `json:"finishedAt,omitempty"`
-	Available   int              `json:"available"`
-	ProbesUsed  int              `json:"probesUsed"`
-	DNSQueries  int              `json:"dnsQueries"`
-	Truncated   bool             `json:"truncated"`
-	DeadlineHit bool             `json:"deadlineHit"`
-	Cancelled   bool             `json:"cancelled"`
-	Hosts       []DetectHostView `json:"hosts"`
+	ItemID     string `json:"itemId"`
+	ScopeID    string `json:"scopeId"`
+	StrategyID string `json:"strategyId"`
+	// StrategyName 是方法面向用户的名字（注册表里那份）；方法已卸载时给空串，前端回落到 ID。
+	StrategyName string           `json:"strategyName"`
+	StartedAt    string           `json:"startedAt,omitempty"`
+	FinishedAt   string           `json:"finishedAt,omitempty"`
+	Available    int              `json:"available"`
+	ProbesUsed   int              `json:"probesUsed"`
+	DNSQueries   int              `json:"dnsQueries"`
+	Truncated    bool             `json:"truncated"`
+	DeadlineHit  bool             `json:"deadlineHit"`
+	Cancelled    bool             `json:"cancelled"`
+	Hosts        []DetectHostView `json:"hosts"`
 }
 
 // DetectHostView 是一个主机名在这轮里的结果；候选行直接复用 accelerator.Candidate，
@@ -122,22 +125,31 @@ func detectResultView(itemID string, rec detectResultRecord) DetectResultView {
 		})
 	}
 	return DetectResultView{
-		ItemID:      itemID,
-		ScopeID:     rec.scopeID,
-		StrategyID:  rec.strategyID,
-		StartedAt:   r.StartedAt.UTC().Format(time.RFC3339),
-		FinishedAt:  r.FinishedAt.UTC().Format(time.RFC3339),
-		Available:   r.Available,
-		ProbesUsed:  r.ProbesUsed,
-		DNSQueries:  r.DNSQueries,
-		Truncated:   r.Truncated,
-		DeadlineHit: r.DeadlineHit,
-		Cancelled:   r.Cancelled,
-		Hosts:       hosts,
+		ItemID:       itemID,
+		ScopeID:      rec.scopeID,
+		StrategyID:   rec.strategyID,
+		StrategyName: strategyDisplayName(rec.strategyID),
+		StartedAt:    r.StartedAt.UTC().Format(time.RFC3339),
+		FinishedAt:   r.FinishedAt.UTC().Format(time.RFC3339),
+		Available:    r.Available,
+		ProbesUsed:   r.ProbesUsed,
+		DNSQueries:   r.DNSQueries,
+		Truncated:    r.Truncated,
+		DeadlineHit:  r.DeadlineHit,
+		Cancelled:    r.Cancelled,
+		Hosts:        hosts,
 	}
 }
 
 // detectResultEmptyView 是「还没有检测结果」的空形状：字段都是零值，数组是空切片。
 func detectResultEmptyView(itemID string) DetectResultView {
 	return DetectResultView{ItemID: itemID, Hosts: []DetectHostView{}}
+}
+
+// strategyDisplayName 把方法 ID 翻成用户可见的名字；注册表里查不到（方法被删）就给空串。
+func strategyDisplayName(id string) string {
+	if s, ok := strategies.Get(id); ok {
+		return s.Name
+	}
+	return ""
 }

@@ -91,6 +91,11 @@ export interface DetectResultView {
     "itemId": string;
     "scopeId": string;
     "strategyId": string;
+
+    /**
+     * StrategyName 是方法面向用户的名字（注册表里那份）；方法已卸载时给空串，前端回落到 ID。
+     */
+    "strategyName": string;
     "startedAt"?: string;
     "finishedAt"?: string;
     "available": number;

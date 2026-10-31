@@ -201,6 +201,8 @@
   "detail.metric.appliedIp": "目前寫入 IP",
   "detail.metric.appliedIp.many": "{count} 個網域各有各的寫入",
   "detail.metric.latency": "連線耗時",
+  "detail.metric.available": "可用候選",
+  "detail.metric.strategy": "偵測方法",
   "detail.metric.bestIp": "偵測最佳 IP",
   "detail.metric.score": "綜合評分",
   "detail.metric.source": "IP 來源",

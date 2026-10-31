@@ -1,5 +1,5 @@
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import { formatDateTime } from '../../i18n/formatters'
+import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
 import type { CatalogCategory, CatalogItem, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -83,7 +83,6 @@ export function ItemDetail({
   const candidates = rows.flatMap((host) => host.candidates ?? [])
   // 当前写入 IP 只有一个来源：后端在这轮候选里标了 applied 的那几条。界面不自己认。
   const appliedIps = [...new Set(candidates.filter((c) => c.applied).map((c) => c.ip))]
-  const appliedLatency = candidates.find((c) => c.applied)?.latencyMs ?? 0
   const restorable = status === HostsStatus.HostsApplied || status === HostsStatus.HostsPartial
   const canApply = candidates.some((c) => c.status === 'available')
 
@@ -100,6 +99,16 @@ export function ItemDetail({
   // 解析失败的域名没有候选行，单独在表上方说一句，不混进表里冒充候选。
   const failedHosts = rows.filter((h) => !h.resolved)
 
+  // 指标六格的数据（拍板 2026-10-31）：全部来自本轮候选，前端现算。
+  // 最优可用 = 延迟最低（并列时 IPv4 优先），和后端写 Hosts 的选址规则同一口径。
+  const bestCandidate = candidates.reduce<((typeof candidates)[number]) | null>((acc, c) => {
+    if (c.status !== 'available') return acc
+    const better = acc === null || c.latencyMs < acc.latencyMs || (c.latencyMs === acc.latencyMs && acc.ipv6 && !c.ipv6)
+    return better ? c : acc
+  }, null)
+  const availableCount = candidates.filter((c) => c.status === 'available').length
+  const strategyLabel = result?.strategyName || result?.strategyId || ''
+
   // 一格指标：检测中整块换微光条；值没来源时用 dim 那档字色，和原型的 b.dim 同一处理。
   const metricCell = (labelKey: string, value: string) => (
     <div key={labelKey} className={styles.metric}>
@@ -107,7 +116,7 @@ export function ItemDetail({
       {detecting ? (
         <span className={styles.skeleton} aria-hidden="true" />
       ) : (
-        <span className={`${styles.metricValue} ${labelKey === 'detail.metric.appliedIp' ? styles.mono : ''}`}>{value}</span>
+        <span className={`${styles.metricValue} ${labelKey === 'detail.metric.appliedIp' || labelKey === 'detail.metric.bestIp' ? styles.mono : ''}`}>{value}</span>
       )}
     </div>
   )
@@ -144,8 +153,7 @@ export function ItemDetail({
           </div>
         </div>
 
-        {/* 六格指标是布局骨架，常驻（拍板 2026-10-31 复盘）：没值显示「—」，
-            「还没检测」「未提供（后端没给这一项）」这类占位句子一律不说。 */}
+        {/* 六格指标是布局骨架，常驻：没值显示「—」，全部有数据来源（拍板 2026-10-31）。 */}
         <div className={styles.metrics}>
           {metricCell(
             'detail.metric.appliedIp',
@@ -155,11 +163,14 @@ export function ItemDetail({
                 ? appliedIps[0]
                 : t('detail.metric.appliedIp.many', { count: appliedIps.length }),
           )}
-          {metricCell('detail.metric.bestIp', '—')}
-          {metricCell('detail.metric.latency', appliedLatency > 0 ? t('detect.latency', { ms: appliedLatency }) : '—')}
-          {metricCell('detail.metric.score', '—')}
-          {metricCell('detail.metric.source', '—')}
-          {metricCell('detail.metric.lastCheck', result?.finishedAt ? formatDateTime(result.finishedAt) : '—')}
+          {metricCell('detail.metric.bestIp', bestCandidate?.ip ?? '—')}
+          {metricCell(
+            'detail.metric.latency',
+            bestCandidate && bestCandidate.latencyMs > 0 ? t('detect.latency', { ms: bestCandidate.latencyMs }) : '—',
+          )}
+          {metricCell('detail.metric.available', candidates.length > 0 ? `${formatInteger(availableCount)}/${formatInteger(candidates.length)}` : '—')}
+          {metricCell('detail.metric.strategy', strategyLabel || '—')}
+          {metricCell('detail.metric.lastCheck', result?.finishedAt ? formatRelativeTime(result.finishedAt) : '—')}
         </div>
 
         <div className={styles.domainsLine}>

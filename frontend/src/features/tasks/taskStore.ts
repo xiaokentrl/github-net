@@ -162,7 +162,7 @@ export async function refreshResult(itemId: string): Promise<DetectResultView> {
 }
 
 function emptyResult(itemId: string): DetectResultView {
-  return { itemId, scopeId: '', strategyId: '', available: 0, probesUsed: 0, dnsQueries: 0, truncated: false, deadlineHit: false, cancelled: false, hosts: [] }
+  return { itemId, scopeId: '', strategyId: '', strategyName: '', available: 0, probesUsed: 0, dnsQueries: 0, truncated: false, deadlineHit: false, cancelled: false, hosts: [] }
 }
 
 // refreshAllResults 把已在 store 里的项目全部重拉一遍：RestoreAll 一笔清空「当前生效」，

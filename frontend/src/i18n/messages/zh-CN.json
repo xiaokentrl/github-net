@@ -201,6 +201,8 @@
   "detail.metric.appliedIp": "当前写入 IP",
   "detail.metric.appliedIp.many": "{count} 个域名各有各的写入",
   "detail.metric.latency": "连接耗时",
+  "detail.metric.available": "可用候选",
+  "detail.metric.strategy": "检测方法",
   "detail.metric.bestIp": "检测最优 IP",
   "detail.metric.score": "综合评分",
   "detail.metric.source": "IP 来源",
