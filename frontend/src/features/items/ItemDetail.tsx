@@ -10,18 +10,6 @@ import { useTaskQueue } from '../tasks/taskStore'
 import styles from './ItemDetail.module.css'
 import detectStyles from './DetectResult.module.css'
 
-// 每种状态一句解释：后端只给档位，这句话不能由前端猜出来的结果撑着。
-// partial 和 applied 要等 Hosts 写入接上才会由后端产出，这里先把话说清楚，不提前显示。
-const HINT_KEY: Record<HostsStatus, string> = {
-  [HostsStatus.$zero]: 'detail.hint.unknown',
-  [HostsStatus.HostsUnknown]: 'detail.hint.unknown',
-  [HostsStatus.HostsNone]: 'detail.hint.none',
-  [HostsStatus.HostsPartial]: 'detail.hint.partial',
-  [HostsStatus.HostsApplied]: 'detail.hint.applied',
-  [HostsStatus.HostsConflict]: 'detail.hint.conflict',
-  [HostsStatus.HostsReadFailed]: 'detail.hint.readFailed',
-}
-
 // 候选状态的文案键。八档来自后端 CandidateStatus，界面按字符串显示，不自己推断成败。
 const CANDIDATE_KEY: Record<string, string> = {
   queued: 'detect.candidate.queued',
@@ -113,13 +101,13 @@ export function ItemDetail({
   const failedHosts = rows.filter((h) => !h.resolved)
 
   // 一格指标：检测中整块换微光条；值没来源时用 dim 那档字色，和原型的 b.dim 同一处理。
-  const metricCell = (labelKey: string, value: string, tone: 'mono' | 'plain' | 'dim' = 'plain') => (
+  const metricCell = (labelKey: string, value: string) => (
     <div key={labelKey} className={styles.metric}>
       <span className={styles.metricLabel}>{t(labelKey)}</span>
       {detecting ? (
         <span className={styles.skeleton} aria-hidden="true" />
       ) : (
-        <span className={`${styles.metricValue} ${tone === 'dim' ? styles.dim : ''} ${tone === 'mono' ? styles.mono : ''}`}>{value}</span>
+        <span className={`${styles.metricValue} ${labelKey === 'detail.metric.appliedIp' ? styles.mono : ''}`}>{value}</span>
       )}
     </div>
   )
@@ -156,36 +144,20 @@ export function ItemDetail({
           </div>
         </div>
 
-        <div className={styles.metrics}>
-          {metricCell(
-            'detail.metric.appliedIp',
-            appliedIps.length === 0
-              ? result
-                ? t('detail.metric.appliedIp.none')
-                : t('detail.metric.noRun')
-              : appliedIps.length === 1
-                ? appliedIps[0]
-                : t('detail.metric.appliedIp.many', { count: appliedIps.length }),
-            appliedIps.length === 1 ? 'mono' : 'dim',
-          )}
-          {metricCell('detail.metric.bestIp', t('detail.metric.unprovided'), 'dim')}
-          {metricCell(
-            'detail.metric.latency',
-            appliedLatency > 0
-              ? t('detect.latency', { ms: appliedLatency })
-              : result
-                ? t('detail.metric.unprovided')
-                : t('detail.metric.noRun'),
-            appliedLatency > 0 ? 'plain' : 'dim',
-          )}
-          {metricCell('detail.metric.score', t('detail.metric.unprovided'), 'dim')}
-          {metricCell('detail.metric.source', t('detail.metric.unprovided'), 'dim')}
-          {metricCell(
-            'detail.metric.lastCheck',
-            result?.finishedAt ? formatDateTime(result.finishedAt) : t('detail.metric.lastCheck.none'),
-            result?.finishedAt ? 'plain' : 'dim',
-          )}
-        </div>
+        {/* 指标只报有料的三格（拍板 2026-10-31）：没写入 IP/没测过就不出这一格，
+            「还没检测」「未提供」这类占位话一律不说。 */}
+        {appliedIps.length > 0 || appliedLatency > 0 || result?.finishedAt ? (
+          <div className={styles.metrics}>
+            {appliedIps.length > 0
+              ? metricCell(
+                  'detail.metric.appliedIp',
+                  appliedIps.length === 1 ? appliedIps[0] : t('detail.metric.appliedIp.many', { count: appliedIps.length }),
+                )
+              : null}
+            {appliedLatency > 0 ? metricCell('detail.metric.latency', t('detect.latency', { ms: appliedLatency })) : null}
+            {result?.finishedAt ? metricCell('detail.metric.lastCheck', formatDateTime(result.finishedAt)) : null}
+          </div>
+        ) : null}
 
         <div className={styles.domainsLine}>
           <span className={styles.lbl}>{t('detail.domains')}</span>
@@ -202,8 +174,6 @@ export function ItemDetail({
           )}
         </div>
 
-        <p className={styles.hint}>{t(HINT_KEY[status])}</p>
-        {hosts?.message ? <p className={styles.hint}>{t('detail.reason', { reason: hosts.message })}</p> : null}
         {hostsError ? (
           <p className={styles.errorBox} role="alert">
             <span className={styles.boxIco} aria-hidden="true">!</span>
@@ -283,13 +253,12 @@ export function ItemDetail({
               <th scope="col">{t('detect.col.hostname')}</th>
               <th scope="col">{t('detect.col.mark')}</th>
               <th scope="col">{t('detect.col.latency')}</th>
-              <th scope="col">{t('detect.col.score')}</th>
             </tr>
           </thead>
           <tbody>
             {flatCandidates.length === 0 ? (
               <tr className={detectStyles.emptyRow}>
-                <td colSpan={6}>{t('detect.empty')}</td>
+                <td colSpan={5}>{t('detect.empty')}</td>
               </tr>
             ) : (
               flatCandidates.map(({ candidate, host }, index) => (
@@ -310,7 +279,6 @@ export function ItemDetail({
                   <td className={candidate.latencyMs > 0 ? detectStyles.latency : detectStyles.latencyNone}>
                     {candidate.latencyMs > 0 ? t('detect.latency', { ms: candidate.latencyMs }) : '—'}
                   </td>
-                  <td className={detectStyles.none}>{t('detail.metric.unprovided.short')}</td>
                 </tr>
               ))
             )}
