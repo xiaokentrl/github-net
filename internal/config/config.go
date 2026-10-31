@@ -63,7 +63,7 @@ var (
 	allowedProfiles  = map[string]bool{ProfileLow: true, ProfileStandard: true, ProfileFull: true}
 	allowedThemes    = map[string]bool{"light": true, "midnight": true, "oled": true, "forest": true, "ocean": true, "sakura": true}
 	allowedZooms     = map[float64]bool{0.9: true, 1: true, 1.1: true, 1.25: true}
-	allowedLanguages = map[string]bool{"zh-CN": true}
+	allowedLanguages = map[string]bool{"zh-CN": true, "zh-TW": true}
 )
 
 // NetworkConfig 是网络与流量设置。
@@ -199,7 +199,7 @@ func (c Config) Validate(scopeIDs map[string]bool, strategies map[string]bool) e
 		return fmt.Errorf("%w: 每轮候选探测总上限要在 %d 到 %d 之间", ErrInvalid, MinCandidateProbes, MaxCandidateProbesLimit)
 	}
 	if !allowedLanguages[c.Appearance.Language] {
-		return fmt.Errorf("%w: 语言 %s 尚未完成正式支持，当前只能选简体中文", ErrInvalid, c.Appearance.Language)
+		return fmt.Errorf("%w: 语言 %s 不在支持列表（简体中文/繁体中文）", ErrInvalid, c.Appearance.Language)
 	}
 	if !allowedThemes[c.Appearance.Theme] {
 		return fmt.Errorf("%w: 主题 %s 不在支持的六套里", ErrInvalid, c.Appearance.Theme)

@@ -1,12 +1,14 @@
 // 可见文案的唯一出口：组件只用 t()，不自己拼句子。
-// 首期只有 zh-CN 一套正式语言（zh-TW 要等阶段四的语言测试才被后端接受），
-// 所以这里只登记 zh-CN；新增语言是「再加一个 JSON 并登记一行」，不改组件。
+// 登记的语言 = messages/ 目录下有 JSON 且配置校验放行的；新增语言是
+// 「再加一个 JSON 并登记一行 + 后端 allowedLanguages 放行」，不改组件。
 import zhCN from './messages/zh-CN.json'
+import zhTW from './messages/zh-TW.json'
 
 type Params = Record<string, string | number>
 
 const bundles: Record<string, Readonly<Record<string, string>>> = {
   'zh-CN': zhCN,
+  'zh-TW': zhTW,
 }
 
 let currentLocale = 'zh-CN'

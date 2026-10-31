@@ -54,6 +54,7 @@ export function SettingsDialog({
   onQueueListWidth,
   onZoom,
   onTheme,
+  onLanguage,
   onCloseToTray,
   onStartMinimized,
   onAutoStart,
@@ -74,6 +75,7 @@ export function SettingsDialog({
   onQueueListWidth: (width: number) => void
   onZoom: (factor: number) => void
   onTheme: (id: string) => void
+  onLanguage: (language: string) => void
   onCloseToTray: (enabled: boolean) => void
   onStartMinimized: (enabled: boolean) => void
   onAutoStart: (enabled: boolean) => void
@@ -149,7 +151,7 @@ export function SettingsDialog({
               />
             )}
             {pane === 'zoom' && <ZoomPane settings={settings} save={save} onZoom={onZoom} />}
-            {pane === 'appearance' && <AppearancePane settings={settings} save={save} onTheme={onTheme} />}
+            {pane === 'appearance' && <AppearancePane settings={settings} save={save} onTheme={onTheme} onLanguage={onLanguage} />}
             {pane === 'tray' && <TrayPane settings={settings} save={save} onCloseToTray={onCloseToTray} onStartMinimized={onStartMinimized} />}
             {pane === 'startup' && <StartupPane settings={settings} save={save} onAutoStart={onAutoStart} />}
             {pane === 'updates' && <UpdatesPane status={status} />}

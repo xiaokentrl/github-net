@@ -454,3 +454,26 @@
   outline: none;
   cursor: pointer;
 }
+
+.action {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--ctl);
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.action:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.action.primaryAction {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}

@@ -351,6 +351,14 @@ export function App() {
     [settings, submit],
   )
 
+  const changeLanguage = useCallback(
+    (language: string) => {
+      if (!settings || settings.appearance.language === language) return
+      submit({ language }, t('settings.subject.language'), 'language')
+    },
+    [settings, submit],
+  )
+
   const changeTheme = useCallback(
     (id: string) => {
       if (!settings || settings.appearance.theme === id) return
@@ -705,6 +713,7 @@ export function App() {
           onQueueListWidth={changeQueueListWidth}
           onZoom={changeZoom}
           onTheme={changeTheme}
+          onLanguage={changeLanguage}
           onCloseToTray={changeCloseToTray}
           onStartMinimized={changeStartMinimized}
           onAutoStart={changeAutoStart}

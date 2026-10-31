@@ -14,7 +14,6 @@
   "topbar.window.minimise": "最小化",
   "topbar.window.maximise": "最大化或还原",
   "topbar.window.close": "关闭窗口",
-
   "toolbar.checkAll": "全选",
   "toolbar.uncheckAll": "全不选",
   "toolbar.checkAllTitle": "全选或取消勾选所有项目（类目勾选跟着项目走）",
@@ -44,7 +43,6 @@
   "toolbar.profile.note.standard": "标准：每个域名最多试 {candidates} 个 IP、并发 {concurrency}。请求量和等待时间居中。",
   "toolbar.profile.note.full": "完整检测：每个域名最多试 {candidates} 个 IP，并发仍不超过 {concurrency}。覆盖最全，但请求最多、等待最久。",
   "toolbar.settings.configPath": "配置文件：{path}",
-
   "settings.nav.tray": "托盘",
   "settings.nav.startup": "开机自启",
   "settings.tray.sub": "窗口关闭行为与启动后最小化",
@@ -109,13 +107,11 @@
   "settings.nav.network": "网络与流量",
   "settings.nav.groupInfo": "信息",
   "settings.nav.about": "关于我们",
-
   "settings.zoom.title": "界面缩放",
   "settings.zoom.sub": "调整整体缩放比例",
   "settings.zoom.paneDesc": "整体缩放比例，影响所有文字与控件。高 DPI 屏幕建议 110%–125%。",
   "settings.zoom.cardTitle": "缩放比例",
   "settings.zoom.cardDesc": "点一档立刻生效并写进配置，只作用在本机这个窗口，不改系统显示比例。如需更精细的缩放，可在操作系统层面调整显示比例。",
-
   "settings.appearance.title": "外观",
   "settings.appearance.sub": "语言与主题",
   "settings.appearance.paneDesc": "主题点一下就换，当场生效，不用重启。语言暂时只有简体中文一种。",
@@ -126,7 +122,6 @@
   "settings.appearance.themeTitle": "主题",
   "settings.appearance.themeDesc": "一共 6 套配色：晨光白、樱花粉、森林绿、深海蓝、午夜蓝、极夜黑。点下方任意卡片立即切换，不用重启。",
   "settings.appearance.themeCurrent": "当前：{name}",
-
   "settings.about.title": "关于我们",
   "settings.about.sub": "应用信息与反馈",
   "settings.about.paneDesc": "应用信息与反馈入口。",
@@ -144,7 +139,6 @@
   "about.row.dataDir": "数据目录",
   "about.row.note": "「构建时间」「源码版本」记的是打包这份程序时用的那笔代码，不是这次打开界面的时间；后端读不到就显示「未提供」，不拿今天的时间顶上。",
   "about.value.none": "未提供",
-
   "theme.grid.label": "配色主题",
   "theme.light.name": "晨光白",
   "theme.light.desc": "清爽浅色 · 日间适用",
@@ -158,7 +152,6 @@
   "theme.midnight.desc": "深蓝沉稳 · 夜间护眼",
   "theme.oled.name": "极夜黑",
   "theme.oled.desc": "纯黑 OLED · 极致省电",
-
   "settings.layout.title": "布局",
   "settings.layout.sub": "调整主界面元素尺寸",
   "settings.layout.paneDesc": "改完立刻保存并反映到界面上。主菜单宽度、任务列表宽度都能按三档预设选，也能拖分隔条取范围内的任意宽度；队列高度可选三档，也能拖面板上方那条横条调整。",
@@ -183,7 +176,6 @@
   "settings.layout.applyFocusTitle": "应用时焦点跟随",
   "settings.layout.applyFocusDesc": "应用队列写到哪个项目，左侧树就展开它所在的类目并选中它；你手动点过左侧树以后，这一轮不再抢焦点。默认关闭。",
   "settings.layout.applyFocusToggle": "开启应用时焦点跟随",
-
   "settings.network.title": "网络与流量",
   "settings.network.sub": "检测范围与网络请求预算",
   "settings.network.paneDesc": "档位和每轮上限改完立刻保存；正在运行的任务继续用它启动时的设置，新排的任务才按新值走。",
@@ -198,7 +190,6 @@
   "settings.network.coverageFull": "本轮上限 {cap} 次，够覆盖一轮全量。",
   "settings.network.coverageShort": "本轮上限 {cap} 次，还差 {gap} 次盖不住一轮全量；接入检测后，超出部分的项目会标为未检测，不会悄悄跳过。",
   "settings.network.note": "这一屏只保存参数：后端还没有发起 DNS/TLS 检测的任务，并发上限也还只是配置里的数字。真实检测接通后由后端统一限制并发和请求量。",
-
   "tree.ariaLabel": "服务目录",
   "tree.search.placeholder": "搜索类目、项目或域名",
   "tree.loading": "正在从后端读取产品目录…",
@@ -213,7 +204,6 @@
   "tree.restore.itemAria": "还原 {name} 到本次应用前的 Hosts 状态",
   "tree.restore.category": "还原「{name}」下所有可还原项到本次应用前的 Hosts 状态",
   "tree.restore.categoryAria": "还原「{name}」下所有可还原项",
-
   "detail.loading": "正在从后端读取…",
   "detail.empty": "点左侧项目看详情。",
   "detail.title": "项目详情",
@@ -234,14 +224,12 @@
   "detail.hint.applied": "后端已经读过系统 Hosts：这个项目的域名都在管理区段里，并且和最后一次成功写入的摘要对得上。",
   "detail.hint.conflict": "区段里的内容和本工具写过的对不上，或者有映射却拿不到可比对的写入摘要。后端停在这里，既不覆盖也不清除，等人工确认。",
   "detail.hint.readFailed": "这次读不到系统 Hosts，所以任何项目都不能报「已替换」或「未替换」——读不到和没替换是两回事。",
-
   "badge.unknown": "未读取",
   "badge.none": "未替换",
   "badge.partial": "部分生效",
   "badge.applied": "已替换",
   "badge.conflict": "冲突",
   "badge.readFailed": "读取失败",
-
   "statusbar.mode": "档位：{name}",
   "statusbar.hostsPath": "Hosts：{path}",
   "statusbar.dns": "DNS：{resolver}（{state}）",
@@ -252,23 +240,18 @@
   "statusbar.sequence": "后端事件序号：{sequence}（重复或过期丢弃 {dropped}）",
   "statusbar.counts": "{categories} 个分类 · {items} 个项目 · 去重后 {hostnames} 个主机名",
   "statusbar.notice": "配置说明：{notice}",
-
   "settings.error": "设置读取失败：{reason}",
   "layout.resizer.title": "拖动调整主菜单宽度",
   "layout.queueListResizer.title": "拖动调整任务列表宽度",
-
   "common.retry": "重试",
-
   "error.boundary.title": "界面出错了",
   "error.boundary.detail": "页面渲染失败：{reason}",
   "error.boundary.action": "重新加载界面",
   "error.unknown": "未知错误",
-
   "hosts.apply": "应用到 Hosts",
   "hosts.restore": "还原此项",
   "hosts.open": "打开 Hosts",
   "hosts.error": "Hosts 操作没能完成：{reason}",
-
   "strategy.label": "{name} 全部加速方法",
   "strategy.hint": "换方法只保存选择，不会马上开始检测；之后的检测都用这里选的方法，检测本身不改系统。",
   "strategy.loading": "正在读这个服务的加速方法…",
@@ -278,7 +261,6 @@
   "strategy.unsaved": "还没选加速方法：现在点检测会被挡下，先在这里选一个。",
   "strategy.stale": "之前保存的方法现在不能用了：{note}",
   "strategy.notice": "方法注册表有情况：{reason}",
-
   "detect.section": "检测",
   "detect.start": "检测",
   "detect.running": "检测中…",
@@ -309,7 +291,6 @@
   "detect.candidate.notStarted": "因总时限未开始",
   "detect.candidate.untested": "预算用完，未检测",
   "detect.candidate.unknown": "状态未知",
-
   "queue.title": "任务队列",
   "queue.summary": "进行中 {active}/{total}",
   "queue.pausedBadge": "已暂停",
@@ -352,5 +333,6 @@
   "queue.status.rolledback": "已回滚",
   "queue.status.restoring": "还原中",
   "queue.status.restored": "已还原",
-  "queue.status.unknown": "状态未知"
+  "queue.status.unknown": "状态未知",
+  "settings.subject.language": "界面语言"
 }

@@ -38,6 +38,7 @@ export type NetworkProfile = 'low' | 'standard' | 'full'
 // 两个焦点跟随开关。
 export type SettingsPatch = {
   networkProfile?: NetworkProfile
+  language?: string
   maxCandidateProbesPerRun?: number
   sidebarWidth?: number
   queueHeight?: number
@@ -68,10 +69,10 @@ export function getSettings(): Promise<Config> {
 export function saveSettings(patch: SettingsPatch, expectedRevision: number, mutationID: string): Promise<Config> {
   const body: Patch = {
     networkProfile: patch.networkProfile ?? null,
+    language: patch.language ?? null,
     maxCandidateProbesPerRun: patch.maxCandidateProbesPerRun ?? null,
     confirmUpdateDownloadOnMetered: null,
     defaultStrategyByScope: null,
-    language: null,
     theme: patch.theme ?? null,
     zoom: patch.zoom ?? null,
     sidebarWidth: patch.sidebarWidth ?? null,

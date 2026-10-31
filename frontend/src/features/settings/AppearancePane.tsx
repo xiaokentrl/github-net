@@ -14,10 +14,12 @@ export function AppearancePane({
   settings,
   save,
   onTheme,
+  onLanguage,
 }: {
   settings: Config
   save: SaveState
   onTheme: (id: string) => void
+  onLanguage: (language: string) => void
 }) {
   // 状态条只认「主题」这一条改动，别屏的提示不往这儿串。
   const themeSave = saveStateFor(save, 'theme')
@@ -38,10 +40,14 @@ export function AppearancePane({
           <Select
             label={t('settings.appearance.langTitle')}
             value={settings.appearance.language}
-            options={[{ value: 'zh-CN', label: t('settings.appearance.lang.zhCN') }]}
-            disabled
-            disabledHint={t('settings.appearance.langOff')}
+            options={[
+              { value: 'zh-CN', label: t('settings.appearance.lang.zhCN') },
+              { value: 'zh-TW', label: t('settings.appearance.lang.zhTW') },
+            ]}
+            disabled={save.kind === 'pending'}
+            onChange={(value) => onLanguage(value)}
           />
+          <InlineStatus kind={save.kind} text={save.text} />
         </div>
       </div>
 
