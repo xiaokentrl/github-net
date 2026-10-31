@@ -239,21 +239,21 @@ export function ItemDetail({
         <div className={styles.cardHead}>
           <h3 className={styles.title}>{t('detail.candidates.title')}</h3>
           <span className={styles.countPill}>{t('detail.candidates.count', { count: visiblePool.length })}</span>
-          {pool.length > 0 ? (
-            <select
-              className={detectStyles.submenuFilter}
-              value={submenuFilter}
-              aria-label={t('pool.filter.aria')}
-              onChange={(event) => setSubmenuFilter(event.target.value)}
-            >
-              <option value="">{t('pool.filter.all')}</option>
-              {submenuOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          ) : null}
+          {/* 筛选常驻（拍板 2026-10-31）：没数据时置灰，让功能看得见；选项来自池里实际出现的二级菜单。 */}
+          <select
+            className={detectStyles.submenuFilter}
+            value={submenuFilter}
+            aria-label={t('pool.filter.aria')}
+            disabled={pool.length === 0}
+            onChange={(event) => setSubmenuFilter(event.target.value)}
+          >
+            <option value="">{t('pool.filter.all')}</option>
+            {submenuOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
           <div className={detectStyles.candidateActions}>
             {/* 只留两颗（拍板 2026-10-31）：「检测」检测当前菜单下全部能测的项目
                 （原「检测全部」，和单项检测重复所以合并），「应用到 Hosts」只管当前项目。
