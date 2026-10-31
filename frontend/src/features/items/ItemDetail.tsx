@@ -1,7 +1,7 @@
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import { formatDateTime } from '../../i18n/formatters'
 import type { CatalogCategory, CatalogItem, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
-import { formatDateTime } from '../../i18n/formatters'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import uiStyles from '../../components/ui/ui.module.css'
@@ -71,7 +71,7 @@ export function ItemDetail({
   detectReady: boolean
   detectError: string
   hostsError: string
-  onDetect: (itemId: string) => void
+  onDetect: (itemId: string, strategyId?: string) => void
   onDetectAll: (items: CatalogItem[]) => void
   onApply: (itemId: string) => void
   onRestore: (itemId: string) => void
@@ -132,7 +132,13 @@ export function ItemDetail({
             {category.name}
             <span className={styles.crumb}> / {item.name}</span>
           </h3>
-          <ServiceStrategySelector scopeId={category.scopeId} scopeName={category.name} onSaved={onStrategySaved} />
+          <ServiceStrategySelector
+            scopeId={category.scopeId}
+            scopeName={category.name}
+            onSaved={onStrategySaved}
+            detecting={detecting}
+            onDetectSelected={(strategyId) => onDetect(item.id, strategyId)}
+          />
           <div className={styles.headActions}>
             <StatusBadge status={status} reason={hosts?.message} />
             {selfDetectable && restorable ? (
@@ -335,37 +341,6 @@ export function ItemDetail({
             )}
           </>
         )}
-      </div>
-
-      {/* 第三张卡：后端给的这份目录与 Hosts 快照的事实，排查时不用翻日志。 */}
-      <div className={styles.card}>
-        <div className={styles.cardHead}>
-          <h3 className={styles.title}>{t('detail.info.title')}</h3>
-        </div>
-        <dl className={styles.fields}>
-          <div>
-            <dt>{t('detail.field.id')}</dt>
-            <dd>{item.id}</dd>
-          </div>
-          <div>
-            <dt>{t('detail.field.category')}</dt>
-            <dd>{category.name}</dd>
-          </div>
-          <div>
-            <dt>{t('detail.field.scope')}</dt>
-            <dd>{category.scopeId}</dd>
-          </div>
-          <div>
-            <dt>{t('detail.field.status')}</dt>
-            <dd>
-              <StatusBadge status={status} reason={hosts?.message} />
-            </dd>
-          </div>
-          <div>
-            <dt>{t('detail.field.readAt')}</dt>
-            <dd>{hosts ? t('detail.readAt.value', { time: formatDateTime(hosts.readAt) }) : t('detail.field.readAt.none')}</dd>
-          </div>
-        </dl>
       </div>
     </div>
   )

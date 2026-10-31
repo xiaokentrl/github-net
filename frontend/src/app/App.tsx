@@ -454,9 +454,10 @@ export function App() {
     [queue.results],
   )
 
-  const startDetect = useCallback((itemId: string) => {
+  // strategyId 给空走范围默认；选择区那颗「检测」按钮会带上下拉选中的方法。
+  const startDetect = useCallback((itemId: string, strategyId?: string) => {
     setDetectError('')
-    detectItems([itemId]).catch((err: unknown) => {
+    detectItems([itemId], strategyId ?? '').catch((err: unknown) => {
       setDetectError(getErrorMessage(err))
     })
   }, [])

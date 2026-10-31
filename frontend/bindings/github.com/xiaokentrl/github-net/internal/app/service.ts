@@ -79,9 +79,12 @@ export function DetectBudget(itemIDs: string[] | null): $CancellablePromise<$mod
  * 
  * 校验全部通过才开始排队：一项不合格就整批拒绝、什么都不排，
  * 避免「测了三个、第四个因为没选方法被拒」这种半截状态。
+ * DetectItems 排一批检测任务。strategyID 给空就按各项目范围的默认方法来
+ * （配置里存的选择 → 出厂默认「全部公共源」，口径和执行器一致）；
+ * 给了就整批用它——选择区那颗「检测」按钮只检测下拉选中的那一个方法。
  */
-export function DetectItems(itemIDs: string[] | null): $CancellablePromise<task$0.Task[] | null> {
-    return $Call.ByID(499348079, itemIDs);
+export function DetectItems(itemIDs: string[] | null, strategyID: string): $CancellablePromise<task$0.Task[] | null> {
+    return $Call.ByID(499348079, itemIDs, strategyID);
 }
 
 /**

@@ -153,8 +153,13 @@ func (s *Service) SelectStrategy(scopeID, strategyID string, expectedRevision in
 
 // strategySnapshot 用一份配置快照拼出某个范围的选择区形状。
 // 读命令和保存成功后都走这里，保证界面拿到的「已保存选择」和落盘的内容是同一份来源。
+// 用户没选过时显示出厂默认（GitHub 范围 → 全部公共源，拍板 2026-10-31）：
+// 检测执行器用的就是这份默认，界面如实显示成选中，而不是假装「还没选」。
 func (s *Service) strategySnapshot(scopeID string, cfg config.Config) StrategySnapshot {
 	savedID := strings.TrimSpace(cfg.Accelerator.DefaultStrategyByScope[scopeID])
+	if savedID == "" {
+		savedID, _ = factoryDefaultStrategy(scopeID)
+	}
 	list := s.strategyTable.list(scopeID)
 	options := make([]StrategyOption, 0, len(list))
 	for _, strategy := range list {
@@ -174,7 +179,8 @@ func (s *Service) strategySnapshot(scopeID string, cfg config.Config) StrategySn
 		ScopeID: scopeID,
 		Options: options,
 		SavedID: savedID,
-		// 空选择不是「坏选择」：没选过的时候可用位给 true，界面只在该重选时才提示。
+		// 空选择不是「坏选择」：没选过（也没有出厂默认）的时候可用位给 true，界面只在该重选时才提示。
+		// 出厂默认非空，可不可用由下面那道核对给。
 		SavedUsable: savedID == "",
 		Revision:    cfg.Revision,
 		Notices:     []string{},

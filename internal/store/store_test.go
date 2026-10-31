@@ -127,19 +127,19 @@ func TestCandidatesOfMissingRound(t *testing.T) {
 	}
 }
 
-// 候选池按「主机名 + IP」去重：同一个 IP 跨轮再写只更新那一行，不堆积；
-// 轮底账则照实每轮一行，两份数据各管各的。
-func TestPoolDedupesAcrossRounds(t *testing.T) {
+// 候选池是缓存语义（拍板 2026-10-31）：新一轮覆盖到的主机名，旧地址先清再写——
+// 池里只有最近一轮的结果；轮底账则照实每轮一行，历史不丢。
+func TestPoolReplacesOnNewRound(t *testing.T) {
 	s := newTestStore(t)
 	first := sampleResult()
 	if err := s.SaveRound("r1", "github", "gitcdn", first); err != nil {
 		t.Fatalf("第一轮落盘失败: %v", err)
 	}
 
-	// 第二轮：同一个 IP 又出现，延迟变了，另有一个新 IP。
+	// 第二轮：老 IP 20.205.243.166 不再出现，换成 4.4.4.4；140.82.121.4 还在、延迟变了。
 	second := sampleResult()
 	second.Candidates[0].LatencyMS = 88
-	second.Candidates = append(second.Candidates,
+	second.Candidates = append(second.Candidates[:1],
 		accelerator.Candidate{ID: "c4", Hostname: "github.com", IP: "4.4.4.4", Status: accelerator.StatusAvailable})
 	if err := s.SaveRound("r2", "github", "all-sources", second); err != nil {
 		t.Fatalf("第二轮落盘失败: %v", err)
@@ -149,59 +149,80 @@ func TestPoolDedupesAcrossRounds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读候选池失败: %v", err)
 	}
-	// 140.82.121.4 / 2606:...（v6）/ 20.205.243.166 / 4.4.4.4，重复的 140.82.121.4 只有一行。
-	if len(pool) != 4 {
-		t.Fatalf("候选池该是 4 行（去重后），实际 %d：%v", len(pool), pool)
+	// 只剩这一轮的 140.82.121.4 和 4.4.4.4；上一轮的 20.205.243.166 和 v6 已被清掉。
+	if len(pool) != 2 {
+		t.Fatalf("缓存语义下池该只有本轮 2 行，实际 %d：%v", len(pool), pool)
 	}
-	var updated *PoolRow
-	for i := range pool {
-		if pool[i].IP == "140.82.121.4" {
-			updated = &pool[i]
-		}
+	if pool[0].IP != "140.82.121.4" || pool[0].LatencyMS != 88 || pool[0].SourceID != "all-sources" {
+		t.Errorf("留存的行该带本轮的结果，实际 %+v", pool[0])
 	}
-	if updated == nil || updated.LatencyMS != 88 || updated.SourceID != "all-sources" {
-		t.Errorf("重复 IP 该被第二轮的结果更新，实际 %+v", updated)
-	}
-	if updated.UpdatedAt != "2026-10-31T08:00:05Z" {
-		t.Errorf("更新时间该取这轮收尾时刻，实际 %q", updated.UpdatedAt)
+	if pool[1].IP != "4.4.4.4" {
+		t.Errorf("新地址该在池里，实际 %+v", pool[1])
 	}
 
-	// 池按主机名过滤：只有 github.com 的查询不给别的域名的行。
-	for _, p := range pool {
-		if p.Hostname != "github.com" {
-			t.Fatalf("按主机名过滤后不该混进其他域名：%+v", p)
-		}
-	}
-
-	// 底账不受池的去重影响：两轮各自的候选行都在。
+	// 底账不受影响：两轮各自的候选行都在，历史照实记。
 	rounds, _ := s.Rounds(0)
 	if len(rounds) != 2 {
 		t.Fatalf("底账该有 2 轮，实际 %d", len(rounds))
 	}
-	all, err := s.Pool("")
-	if err != nil || len(all) != 4 {
-		t.Fatalf("不过滤的池该是同 4 行（err=%v）", err)
+	first1, err := s.Candidates(rounds[1].ID)
+	if err != nil || len(first1) != 3 {
+		t.Fatalf("第一轮底账该还有 3 行（err=%v）", err)
 	}
 }
 
-// 池里的状态是最后一次探测的结论：同一 IP 从可用变超时，池里要跟着变。
-func TestPoolTracksLatestStatus(t *testing.T) {
+// 这一轮覆盖到、但没查出候选的主机名，旧缓存同样清掉：检测过就是最新事实。
+func TestPoolClearsHostnamesWithoutCandidates(t *testing.T) {
 	s := newTestStore(t)
-	good := sampleResult()
-	if err := s.SaveRound("r1", "github", "gitcdn", good); err != nil {
+	first := sampleResult()
+	if err := s.SaveRound("r1", "github", "gitcdn", first); err != nil {
 		t.Fatal(err)
 	}
+	empty := sampleResult()
+	empty.Candidates = nil
+	empty.Hostnames = []accelerator.HostOutcome{{Hostname: "github.com"}}
+	if err := s.SaveRound("r2", "github", "gitcdn", empty); err != nil {
+		t.Fatal(err)
+	}
+	pool, err := s.Pool("github.com")
+	if err != nil || len(pool) != 0 {
+		t.Fatalf("没查出候选的域名旧缓存该被清空，实际 %d 行（err=%v）", len(pool), err)
+	}
+}
+
+// 没被这一轮覆盖到的主机名不受影响：清的是「对应」的旧 IP，不是全库。
+func TestPoolKeepsUntouchedHostnames(t *testing.T) {
+	s := newTestStore(t)
+	other := sampleResult()
+	other.ItemID = "gh-cdn"
+	other.Hostnames = []accelerator.HostOutcome{{Hostname: "github.githubassets.com"}}
+	other.Candidates = []accelerator.Candidate{{ID: "x1", Hostname: "github.githubassets.com", IP: "5.5.5.5", Status: accelerator.StatusAvailable}}
+	if err := s.SaveRound("r0", "github", "gitcdn", other); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveRound("r1", "github", "gitcdn", sampleResult()); err != nil {
+		t.Fatal(err)
+	}
+	pool, err := s.Pool("github.githubassets.com")
+	if err != nil || len(pool) != 1 || pool[0].IP != "5.5.5.5" {
+		t.Fatalf("别的域名的缓存不该被波及，实际 %d 行（err=%v）", len(pool), err)
+	}
+}
+
+// 池里的状态是这一轮探测的结论：写进去什么就是什么。
+func TestPoolTracksLatestStatus(t *testing.T) {
+	s := newTestStore(t)
 	bad := sampleResult()
 	for i := range bad.Candidates {
 		bad.Candidates[i].Status = accelerator.StatusTimeout
 	}
-	if err := s.SaveRound("r2", "github", "gitcdn", bad); err != nil {
+	if err := s.SaveRound("r1", "github", "gitcdn", bad); err != nil {
 		t.Fatal(err)
 	}
 	pool, _ := s.Pool("github.com")
 	for _, p := range pool {
 		if p.Status != string(accelerator.StatusTimeout) {
-			t.Errorf("%s 最后一次是超时，池里该记 timeout，实际 %s", p.IP, p.Status)
+			t.Errorf("%s 这轮是超时，池里该记 timeout，实际 %s", p.IP, p.Status)
 		}
 	}
 }

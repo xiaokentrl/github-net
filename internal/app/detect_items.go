@@ -22,7 +22,10 @@ import (
 //
 // 校验全部通过才开始排队：一项不合格就整批拒绝、什么都不排，
 // 避免「测了三个、第四个因为没选方法被拒」这种半截状态。
-func (s *Service) DetectItems(itemIDs []string) ([]task.Task, error) {
+// DetectItems 排一批检测任务。strategyID 给空就按各项目范围的默认方法来
+// （配置里存的选择 → 出厂默认「全部公共源」，口径和执行器一致）；
+// 给了就整批用它——选择区那颗「检测」按钮只检测下拉选中的那一个方法。
+func (s *Service) DetectItems(itemIDs []string, strategyID string) ([]task.Task, error) {
 	if s.productCatalogErr != nil {
 		return nil, ToPublicError(s.productCatalogErr)
 	}
@@ -44,12 +47,19 @@ func (s *Service) DetectItems(itemIDs []string) ([]task.Task, error) {
 		return nil, NewError(CodeInvalidItemID, "没有要检测的项目", nil)
 	}
 
-	// 先整批校验。每个项目校两件事：目录里有它，它所属的范围有可用的默认方法。
+	// 先整批校验。每个项目校两件事：目录里有它，它所属的范围有可用的方法。
 	// 方法的读取和执行器判定链同源（同一个配置快照、同一张注册表），
 	// 这里过了、执行时再拒只剩「配置刚被改掉」这一种可能，那时任务会以失败落进队列被看见。
 	cfg, err := s.settings.Snapshot()
 	if err != nil {
 		return nil, ToPublicError(err)
+	}
+	pinned := strings.TrimSpace(strategyID)
+	if pinned != "" {
+		if _, ok := s.strategyTable.lookup(pinned); !ok {
+			return nil, NewError(CodeNoStrategySelected,
+				"要检测的方法已经不在注册表里，换一个方法再检测", nil)
+		}
 	}
 	batch := make([]detectCandidate, 0, len(ids))
 	for _, id := range ids {
@@ -57,12 +67,18 @@ func (s *Service) DetectItems(itemIDs []string) ([]task.Task, error) {
 		if !ok {
 			return nil, NewError(CodeInvalidItemID, "产品目录里没有这个项目，刷新界面后再试", nil)
 		}
-		strategyID := strings.TrimSpace(cfg.Accelerator.DefaultStrategyByScope[scopeID])
-		if strategyID == "" {
+		used := pinned
+		if used == "" {
+			used = strings.TrimSpace(cfg.Accelerator.DefaultStrategyByScope[scopeID])
+		}
+		if used == "" {
+			used, _ = factoryDefaultStrategy(scopeID)
+		}
+		if used == "" {
 			return nil, NewError(CodeNoStrategySelected,
 				"这个项目所在的服务还没选检测方法，先在详情顶部的加速方法区选一个", nil)
 		}
-		strategy, ok := s.strategyTable.lookup(strategyID)
+		strategy, ok := s.strategyTable.lookup(used)
 		if !ok {
 			return nil, NewError(CodeNoStrategySelected,
 				"之前选的那个检测方法已经不在注册表里，重新选一个方法再检测", nil)
@@ -71,7 +87,7 @@ func (s *Service) DetectItems(itemIDs []string) ([]task.Task, error) {
 			return nil, NewError(CodeNoStrategySelected,
 				"选的方法不适用于这个项目所在的服务，换一个方法再检测", nil)
 		}
-		batch = append(batch, detectCandidate{id: id, name: item, scopeID: scopeID})
+		batch = append(batch, detectCandidate{id: id, name: item, scopeID: scopeID, strategyID: used})
 	}
 
 	// 一次入口调用就是一轮：这一批项目共享一份候选探测预算。
@@ -84,7 +100,7 @@ func (s *Service) DetectItems(itemIDs []string) ([]task.Task, error) {
 	}
 	tasks := make([]task.Task, 0, len(batch))
 	for _, p := range batch {
-		t, err := s.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: p.id, Name: p.name, ScopeID: p.scopeID, RoundID: roundID})
+		t, err := s.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: p.id, Name: p.name, ScopeID: p.scopeID, StrategyID: p.strategyID, RoundID: roundID})
 		if err != nil {
 			// 排到一半失败只剩「应用正在退出」这一种：队列关了。前面已排进去的是有效任务，
 			// 会随队列关闭被取消，不静默装作整批成功。
@@ -133,9 +149,10 @@ func (s *Service) findItem(itemID string) (name string, scopeID string, ok bool)
 
 // detectCandidate 是入口校验后待排队的项目。
 type detectCandidate struct {
-	id      string
-	name    string
-	scopeID string
+	id         string
+	name       string
+	scopeID    string
+	strategyID string
 }
 
 // detectRoundBudget 算这一轮共享的候选探测预算。

@@ -1,6 +1,7 @@
 package strategies
 
 import (
+	"slices"
 	"context"
 	"strings"
 	"testing"
@@ -196,15 +197,15 @@ func TestErrorsSliceIsCopy(t *testing.T) {
 	}
 }
 
-// 真实注册表的基线：DNS 方法覆盖全部范围，四个公共源方法只覆盖 github 范围，
+// 真实注册表的基线：DNS 方法覆盖除 github 外的全部范围，五个 GitHub 方法（三源 + 全部 + 已有储存）只覆盖 github，
 // 注册零错误、范围和产品目录完全对齐。这一条同时也是 init 的自检——注册静默失败会在这里暴露。
 func TestGlobalRegistryBaseline(t *testing.T) {
 	if errs := Errors(); len(errs) != 0 {
 		t.Fatalf("init 注册有错误：%v", errs)
 	}
 	all := All()
-	if len(all) != 5 {
-		t.Fatalf("应有 5 个方法（DNS + 三源 + 全部），实得 %d：%v", len(all), strategyIDs(all))
+	if len(all) != 6 {
+		t.Fatalf("应有 6 个方法（DNS + 三源 + 全部 + 已有储存），实得 %d：%v", len(all), strategyIDs(all))
 	}
 	s, ok := Get(StrategyIDDNSHosts)
 	if !ok {
@@ -225,11 +226,15 @@ func TestGlobalRegistryBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	scopes := cat.ScopeIDs()
-	if len(s.ScopeIDs) != len(scopes) {
-		t.Fatalf("适用范围数 %d，目录范围数 %d", len(s.ScopeIDs), len(scopes))
+	// DNS 方法声明的是「除 github 外的全部范围」：GitHub 的候选来自公共源和本机储存，不走 DNS。
+	if len(s.ScopeIDs) != len(scopes)-1 {
+		t.Fatalf("适用范围数 %d，应等于目录范围数 %d 减去 github", len(s.ScopeIDs), len(scopes))
 	}
-	if len(s.ScopeIDs) != 11 {
-		t.Fatalf("目录应有 11 个范围，实得 %d", len(s.ScopeIDs))
+	if len(scopes) != 11 {
+		t.Fatalf("目录应有 11 个范围，实得 %d", len(scopes))
+	}
+	if slices.Contains(s.ScopeIDs, "github") {
+		t.Fatalf("DNS 方法不该再声明 github 范围")
 	}
 	for _, id := range s.ScopeIDs {
 		if !scopes[id] {
@@ -239,9 +244,15 @@ func TestGlobalRegistryBaseline(t *testing.T) {
 	if errs := UnknownScopes(scopes); len(errs) != 0 {
 		t.Fatalf("范围和目录对不上：%v", errs)
 	}
-	// github 范围：DNS + 三源 + 全部，共 5 个；别的范围（如 steam）只有 DNS。
+	// github 范围：三源 + 全部 + 已有储存，共 5 个（DNS 解析法已按拍板移出 GitHub）；
+	// 别的范围（如 steam）只有 DNS。
 	if got := ForScope("github"); len(got) != 5 {
 		t.Fatalf("github 范围应有 5 个方法，实得 %v", strategyIDs(got))
+	}
+	for _, s := range ForScope("github") {
+		if s.ID == StrategyIDDNSHosts {
+			t.Fatalf("GitHub 范围不该再列 DNS 解析法")
+		}
 	}
 	if got := ForScope("steam"); len(got) != 1 || got[0].ID != StrategyIDDNSHosts {
 		t.Fatalf("steam 范围该只有 DNS 方法，实得 %v", strategyIDs(got))

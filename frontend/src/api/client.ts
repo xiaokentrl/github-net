@@ -104,10 +104,11 @@ export function selectStrategy(scopeId: string, strategyId: string, expectedRevi
 
 // ===== 检测与队列 =====
 
-// 发起检测：后端整批校验（项目在目录里、范围已选方法、方法可用），不合格整批拒绝。
+// 发起检测：后端整批校验（项目在目录里、范围有可用方法、方法适用），不合格整批拒绝。
+// strategyId 给空按范围默认（配置里存的 → 出厂默认「全部公共源」）；给了就整批用它。
 // 已在队列里的项目返回同一条任务，不会重复排队。
-export function detectItems(itemIds: string[]): Promise<Task[] | null> {
-  return DetectItems(itemIds)
+export function detectItems(itemIds: string[], strategyId = ''): Promise<Task[] | null> {
+  return DetectItems(itemIds, strategyId)
 }
 
 // 取一个项目最近一轮的检测结论；没测过时后端给空形状，不是错误。

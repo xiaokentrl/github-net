@@ -33,13 +33,13 @@ func TestDetectItemsRejectsEmptyAndUnknownIDs(t *testing.T) {
 	}, map[string]strategies.Strategy{"live.one": fakeStrategy("live.one", "还在的方法", detectScopeGitHub)})
 	svc := newDetectEntryService(t, table, pendingExecutor{})
 
-	if _, err := svc.DetectItems([]string{"  ", ""}); codeOf(t, err) != CodeInvalidItemID {
+	if _, err := svc.DetectItems([]string{"  ", ""}, ""); codeOf(t, err) != CodeInvalidItemID {
 		t.Fatalf("空清单该被挡下（invalid_item_id），实际 %v", err)
 	}
-	if _, err := svc.DetectItems(nil); codeOf(t, err) != CodeInvalidItemID {
+	if _, err := svc.DetectItems(nil, ""); codeOf(t, err) != CodeInvalidItemID {
 		t.Fatalf("nil 清单该被挡下，实际 %v", err)
 	}
-	if _, err := svc.DetectItems([]string{"no-such-item"}); codeOf(t, err) != CodeInvalidItemID {
+	if _, err := svc.DetectItems([]string{"no-such-item"}, ""); codeOf(t, err) != CodeInvalidItemID {
 		t.Fatalf("目录里没有的项目该被挡下，实际 %v", err)
 	}
 	if got := len(svc.GetTasks().Tasks); got != 0 {
@@ -53,7 +53,7 @@ func TestDetectItemsRejectsWithoutStrategySelected(t *testing.T) {
 	}, map[string]strategies.Strategy{"live.one": fakeStrategy("live.one", "还在的方法", detectScopeGitHub)})
 	svc := newDetectEntryService(t, table, pendingExecutor{})
 
-	if _, err := svc.DetectItems([]string{"api"}); codeOf(t, err) != CodeNoStrategySelected {
+	if _, err := svc.DetectItems([]string{"api"}, ""); codeOf(t, err) != CodeNoStrategySelected {
 		t.Fatalf("范围没选方法该在入口被挡下（no_strategy_selected），实际 %v", err)
 	}
 	if got := len(svc.GetTasks().Tasks); got != 0 {
@@ -72,7 +72,7 @@ func TestDetectItemsRejectsWhenMethodMissingOrNotApplies(t *testing.T) {
 
 	// 方法从注册表里消失（配置里还留着 ID）：入口照挡，不能拿着一个点不到的 ID 去排队。
 	svc.strategyTable = strategyTable{}
-	if _, err := svc.DetectItems([]string{"api"}); codeOf(t, err) != CodeNoStrategySelected {
+	if _, err := svc.DetectItems([]string{"api"}, ""); codeOf(t, err) != CodeNoStrategySelected {
 		t.Fatalf("方法已不在注册表该被挡下，实际 %v", err)
 	}
 
@@ -82,7 +82,7 @@ func TestDetectItemsRejectsWhenMethodMissingOrNotApplies(t *testing.T) {
 			return fakeStrategy("live.one", "还在的方法", detectScopeSteam), true
 		},
 	}
-	if _, err := svc.DetectItems([]string{"api"}); codeOf(t, err) != CodeNoStrategySelected {
+	if _, err := svc.DetectItems([]string{"api"}, ""); codeOf(t, err) != CodeNoStrategySelected {
 		t.Fatalf("方法不适用该范围该被挡下，实际 %v", err)
 	}
 	if got := len(svc.GetTasks().Tasks); got != 0 {
@@ -100,7 +100,7 @@ func TestDetectItemsEnqueuesDedupesAndRejectsMixedBatch(t *testing.T) {
 		t.Fatalf("先选上方法: %v", err)
 	}
 
-	tasks, err := svc.DetectItems([]string{"api"})
+	tasks, err := svc.DetectItems([]string{"api"}, "")
 	if err != nil {
 		t.Fatalf("选好方法后检测该排进队列: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestDetectItemsEnqueuesDedupesAndRejectsMixedBatch(t *testing.T) {
 	}
 
 	// 同一项目还在队列里时再点检测：拿到同一条任务，不是两条、也不是报错。
-	again, err := svc.DetectItems([]string{"api"})
+	again, err := svc.DetectItems([]string{"api"}, "")
 	if err != nil {
 		t.Fatalf("重复点检测不该报错: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestDetectItemsEnqueuesDedupesAndRejectsMixedBatch(t *testing.T) {
 	}
 
 	// 整批校验：坏项目排在前，好项目也不会被排队；整批拒绝、什么都不留。
-	if _, err := svc.DetectItems([]string{"no-such", "steam"}); codeOf(t, err) != CodeInvalidItemID {
+	if _, err := svc.DetectItems([]string{"no-such", "steam"}, ""); codeOf(t, err) != CodeInvalidItemID {
 		t.Fatalf("混入未知项目该整批拒绝，实际 %v", err)
 	}
 }

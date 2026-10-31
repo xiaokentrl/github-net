@@ -85,7 +85,7 @@ func TestDetectItemsAssignsSharedRoundID(t *testing.T) {
 	}
 	svc.rounds = newRoundBudgets()
 
-	tasks, err := svc.DetectItems([]string{"api", "bare"})
+	tasks, err := svc.DetectItems([]string{"api", "bare"}, "")
 	if err != nil {
 		t.Fatalf("批量检测: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestDetectItemsRoundComesFromQueue(t *testing.T) {
 	}
 	svc.rounds = newRoundBudgets()
 
-	tasks, err := svc.DetectItems([]string{"api", "bare"})
+	tasks, err := svc.DetectItems([]string{"api", "bare"}, "")
 	if err != nil {
 		t.Fatalf("批量检测: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestDetectSingleItemOpensItsOwnRound(t *testing.T) {
 	if _, err := svc.SelectStrategy(detectScopeGitHub, "live.one", 0, "m1"); err != nil {
 		t.Fatalf("先选方法: %v", err)
 	}
-	tasks, err := svc.DetectItems([]string{"api"})
+	tasks, err := svc.DetectItems([]string{"api"}, "")
 	if err != nil {
 		t.Fatalf("单项检测: %v", err)
 	}

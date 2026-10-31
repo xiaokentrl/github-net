@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/xiaokentrl/github-net/internal/accelerator"
@@ -161,6 +162,19 @@ func (s *Store) SaveRound(taskRound, scopeID, strategyID string, r *accelerator.
 	roundRow, err := res.LastInsertId()
 	if err != nil {
 		return fmt.Errorf("store: 拿不到轮行号: %w", err)
+	}
+	// 缓存语义（拍板 2026-10-31）：这一轮覆盖到的主机名，池里的旧地址先清掉再写新的——
+	// 池子回答的是「最近一轮这些域名查到了什么」，不是历史累积；检测过但没查到的域名旧地址也清，
+	// 免得界面上留一份「上上轮的老底」冒充现状。
+	if len(r.Hostnames) > 0 {
+		ph := strings.TrimSuffix(strings.Repeat("?,", len(r.Hostnames)), ",")
+		args := make([]any, 0, len(r.Hostnames))
+		for _, h := range r.Hostnames {
+			args = append(args, h.Hostname)
+		}
+		if _, err := tx.Exec(`DELETE FROM candidate_ips WHERE hostname IN (`+ph+`)`, args...); err != nil {
+			return fmt.Errorf("store: 清旧缓存失败: %w", err)
+		}
 	}
 	for _, c := range r.Candidates {
 		if _, err := tx.Exec(

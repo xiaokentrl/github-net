@@ -147,8 +147,11 @@ func TestGetStrategiesListsApplicableMethodsAndSavedChoice(t *testing.T) {
 		if !opt.CanLookup || !opt.KeepsTLSName || opt.SystemDNS != wantSystemDNS {
 			t.Errorf("方法 %s 的能力位没摊平：%+v", opt.ID, opt)
 		}
-		if opt.Selected {
-			t.Errorf("还没保存过选择，%s 不该被标成已选", opt.ID)
+		// 没保存过选择时，出厂默认（GitHub 范围 → 全部公共源）要显示成已选；
+		// 别的范围没有出厂默认，才该什么都不选。
+		wantSelected := snap.SavedID != ""
+		if opt.Selected != (wantSelected && opt.ID == snap.SavedID) {
+			t.Errorf("方法 %s 的选中标记不对（SavedID=%q）：%+v", opt.ID, snap.SavedID, opt)
 		}
 	}
 	ids := optionIDs(snap)
@@ -157,7 +160,7 @@ func TestGetStrategiesListsApplicableMethodsAndSavedChoice(t *testing.T) {
 	if fmt.Sprint(ids) != fmt.Sprint(sorted) {
 		t.Errorf("列表不是按方法 ID 排序，界面没法稳定渲染：%v", ids)
 	}
-	if !snap.SavedUsable || snap.SavedID != "" || snap.SavedNote != "" {
+	if !snap.SavedUsable || snap.SavedNote != "" {
 		t.Errorf("没选过方法不该算坏选择：%+v", snap)
 	}
 	if len(snap.Notices) != 0 {

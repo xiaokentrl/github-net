@@ -36,11 +36,19 @@ type Resolver interface {
 var systemResolver Resolver = net.DefaultResolver
 
 func init() {
-	scopes, err := catalogScopeIDs()
+	allScopes, err := catalogScopeIDs()
 	if err != nil {
 		// 目录读不出来就没有「适用范围」可声明，宁可不注册，也不写一份范围不明的方法。
 		recordInitError(fmt.Errorf("加速方法 %s 未注册：产品目录读不出来，%w", StrategyIDDNSHosts, err))
 		return
+	}
+	// GitHub 范围不收 DNS 解析法（拍板 2026-10-31）：GitHub 的候选来自公共 hosts 源和本机储存，
+	// 下拉里不再出现「自动查找可用 IP」；其他范围照旧。
+	scopes := make([]string, 0, len(allScopes))
+	for _, id := range allScopes {
+		if id != scopeGitHub {
+			scopes = append(scopes, id)
+		}
 	}
 	if err := Register(Strategy{
 		ID:       StrategyIDDNSHosts,

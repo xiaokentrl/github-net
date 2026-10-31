@@ -30,6 +30,29 @@
   font-size: 11.5px;
 }
 
+/* 下拉右边的「检测」：只检测下拉选中的方法。矮一颗、贴着选择框，和面板同底色系。 */
+.detectBtn {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--ctl);
+  color: var(--text);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.detectBtn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.detectBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .note {
   margin: 0;
   color: var(--text-3);

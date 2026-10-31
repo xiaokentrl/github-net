@@ -106,6 +106,23 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 			candDB = db
 		}
 	}
+	// 「使用已有储存」方法从候选库读可用地址（拍板 2026-10-31）。库没开成就不接：
+	// 那个方法被选中时会明确报「候选库还没接上」，不会静默给空。
+	if candDB != nil {
+		strategies.StoredCandidates = func(hostname string) []strategies.Candidate {
+			rows, err := candDB.Pool(hosts.NormalizeHostname(hostname))
+			if err != nil {
+				return nil
+			}
+			out := make([]strategies.Candidate, 0, len(rows))
+			for _, r := range rows {
+				if r.Status == string(accelerator.StatusAvailable) {
+					out = append(out, strategies.Candidate{IP: r.IP, IPv6: r.IPv6})
+				}
+			}
+			return out
+		}
+	}
 	s := &Service{
 		appName:        appName,
 		version:        version,
