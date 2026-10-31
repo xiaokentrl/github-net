@@ -1,0 +1,126 @@
+/* 托盘胶囊与弹出菜单，照原型 .tray-pill/.tray-menu（第 736–749 行）：
+   胶囊半透明、悬停变实；圆点跑任务时脉冲；菜单里主题色点一行、下面两个动作。 */
+.root {
+  position: relative;
+  flex: none;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--ctl);
+  opacity: 0.55;
+  font-size: 11.5px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.2s ease;
+}
+
+.pill:hover,
+.pill[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex: none;
+}
+
+.running {
+  animation: pillPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pillPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 56;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--ctl);
+  box-shadow: var(--shadow);
+}
+
+.dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 2px 0;
+  border: 1px solid var(--band);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.themeDot {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  flex: none;
+  border-radius: 50%;
+  background: var(--dot-accent);
+  border: 2px solid var(--dot-bg);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+  transition: transform 0.13s ease, box-shadow 0.13s ease;
+}
+
+.themeDot:hover {
+  transform: scale(1.22);
+}
+
+.themeDot.active {
+  box-shadow: 0 0 0 2px var(--primary);
+  transform: scale(1.12);
+}
+
+.sep {
+  height: 1px;
+  background: var(--band);
+  margin: 4px 0;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+
+.item:hover {
+  background: var(--hov);
+  color: var(--text);
+}

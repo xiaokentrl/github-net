@@ -3,6 +3,7 @@ import { Window } from '@wailsio/runtime'
 import { HostsAccess } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { AppStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
+import { TrayPill } from '../../features/tray/TrayPill'
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, useSidebarResize } from './useSidebarResize'
 import styles from './AppShell.module.css'
 
@@ -46,6 +47,9 @@ export function AppShell({
   statusbar,
   updateLatest,
   onOpenUpdate,
+  theme,
+  running,
+  onTheme,
 }: {
   appName: string
   status: AppStatus | null
@@ -62,6 +66,9 @@ export function AppShell({
   queue: ReactNode
   statusbar: ReactNode
   updateLatest: string
+  theme: string
+  running: boolean
+  onTheme: (id: string) => void
   onOpenUpdate: () => void
 }) {
   const resize = useSidebarResize(sidebarWidth, onSidebarResize)
@@ -107,6 +114,8 @@ export function AppShell({
         </span>
         <h1 className={styles.title}>{appName}</h1>
         <span className={styles.spacer} />
+        {/* 标题栏上的托盘胶囊（原型 #trayPill 同款）：主题色点快切 + 最小化到托盘 + 退出。 */}
+        <TrayPill appName={appName} theme={theme} running={running} onTheme={onTheme} />
         {statusLoad === 'loading' && <span className={styles.perm}>{t('detail.loading')}</span>}
         {statusLoad === 'error' && (
           <span className={`${styles.perm} ${styles.warnPerm}`}>

@@ -13,7 +13,7 @@ func mapping(ip string, hosts ...string) Mapping {
 func TestApplyFirstWriteAppendsBlockAndSnapshots(t *testing.T) {
 	content, meta := mustApply(t, Recovery{}, userTop, "item-a", mapping("1.1.1.1", "b.example", "a.example"))
 
-	want := userTop + block("1.1.1.1 a.example b.example")
+	want := userTop + "\n" + block("1.1.1.1 a.example b.example")
 	if content != want {
 		t.Errorf("写出来的全文不对:\n得到 %q\n期望 %q", content, want)
 	}

@@ -668,6 +668,9 @@ export function App() {
           />
         }
         updateLatest={updateLatest}
+        theme={settings?.appearance.theme ?? 'light'}
+        running={runningTask !== null}
+        onTheme={changeTheme}
         onOpenUpdate={() => openSettings('updates')}
         statusbar={
           <StatusBar

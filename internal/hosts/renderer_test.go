@@ -31,7 +31,7 @@ func TestRenderAppendsWhenNoBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := content + block("140.82.113.4 github.com")
+	want := content + "\n" + block("140.82.113.4 github.com")
 	if got != want {
 		t.Errorf("追加结果不对:\n得到 %q\n期望 %q", got, want)
 	}
@@ -277,7 +277,7 @@ func TestRenderTerminatesUnterminatedLastLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "127.0.0.1 localhost\n" + block("1.1.1.1 x.example")
+	want := "127.0.0.1 localhost\n\n" + block("1.1.1.1 x.example")
 	if got != want {
 		t.Errorf("得到 %q，期望 %q", got, want)
 	}

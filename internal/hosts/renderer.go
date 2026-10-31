@@ -22,7 +22,7 @@ var (
 //
 // 三条固定行为（口径来自技术规划第 6 节与结构规划的 Hosts 写入契约）：
 //  1. 区段外的每一行原样保留：顺序、大小写、注释、行尾风格都不动。
-//  2. 原文件没有标记时只在末尾追加区段，不插空行——插入和移除互为逆操作，测试钉得住。
+//  2. 原文件没有标记时在末尾追加区段，先空一行与原有内容分隔（空行/文件为空时不重复加）。
 //  3. 现有区段判读不了就整体拒绝（ErrConflict），不做「先清掉再写」这种猜测式修复。
 func Render(content string, desired []Record) (string, error) {
 	block := Parse(content)
@@ -43,13 +43,25 @@ func Render(content string, desired []Record) (string, error) {
 		eol = "\r\n"
 	}
 	src := splitLines(content)
-	out := make([]string, 0, len(src)+len(lines))
+	// 先空一行再接区段（拍板 2026-10-31）：区段和用户自己写的行之间留一道空白，
+	// 一眼能看出哪里是工具的地盘。只在「新追加区段」时加：已有区段的原位更新不动周围空行。
+	separate := !block.Present && len(src) > 0 && strings.TrimSpace(src[len(src)-1]) != ""
+	out := make([]string, 0, len(src)+len(lines)+1)
 	if block.Present {
-		out = append(out, src[:block.beginAt]...)
+		end := block.beginAt
+		// 整段撤掉时，把当初插入的那道空行一并收走：我们只在「非空行」后面加过空行，
+		// 所以「空行紧贴区段、它上面还是非空行」的那一道就是工具加的；用户自己的连续空行不动。
+		if len(lines) == 0 && end > 1 && strings.TrimSpace(src[end-1]) == "" && strings.TrimSpace(src[end-2]) != "" {
+			end--
+		}
+		out = append(out, src[:end]...)
 		out = append(out, lines...)
 		out = append(out, src[block.endAt+1:]...)
 	} else {
 		out = append(out, src...)
+		if separate {
+			out = append(out, "")
+		}
 		out = append(out, lines...)
 	}
 	if len(out) == 0 {
