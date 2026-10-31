@@ -33,6 +33,18 @@
   opacity: 1;
 }
 
+/* 当前主题名：放在最左，比应用名淡一档；后面一根细分隔线，再接运行圆点和应用名。 */
+.theme {
+  color: var(--text-3);
+}
+
+.sep {
+  width: 1px;
+  height: 12px;
+  background: var(--border-strong);
+  flex: none;
+}
+
 .dot {
   width: 8px;
   height: 8px;

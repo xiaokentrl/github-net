@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Application, Window } from '@wailsio/runtime'
-import { THEMES } from '../theme/themes'
+import { THEMES, themeName } from '../theme/themes'
 import { t } from '../../i18n'
 import styles from './TrayPill.module.css'
 
@@ -44,6 +44,8 @@ export function TrayPill({
         title={t('tray.pill.hint')}
         onClick={() => setOpen((v) => !v)}
       >
+        <span className={styles.theme}>{themeName(theme)}</span>
+        <span className={styles.sep} aria-hidden="true" />
         <span className={`${styles.dot} ${running ? styles.running : ''}`} aria-hidden="true" />
         <span className={styles.label}>{appName}</span>
       </button>
