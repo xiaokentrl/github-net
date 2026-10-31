@@ -56,6 +56,13 @@ export function App() {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [selectedId, setSelectedId] = useState('')
 
+  // 右侧详情默认常显（拍板 2026-10-31）：拿到目录后还没选过，就选中第一个子菜单。
+  useEffect(() => {
+    if (catalogLoad !== 'ready' || selectedId !== '') return
+    const first = snapshot?.categories?.[0]?.items?.[0]
+    if (first) setSelectedId(first.id)
+  }, [catalogLoad, snapshot, selectedId])
+
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogPane, setDialogPane] = useState<SettingsPaneID>('layout')
 
