@@ -3,7 +3,7 @@
 // internal/config/layout_bounds_parity_test.go；抄错的后果是拖完被后端判非法、界面回读旧值（看着像「拖不动」）。
 export const QUEUE_HEIGHT_MIN = 120
 export const QUEUE_HEIGHT_STATIC_MAX = 2000
-export const QUEUE_HEIGHT_DEFAULT = 252
+export const QUEUE_HEIGHT_DEFAULT = 180
 
 // 界面上的天花板按窗口高度现算（原型 calcQueueMaxH）：队列最多占到窗口的 70%，
 // 而且上面那一整栏（顶栏+工具栏+详情）至少要留 200px，否则详情被压没。

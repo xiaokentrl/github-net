@@ -40,6 +40,9 @@ const (
 	SidebarWidthMax           = 600
 	QueueHeightMin            = 120
 	QueueHeightMax            = 2000
+	// QueueHeightSmall 是队列高度「小」档的值，也是出厂默认（拍板 2026-10-31）；
+	// 前端 LayoutPane 的三档预设里「小」必须同值，相等由 layout_bounds_parity_test 钉住。
+	QueueHeightSmall          = 180
 	// 任务列表列宽：下限 150 是「轮名加计数还看得清」的实测值，上限 1200 只是存储兜底，
 	// 界面上真正的上限跟着队列区宽度走（最多占 45%，右边明细必须留过半），两边同值由门钉住。
 	QueueListWidthMin = 150
@@ -154,7 +157,8 @@ func Default() Config {
 		},
 		Accelerator: AcceleratorConfig{DefaultStrategyByScope: map[string]string{}},
 		Appearance:  AppearanceConfig{Language: "zh-CN", Theme: "light", Zoom: 1},
-		Layout:      LayoutConfig{SidebarWidth: 240, QueueHeight: 252, QueueListWidth: 220},
+		// 队列高度默认取「小」档（拍板 2026-10-31）：主区先让给项目树，要看队列再拖大。
+		Layout:      LayoutConfig{SidebarWidth: 240, QueueHeight: QueueHeightSmall, QueueListWidth: 220},
 	}
 }
 

@@ -30,8 +30,8 @@ func TestDefaultIsValidAndUnsaved(t *testing.T) {
 	if c.Network.Profile != ProfileLow || c.Network.MaxCandidateProbesPerRun != 126 {
 		t.Errorf("首次安装必须是省流档、总上限 126，得到 %+v", c.Network)
 	}
-	// 队列三个尺寸各有默认值：左栏 220 是原型定稿的标准宽度。
-	if c.Layout.SidebarWidth != 240 || c.Layout.QueueHeight != 252 || c.Layout.QueueListWidth != 220 {
+	// 队列三个尺寸各有默认值：左栏 220 是原型定稿的标准宽度；队列高度默认「小」档（拍板 2026-10-31）。
+	if c.Layout.SidebarWidth != 240 || c.Layout.QueueHeight != QueueHeightSmall || c.Layout.QueueListWidth != 220 {
 		t.Errorf("布局默认值不对: %+v", c.Layout)
 	}
 }

@@ -78,6 +78,19 @@ export function AppShell({
     '--sidebar-max-w': `${SIDEBAR_MAX_WIDTH}px`,
   } as CSSProperties
   if (shownWidth !== null) (appStyle as Record<string, string>)['--sidebar-w'] = `${shownWidth}px`
+  // 侧栏三档（紧促/标准/宽松）不只是宽度数字：行高、左右内边距、字号一起变，
+  // 每一档都是一个真实的紧凑度（拍板 2026-10-31）。拖到任意宽度时按落在哪一段取哪一档的密度；
+  // 后端没给宽度时不写这几个变量，让 tokens.css 的默认值（标准档）生效。
+  // 树的样式只消费变量（CategoryTree.module.css），两边的默认值各留一份会漂——所以这里写满三档、不靠 CSS 兜底。
+  if (shownWidth !== null) {
+    const density =
+      shownWidth <= 280
+        ? { '--node-h': '26px', '--tree-pad-x': '8px', '--tree-font': '12px' }
+        : shownWidth <= 420
+          ? { '--node-h': '32px', '--tree-pad-x': '12px', '--tree-font': '13px' }
+          : { '--node-h': '38px', '--tree-pad-x': '16px', '--tree-font': '14px' }
+    Object.assign(appStyle as Record<string, string>, density)
+  }
   const sidebarStyle = {} as CSSProperties
 
   return (
