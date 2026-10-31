@@ -56,7 +56,6 @@ export function LayoutPane({
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.layout.title')}</h3>
-      <p className={styles.paneDesc}>{t('settings.layout.paneDesc')}</p>
 
       <div className={styles.card}>
         <div className={styles.cardTitle}>
@@ -65,7 +64,6 @@ export function LayoutPane({
           </span>
           {t('settings.layout.sidebarTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.layout.sidebarDesc')}</p>
         <div className={styles.row}>
           <Segmented
             label={t('settings.layout.sidebarTitle')}
@@ -85,7 +83,6 @@ export function LayoutPane({
           </span>
           {t('settings.layout.queueTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.layout.queueDesc')}</p>
         <div className={styles.row}>
           <Segmented
             label={t('settings.layout.queueTitle')}
@@ -105,7 +102,6 @@ export function LayoutPane({
           </span>
           {t('settings.layout.listTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.layout.listDesc')}</p>
         <div className={styles.row}>
           <Segmented
             label={t('settings.layout.listTitle')}
@@ -125,7 +121,6 @@ export function LayoutPane({
           </span>
           {t('settings.layout.detectFocusTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.layout.detectFocusDesc')}</p>
         <label className={styles.checkRow}>
           <input
             type="checkbox"
@@ -145,7 +140,6 @@ export function LayoutPane({
           </span>
           {t('settings.layout.applyFocusTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.layout.applyFocusDesc')}</p>
         <label className={styles.checkRow}>
           <input
             type="checkbox"

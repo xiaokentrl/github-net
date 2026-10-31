@@ -22,7 +22,6 @@ export function AboutPane({ status }: { status: AppStatus | null }) {
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.about.title')}</h3>
-      <p className={styles.paneDesc}>{t('settings.about.paneDesc')}</p>
 
       <div className={styles.card}>
         <div className={styles.aboutHero}>
@@ -82,7 +81,6 @@ export function AboutPane({ status }: { status: AppStatus | null }) {
             <code className={styles.rowCode}>{value(status?.configPath)}</code>
           </div>
         </div>
-        <p className={styles.cardDesc}>{t('about.row.note')}</p>
       </div>
     </>
   )

@@ -22,7 +22,6 @@ export function StartupPane({
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.startup.title')}</h3>
-      <p className={styles.paneDesc}>{t('settings.startup.paneDesc')}</p>
 
       <div className={styles.card}>
         <div className={styles.cardTitle}>
@@ -31,7 +30,6 @@ export function StartupPane({
           </span>
           {t('settings.startup.autoTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.startup.autoDesc')}</p>
         <label className={styles.checkRow}>
           <input
             type="checkbox"

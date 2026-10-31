@@ -179,41 +179,23 @@
   font-weight: 600;
 }
 
-.paneDesc {
-  margin: 0 0 18px;
-  color: var(--text-3);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
+/* 扁平化（拍板 2026-10-31）：卡片不再画框上底色，靠间距和标题分层，页面只留内容。 */
 .card {
-  margin-bottom: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--ctl);
-  transition: border-color 0.12s, opacity 0.12s;
+  margin-bottom: 16px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--border);
 }
 
-.card:last-child {
+.card:last-of-type {
+  border-bottom: 0;
   margin-bottom: 0;
-}
-
-.card:hover {
-  border-color: var(--card-hov);
-}
-
-/* 后端还没有能应用这个值的地方，整卡按不可用呈现，不给能点但没作用的入口。 */
-.cardOff {
-  opacity: 0.55;
-  background: var(--strip);
 }
 
 .cardTitle {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 4px;
+  margin: 0 0 8px;
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
@@ -222,13 +204,6 @@
 .cardTitle .ico {
   color: var(--primary);
   font-size: 14px;
-}
-
-.cardDesc {
-  margin: 0 0 12px;
-  color: var(--text-3);
-  font-size: 12px;
-  line-height: 1.5;
 }
 
 .row {

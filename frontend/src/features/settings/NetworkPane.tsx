@@ -61,7 +61,6 @@ export function NetworkPane({
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.network.title')}</h3>
-      <p className={styles.paneDesc}>{t('settings.network.paneDesc')}</p>
 
       <div className={styles.card}>
         <div className={styles.cardTitle}>
@@ -70,7 +69,6 @@ export function NetworkPane({
           </span>
           {t('settings.network.profileTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.network.profileDesc')}</p>
         <div className={styles.profileGrid}>
           {PROFILE_IDS.map((id) => {
             const selected = settings.network.profile === id
@@ -102,7 +100,6 @@ export function NetworkPane({
           </span>
           {t('settings.network.budgetTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.network.budgetDesc')}</p>
         <div className={styles.budgetRow}>
           <input
             ref={inputRef}

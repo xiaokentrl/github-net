@@ -30,7 +30,6 @@ export function ZoomPane({
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.zoom.title')}</h3>
-      <p className={styles.paneDesc}>{t('settings.zoom.paneDesc')}</p>
 
       <div className={styles.card}>
         <div className={styles.cardTitle}>
@@ -39,7 +38,6 @@ export function ZoomPane({
           </span>
           {t('settings.zoom.cardTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.zoom.cardDesc')}</p>
         <div className={styles.row}>
           <Segmented
             label={t('settings.zoom.cardTitle')}

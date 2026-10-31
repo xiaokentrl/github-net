@@ -1,6 +1,6 @@
 import type { Config } from '../../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import { InlineStatus } from '../../components/ui/InlineStatus'
-import { Select } from '../../components/ui/Select'
+import { Segmented } from '../../components/ui/Segmented'
 import { ThemeGrid } from '../theme/ThemeGrid'
 import { themeName } from '../theme/themes'
 import { t } from '../../i18n'
@@ -8,8 +8,7 @@ import type { SaveState } from '../../hooks/useSettingsSave'
 import { saveStateFor } from '../../hooks/useSettingsSave'
 import styles from './SettingsDialog.module.css'
 
-// 外观：主题点一下就换肤并写盘；语言这一项整组禁用，因为后端只收 zh-CN，
-// 繁体中文的界面翻译还没补齐，给一个点了必被拒的入口等于骗人。
+// 外观：语言两颗按钮（简/繁，拍板 2026-10-31），主题点一下就换肤并写盘。
 export function AppearancePane({
   settings,
   save,
@@ -26,18 +25,16 @@ export function AppearancePane({
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.appearance.title')}</h3>
-      <p className={styles.paneDesc}>{t('settings.appearance.paneDesc')}</p>
 
-      <div className={`${styles.card} ${styles.cardOff}`}>
+      <div className={styles.card}>
         <div className={styles.cardTitle}>
           <span className={styles.ico} aria-hidden="true">
             ◐
           </span>
           {t('settings.appearance.langTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.appearance.langDesc')}</p>
         <div className={styles.row}>
-          <Select
+          <Segmented
             label={t('settings.appearance.langTitle')}
             value={settings.appearance.language}
             options={[
@@ -45,7 +42,7 @@ export function AppearancePane({
               { value: 'zh-TW', label: t('settings.appearance.lang.zhTW') },
             ]}
             disabled={save.kind === 'pending'}
-            onChange={(value) => onLanguage(value)}
+            onChange={onLanguage}
           />
           <InlineStatus kind={save.kind} text={save.text} />
         </div>
@@ -58,7 +55,6 @@ export function AppearancePane({
           </span>
           {t('settings.appearance.themeTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.appearance.themeDesc')}</p>
         <div className={styles.row}>
           <span className={styles.currentTheme}>
             {t('settings.appearance.themeCurrent', { name: themeName(settings.appearance.theme) })}

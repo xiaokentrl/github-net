@@ -25,7 +25,6 @@ export function TrayPane({
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.tray.title')}</h3>
-      <p className={styles.paneDesc}>{t('settings.tray.paneDesc')}</p>
 
       <div className={styles.card}>
         <div className={styles.cardTitle}>
@@ -34,7 +33,6 @@ export function TrayPane({
           </span>
           {t('settings.tray.closeTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.tray.closeDesc')}</p>
         <label className={styles.checkRow}>
           <input
             type="checkbox"
@@ -54,7 +52,6 @@ export function TrayPane({
           </span>
           {t('settings.tray.startMinTitle')}
         </div>
-        <p className={styles.cardDesc}>{t('settings.tray.startMinDesc')}</p>
         <label className={styles.checkRow}>
           <input
             type="checkbox"
