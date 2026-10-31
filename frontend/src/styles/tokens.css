@@ -5,6 +5,9 @@
    六套配色都在 themes.css 里按同一批变量整块覆盖，这里只登记晨光白（light）一份；
    切换机制是 html[data-theme="..."]，页面组件不写自己的主题色。 */
 :root {
+  /* 晨光白是浅色主题也要声明 color-scheme：不声明时原生控件（下拉弹层、勾选框、滚动条）
+     跟系统偏好走——系统是深色就弹出黑底弹层，页面给的深色文字直接看不见。 */
+  color-scheme: light;
   --bg: #f5f6f8;
   --panel: #fff;
   --border: #e3e6eb;
