@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 
 	appsvc "github.com/xiaokentrl/github-net/internal/app"
 	"github.com/xiaokentrl/github-net/internal/event"
+	"github.com/xiaokentrl/github-net/internal/task"
 )
 
 //go:embed all:frontend/dist
@@ -161,7 +163,6 @@ func main() {
 
 	tray := platformApp.SystemTray.New()
 	tray.SetIcon(trayIcon)
-	tray.SetTooltip(appName)
 
 	// 托盘菜单：显示/隐藏/退出 + 「主题」子菜单（六套，当前项勾选）。
 	// 切主题走配置服务保存并向前端发 settings:changed；菜单整体重建让勾选跟到新主题上。
@@ -169,7 +170,7 @@ func main() {
 	buildTrayMenu = func() *application.Menu {
 		menu := application.NewMenu()
 		menu.Add("显示主窗口").OnClick(func(*application.Context) { requestWindowFocus() })
-		menu.Add("隐藏主窗口").OnClick(func(*application.Context) { window.Hide() })
+		menu.Add("最小化到托盘").OnClick(func(*application.Context) { window.Hide() })
 		menu.AddSeparator()
 		themeMenu := menu.AddSubmenu("主题")
 		current := ""
@@ -203,6 +204,20 @@ func main() {
 		requestWindowFocus()
 	})
 
+	// 托盘提示跟着队列走（原型胶囊那颗「运行中」小圆点的等价物：系统托盘图标是静态图，
+	// 颜色改不了，只能把「有没有在跑」写进提示文字）。只在句子变了才下发，免得每出一条
+	// 进度就打扰一次桌面环境。
+	tooltip := trayTooltipText(appName, 0)
+	tray.SetTooltip(tooltip)
+	unsubscribeTaskProgress := platformApp.Event.On(event.TaskProgressName, func(*application.CustomEvent) {
+		next := trayTooltipText(appName, runningTasks(service.GetTasks()))
+		if next == tooltip {
+			return
+		}
+		tooltip = next
+		tray.SetTooltip(next)
+	})
+
 	// 启动后自动检查一次更新（技术规划 §7）：只比较和提示，不下载、不安装。
 	// 结论经 update:status 事件推给界面；失败也说清楚原因，不把失败装成「已是最新」。
 	go func() {
@@ -232,6 +247,7 @@ func main() {
 	cleanup = func() {
 		cancel()
 		appsvc.ShutdownTaskQueue(service)
+		unsubscribeTaskProgress()
 		unsubscribeStatus()
 		unsubscribeDockReopen()
 		unsubscribeStartup()
@@ -258,6 +274,26 @@ func main() {
 	if err := platformApp.Run(); err != nil {
 		log.Fatal(startupFailureText(err))
 	}
+}
+
+// trayTooltipText 决定托盘提示文字：有活在跑就写清几项，空闲只写应用名。
+// 原型胶囊用一颗会闪的小圆点表示运行中，原生托盘图标是静态图，等价物只有这句提示。
+func trayTooltipText(appName string, running int) string {
+	if running <= 0 {
+		return appName
+	}
+	return fmt.Sprintf("%s · 进行中 %d 项", appName, running)
+}
+
+// runningTasks 数快照里正在执行的任务：检测、应用、恢复都算，排队和已完成的不算。
+func runningTasks(snap task.Snapshot) int {
+	count := 0
+	for _, t := range snap.Tasks {
+		if t.Status == task.StatusRunning || t.Status == task.StatusRestoring {
+			count++
+		}
+	}
+	return count
 }
 
 // startupFailureText 把启动失败说成一句能照着查的话。

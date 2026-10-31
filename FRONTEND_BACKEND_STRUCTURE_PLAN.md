@@ -775,6 +775,7 @@ Wails v3.0.0 是稳定版，提供生成绑定、事件 API 和系统托盘能�
 - `components/navigation/`：分类树、节点和搜索框。分类树只接收数据和回调，不直接调用后端。
 - `components/ui/`：通用控件，只负责呈现与基础交互；不包含 Hosts 或 DNS 业务规则。
 - `components/ui/Segmented.tsx`（2026-10-28 已建）：互斥预设按钮组，选中态用 `aria-pressed`；`onChange` 可缺省以支持整组禁用，禁用原因用同一段说明文字渲染。样式取自原型 `.seg`（第 430–434 行）。
+- `components/ui/ui.module.css` 的 `.btn`（2026-10-31 起）：全仓库唯一一份按钮配方，照原型第 52–61 行（30px 高、6px 圆角、`--ctl` 底、`--hov` 悬停，`.small/.primary/.ghost/.danger/.restore` 五档）。布局层的 `AppShell.module.css` 不再自己写一份，`.action` 用 `composes: btn from '../ui/ui.module.css'` 指过来；注意 CSS Modules 的 `composes` 只认单类选择器，写成 `.action.primary` 构建直接报错，所以主色/危险两档由调用方与 `.action` 并列挂（`Toolbar.tsx` 的 `uiStyles.primary`/`uiStyles.danger`），`.action` 自带 `--btn` 所以 `.btn.primary` 照样命中。2026-10-31 实测：六套主题下顶栏/工具栏/侧栏按钮的计算样式与改动前逐套一致。
 - `features/strategies/ServiceStrategySelector.tsx`：放在当前服务详情区，用“GitHub 全部加速方法”等直白名称显示并选择该服务以后默认使用的方法；切换后持久保存，后续检测自动使用此方法，不因切换而自动开始检测。它是业务组件，不放入通用 `components/ui/`。
 - `OperationFeedback.tsx`：统一显示操作阶段、进度、耗时、取消和最终结果。
 - `InlineStatus.tsx`：在表单或按钮附近显示保存中、成功、错误和重试提示。
