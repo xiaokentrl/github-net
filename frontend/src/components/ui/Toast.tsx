@@ -171,11 +171,12 @@ export function Toast() {
   const userMoved = useRef(false)
 
   // 队列面板当前的显示高度（缩放归一到 CSS 像素层）。找不到就退回默认贴底距离。
+  // +6 是拖拽手柄那条线的高度：胶囊正好坐在手柄上沿。
   const queueBottomOffset = useCallback(() => {
     const zoom = bodyZoom()
     const el = document.querySelector(`section[aria-label="${t('queue.title')}"]`)
     if (!el) return BOTTOM_DEFAULT
-    return Math.round(el.getBoundingClientRect().height / zoom) + 12
+    return Math.round(el.getBoundingClientRect().height / zoom) + 6
   }, [])
 
   // 窗口变小或改了缩放档位，原来那个位置和大小可能已经出去了一半，这里夹回来。
@@ -188,7 +189,9 @@ export function Toast() {
       const viewHeight = window.innerHeight / zoom
       const realHeight = next.height ?? panelRef.current?.offsetHeight ?? HEIGHT_FALLBACK
       const maxBottom = Math.max(EDGE_GAP, viewHeight - realHeight - EDGE_GAP)
+      // 没拖过的胶囊待在队列拖拽线的上沿、靠最右边；用户拖过就完全交给用户。
       next.bottom = Math.min(Math.max(EDGE_GAP, queueBottomOffset()), maxBottom)
+      next.right = EDGE_GAP
     }
     if (next.right !== geomRef.current.right || next.bottom !== geomRef.current.bottom || next.width !== geomRef.current.width || next.height !== geomRef.current.height) {
       geomRef.current = next
