@@ -92,10 +92,8 @@ pkill -x "$IDENTITY_BINARY_NAME" 2>/dev/null || true
 echo '== 3/4 卸载旧包并装新包 =='
 swap_packages "$DEB"
 
-echo '== 4/4 删配置 =='
-# 配置和数据按规划只落在这三个用户目录。删在新包装好之后：这中间没有任何一次运行会写配置，
-# 效果就是「新包从默认配置起步」，而授权或安装没过时不会出现「配置已删、包没装」的半截状态。
-identity_guard || { echo '删配置前产品身份校验没过，中断' >&2; exit 1; }
-rm -rf "$HOME/.local/share/$IDENTITY_DATA_DIR" "$HOME/.cache/$IDENTITY_DATA_DIR" "$HOME/.config/$IDENTITY_DATA_DIR"
+echo '== 4/4 保留配置 =='
+# 配置不再删除（拍板 2026-11-03）：重装后沿用 ~/.config/github-net 里已有的设置，
+# 模拟的是「升级」而不是「新用户起步」。要体验全新配置就手动删 ~/.config/github-net。
 
-echo "== 完成：$IDENTITY_PACKAGE_NAME 已重装，版本 $(dpkg-query -W -f='${Version}' "$IDENTITY_PACKAGE_NAME") =="
+echo "== 完成：$IDENTITY_PACKAGE_NAME 已重装，版本 $(dpkg-query -W -f='${Version}' "$IDENTITY_PACKAGE_NAME")，配置已保留 =="
