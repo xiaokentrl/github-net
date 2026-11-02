@@ -1,0 +1,136 @@
+/* 公共弹框：遮罩 + 可拖可调大小的面板。长相和设置对话框同一套令牌，
+   浮层用 --pop 阴影；拖动期间不加动画，松手才恢复。 */
+.mask {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--mask);
+}
+
+.panel {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 16px);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--pop);
+  overflow: hidden;
+}
+
+.panelDragging {
+  user-select: none;
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  cursor: move;
+  user-select: none;
+  /* 弹框头部是拖弹框用的，不是拖窗口：标 no-drag 防止顶着窗口标题栏拖。 */
+  --wails-draggable: no-drag;
+}
+
+.title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.closeBtn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  background: var(--hov);
+  color: var(--text);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px;
+  overflow: auto;
+}
+
+.footer {
+  flex: none;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+/* 三个方向的大小手柄：右缘、下缘、右下角。命中区比可见的色条宽一倍好抓。 */
+.grip {
+  position: absolute;
+  z-index: 2;
+  touch-action: none;
+}
+
+.gripE {
+  top: 12px;
+  bottom: 12px;
+  right: -3px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.gripS {
+  left: 12px;
+  right: 12px;
+  bottom: -3px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.gripSE {
+  right: -3px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+
+.gripE:hover,
+.gripS:hover {
+  background: var(--primary-soft);
+}
+
+.gripSE::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--border-strong);
+  border-bottom: 2px solid var(--border-strong);
+  border-bottom-right-radius: 3px;
+}
+
+.gripSE:hover::after {
+  border-color: var(--primary);
+}
