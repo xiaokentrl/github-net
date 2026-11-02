@@ -72,16 +72,32 @@ type EntryLine = { hostname: string; value: string; ip: boolean }
 //   - 应用／还原：后端这次读回来的逐条 Hosts 事实；整段判不出归属时后端给空数组，
 //     退回目录里这个项目的域名清单，值写「判不出归属」，不自己编 IP。
 // 跑起来的行会一行一行补上（检测事件把已完成的域名先画出来），所以「还没跑完」不等于「缺行」。
+// 每个主机名最优可用候选的延迟：展开行把「连上要多久」跟在地址后面，字段才算齐。
+function latencyByHostOf(result: DetectResultView | undefined): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const host of result?.hosts ?? []) {
+    const best = pickBestCandidate(host.candidates ?? [])
+    if (best && best.latencyMs > 0) out.set(host.hostname, best.latencyMs)
+  }
+  return out
+}
+
+// 值拼上耗时：没有耗时就只给地址，不摆一个「0ms」充数。
+function withLatency(ip: string, latencyMs: number | undefined): string {
+  return latencyMs ? `${ip} · ${latencyMs}ms` : ip
+}
+
 function entryLinesOf(
   kind: string,
   entries: HostEntryState[],
   hostnames: string[],
   result: DetectResultView | undefined,
 ): EntryLine[] {
+  const latency = latencyByHostOf(result)
   if (kind === 'detect') {
     return (result?.hosts ?? []).map((host) => {
       const best = pickBestCandidate(host.candidates ?? [])
-      if (best) return { hostname: host.hostname, value: best.ip, ip: true }
+      if (best) return { hostname: host.hostname, value: withLatency(best.ip, best.latencyMs), ip: true }
       return { hostname: host.hostname, value: host.resolved ? t('queue.detail.noUsableAddress') : t('queue.detail.resolveFailed'), ip: false }
     })
   }
@@ -89,7 +105,7 @@ function entryLinesOf(
     // written 为真但后端没给地址（理论上不会）也按「未写入」显示：这一栏宁可不给数，也不给空的。
     return entries.map((entry) => ({
       hostname: entry.hostname,
-      value: entry.written && entry.ip ? entry.ip : t('queue.detail.entryNotWritten'),
+      value: entry.written && entry.ip ? withLatency(entry.ip, latency.get(entry.hostname)) : t('queue.detail.entryNotWritten'),
       ip: Boolean(entry.written && entry.ip),
     }))
   }
