@@ -195,11 +195,16 @@ export function Toast() {
     setGeom(next)
   }, [])
 
+  // 收起态的小胶囊拖过没有：拖完松手不算点击，不会一拖就展开面板。
+  const pillMoved = useRef(false)
+  const pillDrag = useRef<{ x: number; y: number } | null>(null)
+
   // 一次按下：edges 全 false 是抓头部整块移动，带边的是抓那条边/那个角调宽高。
-  const startDrag = useCallback((edges: Edges) => (event: ReactPointerEvent<HTMLElement>) => {
+  // allowOnButton 给收起态的小胶囊用——它本身就是颗按钮，拖动必须从它身上起手。
+  const startDrag = useCallback((edges: Edges, allowOnButton = false) => (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return
     // 头部那两颗按钮也在这一条里：点在按钮上就不算拖动。
-    if ((event.target as HTMLElement).closest('button')) return
+    if (!allowOnButton && (event.target as HTMLElement).closest('button')) return
     event.preventDefault()
     const panel = panelRef.current
     // 还没拖出过高度时面板是内容撑的，这里量一次当下真实高度当作起点数字。
@@ -213,6 +218,11 @@ export function Toast() {
     (event: ReactPointerEvent<HTMLElement>) => {
       const state = drag.current
       if (!state || state.pointerId !== event.pointerId) return
+      if (pillDrag.current) {
+        const dx = event.clientX - pillDrag.current.x
+        const dy = event.clientY - pillDrag.current.y
+        if (Math.abs(dx) + Math.abs(dy) > 4) pillMoved.current = true
+      }
       const zoom = bodyZoom()
       // 往右下拖＝离右边和底边更近，所以两个方向都是减。
       pendingGeom.current = clampGeom(dragGeom(state, (event.clientX - state.startX) / zoom, (event.clientY - state.startY) / zoom), panelRef.current)
@@ -292,7 +302,25 @@ export function Toast() {
   if (!showPanel) {
     return (
       <div className={`${styles.root} ${styles.rootPill}`} style={rootStyle}>
-        <button type="button" className={styles.pill} onClick={openPanel} aria-expanded={false} title={t('ui.toast.expand')} aria-label={t('ui.toast.expand')}>
+        <button
+          type="button"
+          className={styles.pill}
+          onClick={() => {
+            if (pillMoved.current) return
+            openPanel()
+          }}
+          onPointerDown={(event) => {
+            pillMoved.current = false
+            pillDrag.current = { x: event.clientX, y: event.clientY }
+            startDrag(MOVE, true)(event)
+          }}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          aria-expanded={false}
+          title={t('ui.toast.expand')}
+          aria-label={t('ui.toast.expand')}
+        >
           <span className={styles.pillText}>{t('ui.toast.title')}</span>
           {notices.length > 0 ? <span className={styles.pillCount}>{notices.length}</span> : null}
           <span className={styles.pillChevron} aria-hidden="true">
