@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot, SourcesCacheResult } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
-import { applyItems, clearSourcesCache, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
+import { applyItemSmart, applyItems, clearSourcesCache, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
 import { subscribeAutomationStatus, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
 import { automationText } from '../components/layout/StatusBar'
 import { getErrorMessage } from '../api/errors'
@@ -230,8 +230,20 @@ export function App() {
       // 光靠队列面板那一行很容易被划过去；检测类不递（一轮几十条，递出来就是刷屏）。
       // 文字里不带项目名，同一批的同一种失败自然并成一条。
       const reason = settled.errorMsg || t('error.unknown')
-      if (settled.status === 'failed') pushNotice('error', t('hosts.task.failed', { reason }))
-      if (settled.status === 'rolledback') pushNotice('error', t('hosts.task.rolledback', { reason }))
+      // 应用类写 Hosts 的收尾（拍板 2026-11-03）：回执直接带下一步动作——
+      // 重试应用（走当前保存的方法重新流水线）和查看详情（跳到该项目的详情页）。
+      const applyActions =
+        settled.kind === 'apply' && settled.itemId
+          ? [
+              { label: t('notice.action.retryApply'), run: () => applyItemSmart(settled.itemId) },
+              { label: t('notice.action.showDetail'), run: () => setSelectedId(settled.itemId) },
+            ]
+          : undefined
+      if (settled.kind === 'apply' && settled.status === 'skipped') {
+        pushNotice('warning', t('hosts.task.skipped', { reason }), applyActions)
+      }
+      if (settled.status === 'failed') pushNotice('error', t('hosts.task.failed', { reason }), applyActions)
+      if (settled.status === 'rolledback') pushNotice('error', t('hosts.task.rolledback', { reason }), applyActions)
       if (settled.kind === 'apply' && settled.status === 'done') pushNotice('info', t('hosts.apply.doneHint'))
     })
 
@@ -696,6 +708,12 @@ export function App() {
     [],
   )
 
+  // 单项「应用」走智能流水线：自动预检 + 写入（拍板 2026-11-03）。
+  const startApplySmart = useCallback((itemId: string, strategyId?: string) => {
+    setHostsError('')
+    applyItemSmart(itemId, strategyId).catch((err: unknown) => reportRejection(setHostsError, err))
+  }, [reportRejection])
+
   const startApply = useCallback((itemId: string) => {
     setHostsError('')
     queueExpandRef.current?.()
@@ -867,6 +885,7 @@ export function App() {
             onApply={startApply}
             onRestore={startRestore}
             onRestoreCategory={startRestoreCategory}
+            onApplySmart={startApplySmart}
             onStrategySaved={loadSettings}
           />
         }

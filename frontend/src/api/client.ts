@@ -7,6 +7,7 @@ import {
   ClearFinishedTasks,
   ClearSourcesCache,
   DetectBudget,
+  ApplyItemSmart,
   ClearQueue,
   DetectItems,
   GetAppStatus,
@@ -182,6 +183,12 @@ export function detectBudget(itemIds: string[]): Promise<DetectBudgetPreview> {
 // 这批命令的真正落盘在特权辅助服务那边；入口只校验形状，失败会带稳定错误码回来。
 
 // 应用：把该项目最近一轮检测的可用候选写进系统 Hosts。没检测过会在入口被拒。
+// 单项「应用」= 流水线：自动预检（检测）→ 有可用候选才写 Hosts。
+// 该项目已有检测在跑则挂到那个轮上等收口；strategyId 空按范围默认（执行时现解析，重试自然用当前源）。
+export function applyItemSmart(itemId: string, strategyId = ''): Promise<Task[] | null> {
+  return ApplyItemSmart(itemId, strategyId)
+}
+
 export function applyItems(itemIds: string[]): Promise<Task[] | null> {
   return ApplyItems(itemIds)
 }
