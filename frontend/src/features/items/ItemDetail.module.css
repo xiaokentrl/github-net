@@ -454,3 +454,110 @@
 .rowMenuItem:hover {
   background: var(--hov);
 }
+
+/* 「还原此项」弹框：居中小面板，三个选项带各自说明，进行中三行阶段状态。 */
+.flowMask {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: var(--mask);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flowPanel {
+  width: min(440px, calc(100vw - 48px));
+  padding: 18px 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--pop);
+}
+
+.flowTitle {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.flowDesc {
+  margin: 0 0 14px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.flowOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flowOption {
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--ctl);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.flowOption:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.flowOptionHint {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.flowStages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--band);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.flowStageLine {
+  display: flex;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.flowStageName {
+  flex: none;
+  width: 42px;
+  color: var(--text-3);
+}
+
+.flowClose {
+  align-self: center;
+  margin-top: 4px;
+  padding: 6px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--ctl);
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.flowClose:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}

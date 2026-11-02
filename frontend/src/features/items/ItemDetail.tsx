@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
 import { Kind, type Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
@@ -10,7 +10,8 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import uiStyles from '../../components/ui/ui.module.css'
 import { pickBestCandidate } from '../detect/candidateChoice'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
-import { useTaskQueue } from '../tasks/taskStore'
+import { RestoreFlowDialog } from './RestoreFlowDialog'
+import { isTerminalTask, useTaskQueue } from '../tasks/taskStore'
 import styles from './ItemDetail.module.css'
 import detectStyles from './DetectResult.module.css'
 
@@ -139,6 +140,10 @@ export function ItemDetail({
   const [colWidths, setColWidths] = useState<number[] | null>(null)
   // ⋯ 菜单：只对当前展开的那一行生效，点别处收起（详情卡每行一个）。
   const [soloMenuFor, setSoloMenuFor] = useState<string | null>(null)
+  // 「还原此项」弹框（拍板 2026-11-03）：还原后用户三选一——接着检测 / 接着应用 / 放弃。
+  // mode 从 choose 切到 detect/apply 后，effect 在还原任务落定那一刻触发后续动作。
+  const [restoreFlow, setRestoreFlow] = useState<{ itemId: string; mode: 'choose' | 'detect' | 'apply' } | null>(null)
+  const flowFiredRef = useRef(false)
   const colDrag = useRef<{ pointerId: number; index: number; startX: number; startWidths: number[] } | null>(null)
 
   const startColDrag = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
@@ -168,6 +173,24 @@ export function ItemDetail({
     colDrag.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
+  // 还原任务落定后按弹框里选的模式接后续动作：检测只触发一次，应用走智能流水线。
+  useEffect(() => {
+    if (!restoreFlow || restoreFlow.mode === 'choose') return
+    const flowTasks = state.tasks.filter((tk) => tk.itemId === restoreFlow.itemId)
+    const restoreTask = flowTasks.find((tk) => tk.kind === 'restore')
+    if (!restoreTask || !isTerminalTask(restoreTask.status)) return
+    const detectTask = flowTasks.find((tk) => tk.kind === 'detect')
+    if (restoreFlow.mode === 'detect' && !detectTask && !flowFiredRef.current) {
+      flowFiredRef.current = true
+      onDetect(restoreFlow.itemId)
+      return
+    }
+    if (restoreFlow.mode === 'apply' && !flowFiredRef.current) {
+      flowFiredRef.current = true
+      onApplySmart(restoreFlow.itemId)
+    }
+  }, [restoreFlow, state.tasks, onDetect, onApplySmart])
+
   if (!item || !category) return <EmptyState message={t('detail.empty')} />
 
   const status = hosts?.status ?? HostsStatus.HostsUnknown
@@ -348,8 +371,10 @@ export function ItemDetail({
                               }`}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                if (action.main!.kind === 'restore') onRestore(it.id)
-                                else onApplySmart(it.id)
+                                if (action.main!.kind === 'restore') {
+                                  flowFiredRef.current = false
+                                  setRestoreFlow({ itemId: it.id, mode: 'choose' })
+                                } else onApplySmart(it.id)
                               }}
                             >
                               {action.main.label}
@@ -362,7 +387,8 @@ export function ItemDetail({
                               title={t('hosts.restoreHint')}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                onRestore(it.id)
+                                flowFiredRef.current = false
+                                setRestoreFlow({ itemId: it.id, mode: 'choose' })
                               }}
                             >
                               {action.secondary.label}
@@ -509,6 +535,29 @@ export function ItemDetail({
           </tbody>
         </table>
       </div>
+
+      {restoreFlow ? (
+        <RestoreFlowDialog
+          flow={restoreFlow}
+          itemName={(() => {
+            const found = (category.items ?? []).find((it) => it.id === restoreFlow.itemId)
+            return found ? found.name : restoreFlow.itemId
+          })()}
+          onChooseDetect={() => {
+            if (restoreFlow.mode === 'choose') {
+              setRestoreFlow({ ...restoreFlow, mode: 'detect' })
+              onRestore(restoreFlow.itemId)
+            }
+          }}
+          onChooseApply={() => {
+            if (restoreFlow.mode === 'choose') {
+              setRestoreFlow({ ...restoreFlow, mode: 'apply' })
+              onRestore(restoreFlow.itemId)
+            }
+          }}
+          onClose={() => setRestoreFlow(null)}
+        />
+      ) : null}
     </div>
   )
 }
