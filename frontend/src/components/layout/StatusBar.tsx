@@ -17,7 +17,7 @@ function menuNames(ids: string[] | null | undefined, names: Record<string, strin
 // 没跑过（stage 为空）时整行不出现——状态栏不摆没发生的事。
 // 句子键一律写成 t('字面键')：internal/app/i18n_keys_parity_test.go 只认字面键，
 // 键名拼错的话界面上会直接印出「缺文案:…」，那道门抓不到动态拼的就是漏网。
-function automationText(status: AutomationStatus, names: Record<string, string>): string {
+export function automationText(status: AutomationStatus, names: Record<string, string>): string {
   const detail = status.detail ? `（${status.detail}）` : ''
   const rejected = rejectedNote(status, names)
   switch (status.stage) {

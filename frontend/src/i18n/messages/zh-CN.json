@@ -247,6 +247,8 @@
   "statusbar.sequence": "后端事件序号：{sequence}（重复或过期丢弃 {dropped}）",
   "statusbar.counts": "{categories} 个分类 · {items} 个项目 · 去重后 {hostnames} 个主机名",
   "statusbar.notice": "配置说明：{notice}",
+  "notice.round.detectDone": "检测完成：{total} 项",
+  "notice.round.detectDone.failed": "检测完成：{total} 项，其中 {failed} 项失败",
   "statusbar.automation.detecting": "启动自动检测：已排 {count} 项",
   "statusbar.automation.applying": "启动自动应用：已排 {count} 项",
   "statusbar.automation.closing": "启动自动化：应用成功 {count} 项，正在退出",

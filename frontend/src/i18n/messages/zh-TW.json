@@ -247,6 +247,8 @@
   "statusbar.sequence": "後端事件序號：{sequence}（重複或過期丟棄 {dropped}）",
   "statusbar.counts": "{categories} 個分類 · {items} 個項目 · 去重後 {hostnames} 個主機名稱",
   "statusbar.notice": "配置說明：{notice}",
+  "notice.round.detectDone": "偵測完成：{total} 項",
+  "notice.round.detectDone.failed": "偵測完成：{total} 項，其中 {failed} 項失敗",
   "statusbar.automation.detecting": "啟動自動偵測：已排 {count} 項",
   "statusbar.automation.applying": "啟動自動應用：已排 {count} 項",
   "statusbar.automation.closing": "啟動自動化：應用成功 {count} 項，正在結束",

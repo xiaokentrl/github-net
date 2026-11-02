@@ -4,6 +4,7 @@ import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/gith
 import type { Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import { applyItems, clearSourcesCache, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
 import { subscribeAutomationStatus, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
+import { automationText } from '../components/layout/StatusBar'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
 import { SettingsEntry } from '../components/layout/SettingsEntry'
@@ -20,7 +21,7 @@ import { SettingsDialog, type SettingsPaneID } from '../features/settings/Settin
 import { ItemDetail } from '../features/items/ItemDetail'
 import { TaskPanel } from '../features/tasks/TaskPanel'
 import { subscribeTaskEvents } from '../features/tasks/taskEvents'
-import { useTaskQueue } from '../features/tasks/taskStore'
+import { taskStateSnapshot, useTaskQueue } from '../features/tasks/taskStore'
 import { useRestoreAllTasks } from '../features/tasks/useRestoreAll'
 import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
@@ -209,6 +210,22 @@ export function App() {
     // 应用/还原类任务落定后重读目录，详情页的 Hosts 状态才会跟着变；检测类不用（结果存储自己追）。
     const unsubscribeTasks = subscribeTaskEvents((settled) => {
       if (settled.kind === 'apply' || settled.kind === 'restore') loadCatalog()
+      // 检测轮收尾回执（拍板 2026-11-03）：一项一项递就是刷屏，按轮聚合一条。
+      // 该轮全部任务到终态的那一刻算收尾；有失败的用警告档，干净的用成功档。
+      if (settled.kind === 'detect' && settled.status === 'done' && settled.roundId) {
+        const snap = taskStateSnapshot()
+        const siblings = snap.tasks.filter((tk) => tk.roundId === settled.roundId)
+        if (siblings.length > 0 && siblings.every((tk) => tk.status !== 'waiting' && tk.status !== 'running')) {
+          const failed = siblings.filter((tk) => tk.status === 'failed' || tk.status === 'skipped').length
+          const total = siblings.length
+          pushNotice(
+            failed > 0 ? 'warning' : 'success',
+            failed > 0
+              ? t('notice.round.detectDone.failed', { total, failed })
+              : t('notice.round.detectDone', { total }),
+          )
+        }
+      }
       // 写系统 Hosts 的结果递进右下角面板：辅助服务没在跑、写失败被回滚这两种，
       // 光靠队列面板那一行很容易被划过去；检测类不递（一轮几十条，递出来就是刷屏）。
       // 文字里不带项目名，同一批的同一种失败自然并成一条。
@@ -238,8 +255,19 @@ export function App() {
     })
 
     // 启动自动化每一步推来的结论：后到的一份覆盖前一份，界面只显示手上这最新一句。
+    // 同一结论同时递一条进右下角面板（拍板 2026-11-03）：阶段或原因码变了才推一条，
+    // 进行中的重复进度不打扰；关键收尾（跑完/跳过/失败/不退出）在面板里留底。
+    let lastAutomationKey = ''
     const unsubscribeAutomation = subscribeAutomationStatus((payload) => {
       setAutomation(payload)
+      const key = `${payload.stage}:${payload.reason ?? ''}`
+      if (key === lastAutomationKey) return
+      lastAutomationKey = key
+      if (payload.stage === 'detecting' || payload.stage === 'applying' || payload.stage === 'closing') return
+      if (!payload.stage) return
+      const kind = payload.stage === 'failed' ? 'error' : payload.stage === 'done' && !payload.reason ? 'success' : 'warning'
+      const text = automationText(payload, menuNamesRef.current)
+      pushNotice(kind, text)
     })
 
     return () => {
@@ -363,11 +391,13 @@ export function App() {
     () => (snapshot?.categories ?? []).map((cat) => ({ value: cat.id, label: cat.name })),
     [snapshot],
   )
+  const menuNamesRef = useRef<Record<string, string>>({})
   const menuNamesById = useMemo(() => {
     const map: Record<string, string> = {}
     for (const cat of snapshot?.categories ?? []) map[cat.id] = cat.name
     return map
   }, [snapshot])
+  menuNamesRef.current = menuNamesById
 
   const selected = useMemo(() => {
     const categories = snapshot?.categories ?? []

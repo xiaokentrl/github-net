@@ -59,6 +59,11 @@ export function useTaskQueue(): TaskState {
   return useSyncExternalStore(subscribe, getSnapshot)
 }
 
+// 事件回调（不挂在 React 上）读当前快照用：判「这一轮是不是全部落定了」就靠它。
+export function taskStateSnapshot(): TaskState {
+  return state
+}
+
 // applyTaskSnapshot 先订阅后快照：水位以内的事件会被这条整体替换掉，不重复应用。
 export function applyTaskSnapshot(snap: Snapshot) {
   publish({
