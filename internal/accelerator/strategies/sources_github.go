@@ -71,6 +71,16 @@ func init() {
 	}
 }
 
+// SourcesForScope 给出这个加速范围的候选来自哪几份公共源；不用公共源的范围（Steam）回空。
+// 「清理已选缓存」按勾中的菜单（=范围）清源，用的就是这一份清单：
+// 它和上面登记进表的三份同源同序，不会出现「表里有第四份、清理却漏了」那种对不上。
+func SourcesForScope(scopeID string) []github.Source {
+	if scopeID != scopeGitHub {
+		return nil
+	}
+	return github.All()
+}
+
 // lookupOne 从单一公共源里取一个主机名的候选。
 func lookupOne(src github.Source) func(context.Context, Input) (Output, error) {
 	return func(ctx context.Context, in Input) (Output, error) {

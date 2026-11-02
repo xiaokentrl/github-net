@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot, SourcesCacheResult } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
-import { applyItems, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
+import { applyItems, clearSourcesCache, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
 import { subscribeAutomationStatus, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
@@ -46,6 +46,20 @@ function reportRejection(setter: (text: string) => void, err: unknown): void {
   const message = getErrorMessage(err)
   setter(message)
   pushNotice('error', message)
+}
+
+// 清理回执的文字：三种情况各说各的，数字全部来自后端，界面不自己数。
+// 「清掉 N 份」和「今天还没下载过」是两件不同的事——后者不用清，说成「已清理 0 份」会让人以为出错了。
+function cacheNoticeOf(res: SourcesCacheResult): { kind: 'info' | 'warning'; text: string } {
+  const cleared = res.cleared ?? []
+  const sources = res.sources ?? []
+  if (cleared.length > 0) {
+    return { kind: 'info', text: t('toolbar.clearCache.cleared', { count: cleared.length, names: cleared.join('、') }) }
+  }
+  if (sources.length === 0) {
+    return { kind: 'warning', text: t('toolbar.clearCache.noSource') }
+  }
+  return { kind: 'info', text: t('toolbar.clearCache.noneToday', { count: sources.length }) }
 }
 
 export function App() {
@@ -246,6 +260,14 @@ export function App() {
   const hostsOf: HostsLookup = useMemo(() => {
     const map = new Map<string, HostsState>()
     for (const state of snapshot?.hosts ?? []) map.set(state.itemId, state)
+    return map
+  }, [snapshot])
+
+  // itemId → 目录里这个项目的域名清单。队列明细在整段 Hosts 判不出归属时（后端逐条给空数组）
+  // 退回这份清单逐条列域名，值写「判不出归属」——和详情页那条退路同一个口径，不自己编 IP。
+  const hostnamesOf = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const cat of snapshot?.categories ?? []) for (const item of cat.items ?? []) map.set(item.id, item.hostnames ?? [])
     return map
   }, [snapshot])
 
@@ -568,6 +590,23 @@ export function App() {
     [reportSkippedApply],
   )
 
+  // 清理已选缓存：勾了哪个菜单就清那个菜单的源（拍板 2026-11-02，源一天只下一份）。
+  // 结果只走右下角提示面板——这条命令不进队列、不写 Hosts，没有别的界面能显示它。
+  // 数字全部来自后端回执：清掉几份、今天到底下载过没有，只有那份落盘记录知道。
+  const [clearBusy, setClearBusy] = useState(false)
+  const clearCheckedCache = useCallback((checked: ReadonlySet<string>) => {
+    if (checked.size === 0) return
+    if (!window.confirm(t('toolbar.clearCache.confirm', { count: checked.size }))) return
+    setClearBusy(true)
+    clearSourcesCache([...checked])
+      .then((res) => {
+        const notice = cacheNoticeOf(res)
+        pushNotice(notice.kind, notice.text)
+      })
+      .catch((err: unknown) => pushNotice('error', getErrorMessage(err)))
+      .finally(() => setClearBusy(false))
+  }, [])
+
   // strategyId 给空走范围默认；选择区那颗「检测」按钮会带上下拉选中的方法。
   const startDetect = useCallback((itemId: string, strategyId?: string) => {
     setDetectError('')
@@ -711,7 +750,10 @@ export function App() {
             saveKind={save.kind}
             saveText={save.text}
             busy={save.kind === 'pending'}
+            clearBusy={clearBusy}
+            clearEnabled={checkedIds.size > 0}
             onOpenNetwork={() => openSettings('network')}
+            onClearCheckedCache={() => clearCheckedCache(checkedIds)}
             onDetectChecked={() => startDetectChecked(checkedIds)}
             onApplyChecked={() => startApplyChecked(checkedIds)}
             onOpenHosts={openHostsFile}
@@ -763,6 +805,7 @@ export function App() {
             }}
             onHostsChanged={loadCatalog}
             hostsOf={hostsOf}
+            hostnamesOf={hostnamesOf}
           />
         }
         updateLatest={updateLatest}

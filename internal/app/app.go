@@ -17,6 +17,7 @@ import (
 	"github.com/xiaokentrl/github-net/internal/hosts"
 	"github.com/xiaokentrl/github-net/internal/platform"
 	"github.com/xiaokentrl/github-net/internal/privilege"
+	"github.com/xiaokentrl/github-net/internal/sources/github"
 	"github.com/xiaokentrl/github-net/internal/store"
 	"github.com/xiaokentrl/github-net/internal/task"
 	"github.com/xiaokentrl/github-net/internal/updater"
@@ -84,6 +85,11 @@ type Service struct {
 	// 「真表走不到的分支」有测试落点，见 strategies.go。
 	strategyTable strategyTable
 
+	// sourceCache 是「清理已选缓存」这条命令动的那一层源落盘缓存的接缝。
+	// 零值即生产行为（动 github.Default 那一份共用拉源器）；测试注入假件，
+	// 免得单测把删除动作落到本机真实配置目录里。
+	sourceCache sourcesClearer
+
 	// stamp 是这份构建自带的 VCS 标记，进程活着就不会变，所以构造时读一次。
 	stamp buildStamp
 
@@ -109,6 +115,9 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 		if db, derr := store.Open(filepath.Join(filepath.Dir(p), "detect-history.db")); derr == nil {
 			candDB = db
 		}
+		// 公共源的当天落盘缓存也接在这里（拍板 2026-11-02：一天只下一份）。
+		// 接的是检测共用的那一份 github.Default，所以「清理已选缓存」清完，下一轮检测才会真的重新下载。
+		github.Default.UseCache(github.NewFileCache(filepath.Join(filepath.Dir(p), "sources-cache")))
 	}
 	// 「使用已有储存」方法从候选库读可用地址（拍板 2026-10-31）。库没开成就不接：
 	// 那个方法被选中时会明确报「候选库还没接上」，不会静默给空。

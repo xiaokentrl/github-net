@@ -1,8 +1,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { HostEntryState, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { DetectResultView, HostEntryState, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import { cancelTask, clearFinishedTasks, clearQueue, getTasks, pauseQueue, retryFailedTasks, resumeQueue } from '../../api/client'
 import { getErrorMessage } from '../../api/errors'
+import { pickBestCandidate } from '../detect/candidateChoice'
 import { useBarResize } from '../../components/layout/useBarResize'
 import { t } from '../../i18n'
 import { clampQueueHeight, QUEUE_HEIGHT_DEFAULT, QUEUE_HEIGHT_MIN } from './queueHeight'
@@ -36,6 +37,13 @@ function qdFocusIndex(kids: Task[]): number {
   return i >= 0 ? i : Math.max(0, kids.length - 1)
 }
 
+// 明细表翻页按实测占高分配（px）：主行 30，展开后每条域名一行约 18（11px 字 + 2px 行距），
+// 子表那一行自己还有上下 10 留白；表头另外占 40，要先从面板可用高度里扣掉。
+const ROW_HEIGHT = 30
+const ENTRY_ROW_HEIGHT = 18
+const ENTRY_ROW_PADDING = 10
+const DETAIL_HEAD_HEIGHT = 40
+
 // 明细第二列「当前阶段 / 结果」的文字。以前落定的行只剩一个色点和一个「—」，
 // 用户看不出这一项到底做成了什么，所以逐档给一句实话：
 // 写了几条、还差几条、还是没写；检测给「几可用」；排队和取消也照实说。
@@ -61,6 +69,40 @@ function stageResultOf(task: Task, entries: HostEntryState[], detect: { hosts: n
   return '—'
 }
 
+// 明细行下面那张逐条子表的一行。`ip` 为真才是「一个地址」，走等宽绿字；
+// 其余都是状态话术（未写入／判不出归属／没有可用地址／解析失败），走中性字色，不冒充结果。
+type EntryLine = { hostname: string; value: string; ip: boolean }
+
+// 每一行任务都摊成「一条域名一行」，检测、应用、还原三类一样给（拍板 2026-11-02）：
+//   - 检测：这一轮每条域名选中的最优可用地址；有候选但没一条可用→「没有可用地址」；解析不出来→「解析失败」。
+//     选址算法和详情页同一份（pickBestCandidate），两边出现两个地址就是错的。
+//   - 应用／还原：后端这次读回来的逐条 Hosts 事实；整段判不出归属时后端给空数组，
+//     退回目录里这个项目的域名清单，值写「判不出归属」，不自己编 IP。
+// 跑起来的行会一行一行补上（检测事件把已完成的域名先画出来），所以「还没跑完」不等于「缺行」。
+function entryLinesOf(
+  kind: string,
+  entries: HostEntryState[],
+  hostnames: string[],
+  result: DetectResultView | undefined,
+): EntryLine[] {
+  if (kind === 'detect') {
+    return (result?.hosts ?? []).map((host) => {
+      const best = pickBestCandidate(host.candidates ?? [])
+      if (best) return { hostname: host.hostname, value: best.ip, ip: true }
+      return { hostname: host.hostname, value: host.resolved ? t('queue.detail.noUsableAddress') : t('queue.detail.resolveFailed'), ip: false }
+    })
+  }
+  if (entries.length > 0) {
+    // written 为真但后端没给地址（理论上不会）也按「未写入」显示：这一栏宁可不给数，也不给空的。
+    return entries.map((entry) => ({
+      hostname: entry.hostname,
+      value: entry.written && entry.ip ? entry.ip : t('queue.detail.entryNotWritten'),
+      ip: Boolean(entry.written && entry.ip),
+    }))
+  }
+  return hostnames.map((hostname) => ({ hostname, value: t('queue.detail.entryUnowned'), ip: false }))
+}
+
 
 // 队列面板：双栏——左「任务列表」（轮，对应原型包裹任务），右「任务明细」（轮下的项目任务，
 // 三列：名称 / 当前阶段结果 / 进度耗时）。切页面不丢进度——状态住 taskStore，不在这里。
@@ -72,6 +114,7 @@ function stageResultOf(task: Task, entries: HostEntryState[], detect: { hosts: n
 // onHostsChanged：面板里的「全部还原」改的是系统 Hosts，改完要让主界面重读一遍目录状态。
 // hostsOf：后端每次 GetItems 现读的 Hosts 事实（含逐条主机名写到哪个地址）。
 // 明细那一列要说「写了几条、哪几条」，这份数字只能从这儿来，界面不自己数区段。
+// hostnamesOf：目录里每个项目的域名清单，只在整段判不出归属（后端逐条给空数组）时用来逐条列域名。
 export function TaskPanel({
   height,
   onHeightChange,
@@ -81,6 +124,7 @@ export function TaskPanel({
   onPickItem,
   onHostsChanged,
   hostsOf,
+  hostnamesOf,
 }: {
   height: number | null
   onHeightChange: (height: number) => void
@@ -90,6 +134,7 @@ export function TaskPanel({
   onPickItem: (itemId: string) => void
   onHostsChanged: () => void
   hostsOf: Map<string, HostsState>
+  hostnamesOf: Map<string, string[]>
 }) {
   const state = useTaskQueue()
 
@@ -174,7 +219,7 @@ export function TaskPanel({
   const kids = selected ? selected.kids : []
   const focus = qdFocusIndex(kids)
 
-  // 翻页：每页行数按明细面板高度现算；焦点跨页自动跟随，箭头手动翻后保持。
+  // 翻页：一页能放几行按明细面板高度现算；焦点跨页自动跟随，箭头手动翻后保持。
   // 收起/展开只藏正文（原型 .queue.collapsed），也不落配置——重开窗口还是展开的。
   const [collapsed, setCollapsed] = useState(false)
   // 逐条替换默认就铺开：应用一轮跑完，每一项的每条域名写到了哪个 IP（或没写上）要一眼看到，
@@ -189,28 +234,62 @@ export function TaskPanel({
     })
   }, [])
   useEffect(() => setCollapsedRows(new Set()), [selectedRoundId])
+
+  // 逐条子表先按整轮算一遍：翻页要按「展开之后真实占多高」分配，渲染只画当页那几条。
+  // 两处共用同一份，才不会「翻页按 3 条算、画出来占 6 条」把列表顶出面板。
+  const lineRows = useMemo(
+    () =>
+      kids.map((task) => {
+        const entries = (task.itemId && hostsOf.get(task.itemId)?.entries) || []
+        const hostnames = (task.itemId && hostnamesOf.get(task.itemId)) || []
+        const result = task.itemId ? state.results[task.itemId] : undefined
+        return entryLinesOf(task.kind, entries, hostnames, result)
+      }),
+    [kids, hostsOf, hostnamesOf, state.results],
+  )
+
   const bodyRef = useRef<HTMLDivElement | null>(null)
-  const [perPage, setPerPage] = useState(6)
+  const [paneHeight, setPaneHeight] = useState(0)
   const [page, setPage] = useState(0)
   useEffect(() => {
-    const measure = () => {
-      const h = bodyRef.current?.clientHeight ?? 0
-      setPerPage(Math.max(3, Math.min(14, Math.floor((h - 40) / 30))))
-    }
+    const measure = () => setPaneHeight(bodyRef.current?.clientHeight ?? 0)
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
   }, [selectedRoundId, collapsed])
-  const pages = Math.max(1, Math.ceil(kids.length / perPage))
-  const focusPage = Math.floor(focus / perPage)
+
+  // 一页放几行不再是固定行数：从第一条开始逐行累加占高，装不下就断页；行序、行数都不动。
+  const pageRanges = useMemo(() => {
+    if (kids.length === 0) return [{ start: 0, end: 0 }]
+    const budget = Math.max(ROW_HEIGHT, paneHeight - DETAIL_HEAD_HEIGHT)
+    const ranges: { start: number; end: number }[] = []
+    let start = 0
+    let used = 0
+    for (let i = 0; i < kids.length; i++) {
+      const lines = lineRows[i]
+      const open = lines.length > 0 && !collapsedRows.has(kids[i].id)
+      const cost = ROW_HEIGHT + (open ? lines.length * ENTRY_ROW_HEIGHT + ENTRY_ROW_PADDING : 0)
+      if (i > start && used + cost > budget) {
+        ranges.push({ start, end: i })
+        start = i
+        used = 0
+      }
+      used += cost
+    }
+    ranges.push({ start, end: kids.length })
+    return ranges
+  }, [kids, lineRows, collapsedRows, paneHeight])
+  const pages = pageRanges.length
+  const focusPage = Math.max(0, pageRanges.findIndex((r) => focus >= r.start && focus < r.end))
   useEffect(() => {
     if (focusPage !== page) {
       setPage(focusPage)
     }
   }, [focusPage, page])
   const safePage = Math.min(page, pages - 1)
-  const sliceStart = safePage * perPage
-  const slice = kids.slice(sliceStart, sliceStart + perPage)
+  const range = pageRanges[safePage]
+  const sliceStart = range.start
+  const slice = kids.slice(range.start, range.end)
 
   // 两栏之间的分隔条：拖动期间只有本地预览，松手提交一次给配置（和侧栏同一套实现）。
   // 上限当场算——按队列区实测宽度取一份比例，右边明细必须留过半才看得清三列。
@@ -269,8 +348,8 @@ export function TaskPanel({
   return (
     <>
       {/* 手柄在面板外面，是详情与队列之间的兄弟节点——原型 .right 里就是这个顺序（第 840 行）。
-          收起时跟着藏起来（原型 toggleQueueCollapsed 里 display:none），不然拖着改一个看不见的高度。 */}
-      {!collapsed && height !== null && (
+          收起时也在（拍板 2026-11-02）：收起那条跟着拖出的高度变厚，所以不能再把它藏掉。 */}
+      {height !== null && (
         <div
           className={`${styles.rowResizer} ${heightResize.dragging ? styles.rowResizerDragging : ''}`}
           role="separator"
@@ -402,7 +481,7 @@ export function TaskPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {slice.map((task) => {
+                    {slice.map((task, i) => {
                       const entries = (task.itemId && hostsOf.get(task.itemId)?.entries) || []
                       const result = task.itemId ? state.results[task.itemId] : undefined
                       const stageResult = stageResultOf(
@@ -413,9 +492,12 @@ export function TaskPanel({
                       const prog = task.progress > 0 || task.status === 'running'
                         ? `${task.progress}%${task.duration ? ' · ' + task.duration : ''}`
                         : task.duration || '—'
-                      // 只有应用/还原这两种任务有「逐条替换」可看；检测的逐条在详情页那张候选表里。
-                      const expandable = entries.length > 0 && (task.kind === 'apply' || task.kind === 'restore')
+                      // 逐条子表用的就是翻页那一份：检测给这一轮每条域名的结果，应用/还原给每条域名现在的下落。
+                      const lines = lineRows[sliceStart + i] ?? []
+                      const expandable = lines.length > 0
                       const open = !collapsedRows.has(task.id)
+                      // 展开按钮的说法跟着任务走：检测那行摊开的是这一轮每条域名的结果，不是替换。
+                      const toggleKey = task.kind === 'detect' ? (open ? 'queue.detail.collapseDetect' : 'queue.detail.expandDetect') : open ? 'queue.detail.collapseEntries' : 'queue.detail.expandEntries'
                       return (
                         <Fragment key={task.id}>
                           <tr
@@ -428,8 +510,8 @@ export function TaskPanel({
                                   type="button"
                                   className={styles.expandBtn}
                                   aria-expanded={open}
-                                  aria-label={open ? t('queue.detail.collapseEntries') : t('queue.detail.expandEntries')}
-                                  title={open ? t('queue.detail.collapseEntries') : t('queue.detail.expandEntries')}
+                                  aria-label={t(toggleKey)}
+                                  title={t(toggleKey)}
                                   onClick={(event) => {
                                     event.stopPropagation()
                                     toggleRow(task.id)
@@ -450,12 +532,10 @@ export function TaskPanel({
                             <tr className={styles.entryRow}>
                               <td colSpan={4}>
                                 <ul className={styles.entryList}>
-                                  {entries.map((entry) => (
-                                    <li key={entry.hostname} className={styles.entryItem}>
-                                      <span className={styles.entryHost}>{entry.hostname}</span>
-                                      <span className={`${styles.entryIp} ${entry.written ? '' : styles.entryMissing}`}>
-                                        {entry.written ? entry.ip : t('queue.detail.entryNotWritten')}
-                                      </span>
+                                  {lines.map((line) => (
+                                    <li key={line.hostname} className={styles.entryItem}>
+                                      <span className={styles.entryHost}>{line.hostname}</span>
+                                      <span className={line.ip ? styles.entryIp : `${styles.entryIp} ${styles.entryMissing}`}>{line.value}</span>
                                     </li>
                                   ))}
                                 </ul>

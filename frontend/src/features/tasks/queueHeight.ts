@@ -1,7 +1,8 @@
 // 队列面板高度的前端唯一来源。这三个死数必须逐个等于后端 internal/config 的
 // QueueHeightMin / QueueHeightMax 与 Default() 的队列高度，相等断言在
 // internal/config/layout_bounds_parity_test.go；抄错的后果是拖完被后端判非法、界面回读旧值（看着像「拖不动」）。
-export const QUEUE_HEIGHT_MIN = 120
+// 下限 45 = 收起态那一条（队列头 44px + 1px 下边框）：收起时拖动条也常驻，拖的就是这一个字段。
+export const QUEUE_HEIGHT_MIN = 45
 export const QUEUE_HEIGHT_STATIC_MAX = 2000
 export const QUEUE_HEIGHT_DEFAULT = 180
 

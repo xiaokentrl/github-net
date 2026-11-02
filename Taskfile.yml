@@ -19,25 +19,74 @@ includes:
   android: ./build/android/Taskfile.yml
 
 tasks:
+  default:
+    desc: 列出全部任务
+    # 这里不能写 `task --list`：task 是 wails3 内嵌的，本机 PATH 里没有独立的 task 可执行文件，
+    # 任务里再调它会 exit 127。`--list` 由 wails3 自己解析、不会递归执行任务。
+    cmds:
+      - wails3 task --list
+
   build:
     summary: Builds the application
+    desc: 构建当前平台产物（Linux 上是 bin/github-net 与 bin/github-net-helper）
     cmds:
       - task: "{{.GOOS}}:build"
 
   package:
     summary: Packages a production build of the application
+    desc: 构建并打当前平台全部安装包（Linux：AppImage + deb + rpm + Arch，需 rpmbuild 等额外工具）
     cmds:
       - task: "{{.GOOS}}:package"
 
   run:
     summary: Runs the application
+    desc: 运行当前平台产物
     cmds:
       - task: "{{.GOOS}}:run"
 
   dev:
     summary: Runs the application in development mode
+    desc: 开发模式（Wails + Vite 热重载）
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  # 自检 = CI 前三步的本地版：CI 红的这里先红，不用等推送。
+  check:
+    desc: 提交前自检（不出安装包）：Go 格式 + go vet + 前端语言包一致 + 前端类型检查
+    cmds:
+      - task: check:go
+      - task: check:frontend
+
+  check:go:
+    desc: gofmt 与 go vet
+    cmds:
+      - 'test -z "$(gofmt -l .)" || { gofmt -l .; echo "上面这些 .go 没格式化：跑 gofmt -w ."; exit 1; }'
+      - go vet ./...
+
+  check:frontend:
+    desc: 前端语言包键一致 + TypeScript 类型检查（不产出 dist）
+    dir: frontend
+    cmds:
+      - npm run check:locales -q
+      - npm run typecheck -q
+
+  test:
+    desc: 跑全部 Go 测试（每次强制真跑，不用缓存）
+    cmds:
+      - go test -count=1 ./...
+
+  # 出包只到 deb：本项目实际发布的就是 bin/github-net.deb（见 README 发布矩阵、
+  # .github/workflows/release.yml 的「打 deb 安装包」）。rpm/AppImage/Arch 要 rpmbuild 等
+  # 额外工具，本机没有，需要时用 wails3 task package。
+  # 这里刻意不递增版本号：本项目的版本改的是 main.go 的 appVersion，打标签时 CI 会拿它和
+  # 标签核对；自动 +1 会让「代码里写的版本」和「准备发的标签」对不上。
+  release:local:
+    desc: 本机一键出包（Linux）：自检 → 测试 → 构建 → 打 deb，产物 bin/github-net.deb
+    cmds:
+      - task: check
+      - task: test
+      - task: linux:create:deb
+      - ls -l bin/github-net bin/github-net-helper bin/github-net.deb
 
   install:msix:tools:
     summary: Installs tools required for Windows MSIX packaging

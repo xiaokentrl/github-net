@@ -13,15 +13,17 @@
   transition: height 0.18s ease;
 }
 
-/* 收起：只留队列头那一条（原型 .queue.collapsed 第 338–340 行）。
-   45px = 队列头 44px + 那 1px 下边框；正文整块藏掉，但节点留在原地，展开后滚动位置不丢。 */
-.panelCollapsed {
-  height: 45px !important;
-  min-height: 45px !important;
-}
-
+/* 收起：只藏正文（原型 .queue.collapsed 第 338–340 行藏的就是 body）。
+   高度不再冻成 45px——收起那条的厚薄就是配置里的 queueHeight，由上方手柄拖（拍板 2026-11-02），
+   所以这里只让队列头把整块占满、内容垂直居中；节点留在原地，展开后滚动位置不丢。 */
 .panelCollapsed .body {
   display: none;
+}
+
+.panelCollapsed .head {
+  flex: 1 1 auto;
+  height: auto;
+  border-bottom: none;
 }
 
 /* 详情与队列之间那条横向手柄，抄原型 .resizer(232–235)：6px 高、上下拖、把手上那道小横条。 */

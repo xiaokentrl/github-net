@@ -25,7 +25,7 @@ GitHub Net（GitHub 加速助手）是一个用 Go、Wails v3、React 和 TypeSc
 - **真实可见的检测**：候选逐行显示排队中 / 检测中 / 可用 / 不可用 / 超时 / 已取消 / 预算用完未检测，带延迟；单项一轮 5 秒截止，DNS 查询与 TCP+TLS 探测各 2 秒预算，不伪造进度和剩余时间。
 - **省流三档**：省流（每主机名 2 个候选、并发 2）/ 标准（8 / 8）/ 完整检测（16 / 8）；每轮探测总上限默认 126、可填 1–1008，够不够覆盖一轮在「网络与流量」页和工具栏档位按钮上先看得见，批量检测覆盖不全时先弹确认。只做 DNS 查询和 TCP/TLS 握手，不下载网页内容，不自动重试。
 - **任务队列**：检测、应用、还原统一入队、串行执行，九档状态；面板给分轮进度与耗时，支持暂停、取消等待、重试失败、清空已完成、清空队列、全部还原；状态存在应用级 store 里，切页面不丢进度。批量应用按项目逐项判定：勾了几项这一轮就有几行，做不了的那几项也进同一轮、以「跳过」落定并把原因写在那一行的结果里（没检测过、最近一轮没有可用候选），不会悄悄少掉。
-- **替换逐条看得见**：「已替换」不再只有一个词。主菜单每个项目行下面常驻逐条子行——每个域名一行 `域名 → 现在写到的 IP` 或 `域名 → 未写入`，不用悬停、不用点开，类目折叠时整块跟着收起来；名字后那枚「已写入 N/M」只给个数。详情页把域名摊成同样的逐条；队列明细的「当前阶段 / 结果」按状态各说一句实话（应用「已写入 2/3 条」、跳过把没做的原因原样写出来、还原「已还原，这 3 条不再由本工具写」、检测「检测完成，若干个域名里若干条可用」），行下的逐条替换默认就铺开，▸/▾ 留着给手动收起。这些数字只来自后端这次读回来的逐条事实（`HostsState.entries`，归属取自特权服务的写入记录）；判不出归属（冲突、读不到）时不出子行、退回域名清单，界面不自己编 IP。侧栏窄到 250px 以下时那枚数字收起，子行照旧显示、域名那端截断。
+- **替换逐条看得见**：「已替换」不再只有一个词，但逐条明细不插进主菜单（2026-11-02 定）：主菜单的一行只有这一项自己的名字、色点和状态字。逐条摊开放在两个地方——详情页把域名摊成每个域名一行 `域名 → 现在写到的 IP` 或 `域名 → 未写入`；队列明细的「当前阶段 / 结果」按状态各说一句实话（应用「已写入 2/3 条」、跳过把没做的原因原样写出来、还原「已还原，这 3 条不再由本工具写」、检测「检测完成，若干个域名里若干条可用」），行下的逐条替换默认就铺开，▸/▾ 留着给手动收起。这些数字只来自后端这次读回来的逐条事实（`HostsState.entries`，归属取自特权服务的写入记录）；判不出归属（冲突、读不到）时后端给空清单，这时逐条整块不出现、退回域名清单，界面不自己编 IP。
 - **Hosts 安全**：界面进程永不直接写盘——写入交给 root 常驻的辅助服务 `github-net-helper`（Unix socket `/run/github-net/helper.sock`，白名单只有 ping / apply / restoreItem / restoreAll / hostsState 五个操作）。写前备份，只改带本工具标记的区段，原子替换后重读校验，失败自动回滚，可一键还原到应用前状态，也可直接打开 Hosts 查看。
 - **权限最小化**：主界面始终以普通用户运行。Linux 装包时由 postinst 一次性 enable 并 restart 那个 systemd 服务，之后读写 Hosts 不再反复要 root。
 - **开机自动化**：开机自启（Linux 写 XDG autostart）、启动后自动检测（可多选哪些主菜单参与，一个没勾就不跑）、检测完成自动应用、自动应用队列跑完真退出进程；状态栏回显这一轮跑到哪、哪些菜单没排上、为什么没退出。
@@ -33,7 +33,7 @@ GitHub Net（GitHub 加速助手）是一个用 Go、Wails v3、React 和 TypeSc
 - **自动更新**：检查 GitHub Releases 最新稳定版，下载前显示版本、来源和大小，SHA256 与 Ed25519 签名双校验通过才交给系统安装器；嵌入公钥缺失一律拒绝。
 - **设置中心八页**：布局、界面缩放、外观、网络与流量、托盘、开机自启、检测升级、关于我们；改动即时经后端统一保存，跨重启生效。
 - **外观与窗口**：六套主题（晨光白是唯一浅色，另五套深色，含纯黑 OLED 档）、界面缩放四档（90/100/110/125%）、侧栏宽度可拖（200–600）、队列高度三档加拖动条；无边框窗口自绘标题栏，配系统托盘（显示主窗口、最小化到托盘、主题子菜单、退出，托盘提示跟着队列是否在跑变）。
-- **提示面板**：窗口右下角的公共提示，四类（错误、警告、提醒、成功），跟着窗口位置走；每条能关闭和复制，整块能清空、收起成胶囊、按住标题栏拖动（双击归位）。错误不自己消失，其余 20/8/6 秒，收起期间倒计时冻结。应用与还原、队列任务到终态、被后端挡下的操作、检查更新都往这里递话；它是补充，按钮旁的原位红字照旧留着。
+- **提示面板**：窗口右下角的公共提示，四类（错误、警告、提醒、成功），跟着窗口位置走；每条能关闭和复制，整块能清空、收起成胶囊、按住标题栏拖动（双击归位）。那颗胶囊小按钮常驻右下角：一条提示都没有时它也在，点开是「暂无提示」，再收起又回到小按钮（2026-11-02）。错误不自己消失，其余 20/8/6 秒，收起期间倒计时冻结。应用与还原、队列任务到终态、被后端挡下的操作、检查更新都往这里递话；它是补充，按钮旁的原位红字照旧留着。
 - **双语界面**：简体中文默认，繁体中文可切换，两份语言包各 395 个键；缺键时界面直接印「缺文案:键名」，不静默兜底。
 - **无障碍**：分类树用 `role="tree"` 加方向键操作，设置对话框 `aria-modal` 且 Esc 可关，保存结果与错误经 `aria-live` / `role="alert"` 播报。
 
@@ -83,15 +83,35 @@ Linux 系统要求详见下文「开发和构建」里的发布线说明。
 ```sh
 wails3 dev          # 热重载开发
 wails3 build        # 当前平台产物
-go test ./...       # Go 测试
+wails3 task check   # 提交前自检：gofmt、go vet、前端语言包一致、前端类型检查
+wails3 task test    # Go 测试（每次真跑，不用缓存）
 ```
 
 Linux 只有一条发布线：默认 GTK4/WebKitGTK 6.0，构建宿主为 Ubuntu 26.04（本机即该版本，或等效容器 `ubuntu:26.04`），也就是上面的 `wails3 build`。发布目标是 Debian 13 与 Ubuntu 26.04。Debian 12 不在目标内——它的仓库没有 `webkitgtk-6.0`，默认后端编不过；Ubuntu 24.04 也已于 2026-10-27 经裁决移出，改由 26.04 LTS 取代。`-tags gtk3` 只留作开发者本机备选，官方不为它出包、不承诺修复。
 
-Linux 构建需要 `libgtk-4-dev libwebkitgtk-6.0-dev`（另需 gcc、pkg-config、binutils，CGO 打开）。手动出 deb：
+Linux 构建需要 `libgtk-4-dev libwebkitgtk-6.0-dev`（另需 gcc、pkg-config、binutils，CGO 打开）。
+
+### 打包（出包）
+
+一条命令走完「自检 → 测试 → 构建 → 打安装包」：
 
 ```sh
-wails3 task linux:create:deb     # 同族还有 create:rpm / create:appimage / create:aur
+wails3 task release:local
+```
+
+产物在 `bin/`，跑完会列出来：`bin/github-net`（主程序）、`bin/github-net-helper`（特权辅助服务）、`bin/github-net.deb`（安装包，发布矩阵里就是这一颗）。任何一步失败即中止，不会带着红的自检去打包。
+
+包里的版本号取自 `main.go` 的 `appVersion`（`scripts/version.sh` 读它，出包前自动同步进 `build/linux/nfpm/nfpm.yaml`）。`release:local` 不改版本号：改版本是发版时的独立动作，打标签时 CI 会核对标签和 `appVersion` 是否一致，自动 +1 只会让两者对不上。
+
+想单独做其中一步：
+
+```sh
+wails3 task check              # 只自检，不出产物
+wails3 task test               # 只跑 Go 测试
+wails3 task build              # 只构建两颗二进制
+wails3 task linux:create:deb   # 只打 deb（同族 create:rpm / create:appimage / create:aur）
+wails3 task package            # 当前平台全部格式（Linux：AppImage + deb + rpm + Arch，另需 rpmbuild 等工具）
+wails3 task                    # 列出全部任务
 ```
 
 产物能不能装某台机器，看实测的两道门：用 `objdump -T` 查产物要求的最高 `GLIBC_x.y` 是否不高于 `GLIBC_2.41`（最低目标 Debian 13 的 glibc），用 `ldd` 查目标发行版是否有 `libgtk-4.so.1`、`libwebkitgtk-6.0.so.4` 和 `libjavascriptcoregtk-6.0.so.1`。同一份代码在 Ubuntu 26.04 编出的产物要求 `GLIBC_2.38`，放进 Debian 13 容器 `ldd -r` 无未解析符号，所以一台 26.04 宿主可以同时供 Debian 13 与 Ubuntu 26.04 两条线；Debian 13 那边只验过链接，实机运行还没验。Windows 和 macOS 构建需在各自原生 runner 上验证。
@@ -126,7 +146,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 ├── internal/
 │   ├── accelerator/         # 检测编排：budget.go 算一轮预算，detect.go 串起取候选与验候选，管并发、单项 5 秒截止、逐候选状态与带序号事件
 │   │   └── strategies/      # 加速方法单文件自注册：契约、注册表与六个方法（三家公共源、全部公共源、使用已有储存、系统 DNS）
-│   ├── app/                 # 暴露给前端的 27 条命令、DTO 与错误转换：队列 7 条在 queue.go，检测 detect_items.go + detect.go，应用/还原 apply_items.go，更新 update.go，启动自动化 startup_automation.go
+│   ├── app/                 # 暴露给前端的 28 条命令、DTO 与错误转换：队列 7 条在 queue.go，检测 detect_items.go + detect.go，应用/还原 apply_items.go，更新 update.go，启动自动化 startup_automation.go，清理源缓存 sources_cache.go
 │   ├── catalog/             # 产品数据：11 分类 / 52 项目 / 63 主机名（catalog.json）
 │   ├── config/              # 用户配置：校验、revision、原子保存、旧位置迁移
 │   ├── detector/            # 候选连通性与证书校验（TCP+TLS，2 秒预算），被检测编排调用
@@ -135,7 +155,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 │   ├── identity/            # 产品名字的唯一手写源：户口层常量、派生路径与钉死它们的金标准测试
 │   ├── platform/            # 开机自启适配：Linux 写 XDG autostart；Windows/macOS 明确返回不支持
 │   ├── privilege/           # 特权辅助服务的客户端、服务端与白名单协议（Unix socket）
-│   ├── sources/             # GitHub 三家公共源的地址与合并解析
+│   ├── sources/             # GitHub 三家公共源的地址与合并解析；每源一份当天落盘缓存（sources-cache/），清掉才重新下载
 │   ├── store/               # SQLite 候选底账（detect-history.db）
 │   ├── task/                # 内存任务队列：串行执行、九档状态、取消/暂停/重试/两项清理，事件序号与快照水位同源
 │   └── updater/             # 检查 Releases、下载并做 SHA256 + Ed25519 双校验，再交给系统安装器
@@ -150,7 +170,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 
 ### CI 与发布
 
-`.github/workflows/ci.yml` 在 push 和 PR 上跑四步：前端 `npm ci && npm run build`（含 tsc）；后端在 `ubuntu:26.04` 容器里查 `gofmt`、`go vet ./...`、`go test -count=1 ./...`；同在 Ubuntu 26.04 宿主用默认后端出 x64 产物并跑门一（≤`GLIBC_2.41`）与本发行版门二；最后把产物放进 `debian:13` 容器复核门二。当前只覆盖 Linux x64，arm64、Windows、macOS 还没有对应任务，所以本地提交前请自行跑 `go build ./... && go vet ./... && go test ./...`、`gofmt -l .`（应为空）和 `frontend` 里的 `npm run build`。
+`.github/workflows/ci.yml` 在 push 和 PR 上跑四步：前端 `npm ci && npm run build`（含 tsc）；后端在 `ubuntu:26.04` 容器里查 `gofmt`、`go vet ./...`、`go test -count=1 ./...`；同在 Ubuntu 26.04 宿主用默认后端出 x64 产物并跑门一（≤`GLIBC_2.41`）与本发行版门二；最后把产物放进 `debian:13` 容器复核门二。当前只覆盖 Linux x64，arm64、Windows、macOS 还没有对应任务，所以本地提交前请自行跑 `wails3 task check && wails3 task test`（就是 `gofmt`、`go vet ./...`、`go test -count=1 ./...` 加前端的语言包一致和 `tsc`）；要连产物一起验就跑 `wails3 task release:local`。
 
 `.github/workflows/release.yml` 由 `v*` 标签触发：先核对标签与 `scripts/version.sh`（唯一来源是 `main.go` 的 `appVersion`）一致，再在 Ubuntu 26.04 容器出 deb、过门一与门二、用 `NET_SIGNING_KEY` 签出 `.deb.sig` 和 `checksums.txt`，最后连同正文建 GitHub Release；正文取仓库根 `release-notes.md`，由 `scripts/gen-release-notes.sh` 按「新增 / 修复 / 更新」三组生成。Windows 与 macOS 不在矩阵里。
 
@@ -184,7 +204,7 @@ The first-launch window at 1280×800: category tree on the left, service detail 
 - **Visible probing**: each candidate gets its own row — queued / probing / reachable / unreachable / timeout / cancelled / skipped-for-budget — with latency; a 5-second deadline per item per round, 2 seconds for a DNS query and 2 for a TCP+TLS probe, and no fake progress bars.
 - **Three data profiles**: low data (2 candidates per hostname, concurrency 2) / standard (8 / 8) / full (16 / 8); the per-round probe cap defaults to 126 and is editable from 1 to 1008, whether it covers a round is shown before you start (network page and the profile button in the toolbar), and a batch probe with a shortfall asks for confirmation first. Probing sends DNS queries and TCP/TLS handshakes only — no page downloads, no automatic retries.
 - **Task queue**: probing, applying and restoring all run through one serial queue with nine statuses; the panel shows per-round progress and duration and offers pause, cancel waiting, retry failed, clear finished, clear all and restore all; state lives in an app-level store, so switching pages never loses a task. A batch apply judges item by item: tick N items and the round holds N rows — the ones that cannot run stay in the same round as "skipped" with the reason on their own row (never probed, or no usable candidate in the last round) instead of silently disappearing.
-- **Every replacement is visible**: "replaced" is no longer a single word. Under each project row in the menu the per-domain lines are permanently rendered — one line per domain, `domain → the IP it currently resolves to` or `domain → not written` — no hovering, no clicking, and collapsing the category hides them together; the little "written N/M" after the name is just a count. The detail page lists the domains the same way; the "stage / result" column of the queue panel states what actually happened per status — how many domains an apply wrote and how many are still missing, the reason a skipped item was not done, what a restore gave back, how many candidates a probe found usable — and the per-domain rows under a task are open by default, with ▸/▾ kept as a manual collapse. Those numbers come only from the per-domain facts the backend read on this call (`HostsState.entries`, ownership taken from the helper's write record); when ownership can't be decided (conflict, read failure) no per-domain line is shown and the plain domain list is used instead — the UI never invents an IP. Below 250px of sidebar width the count badge hides itself while the per-domain lines stay (the domain end truncates).
+- **Every replacement is visible**: "replaced" is no longer a single word, but the per-domain detail stays out of the main menu (decided 2026-11-02): a menu row holds only that item's own name, status dot and status word. The domain-by-domain breakdown lives in two places — the detail page lists one line per domain, `domain → the IP it currently resolves to` or `domain → not written`; the "stage / result" column of the queue panel states what actually happened per status — how many domains an apply wrote and how many are still missing, the reason a skipped item was not done, what a restore gave back, how many candidates a probe found usable — and the per-domain rows under a task are open by default, with ▸/▾ kept as a manual collapse. Those numbers come only from the per-domain facts the backend read on this call (`HostsState.entries`, ownership taken from the helper's write record); when ownership can't be decided (conflict, read failure) no per-domain line is shown and the plain domain list is used instead — the UI never invents an IP.
 - **Hosts safety**: the UI process never writes the file — a root-resident helper (`github-net-helper`, Unix socket `/run/github-net/helper.sock`) does, and its whitelist is five operations only (ping / apply / restoreItem / restoreAll / hostsState). It backs up first, touches only the section tagged by this tool, replaces atomically, re-reads to verify, rolls back on failure, and restores on demand; an "open hosts" shortcut is there too.
 - **Least privilege**: the UI always runs as a normal user. On Linux the package's postinst enables and restarts the systemd service once, so hosts read/write never asks for root again.
 - **Startup automation**: launch at login (an XDG autostart entry on Linux), probe on startup for the categories you ticked (none ticked = the chain never starts), apply automatically once probing settles, and really exit the process when that auto-apply queue drains; the status bar reports how far the round got, which categories were skipped and why the app did not quit.
@@ -192,7 +212,7 @@ The first-launch window at 1280×800: category tree on the left, service detail 
 - **Auto updates**: checks the latest stable GitHub Release, shows version, source and size before downloading, and hands the file to the system installer only after SHA256 and Ed25519 signature verification; a missing embedded public key is a hard refusal.
 - **Settings, eight pages**: layout, zoom, appearance, network & traffic, tray, startup, update check, about; every change is saved through the backend immediately and survives a restart.
 - **Look and shell**: six themes (Daylight is the only light one; OLED Black is pure black), four zoom levels (90/100/110/125%), a draggable sidebar (200–600 px), three queue heights plus a drag bar, a frameless window with a self-drawn titlebar, and a tray menu (show, minimize to tray, theme submenu, quit) whose tooltip follows whether tasks are running.
-- **Notice panel**: bottom-right of the window and it follows the window; four levels (error, warning, info, success). Each notice can be dismissed and copied, the panel can be cleared, collapsed into a pill, and dragged by its header (double-click returns it to the corner). Errors stay until dismissed, the rest expire after 20/8/6 s and the countdown freezes while collapsed. Apply/restore results, tasks reaching a final state, operations the backend refused and update checks all report here; it supplements the inline status text, it does not replace it.
+- **Notice panel**: bottom-right of the window and it follows the window; four levels (error, warning, info, success). Each notice can be dismissed and copied, the panel can be cleared, collapsed into a pill, and dragged by its header (double-click returns it to the corner). That pill is permanent (2026-11-02): it stays in the corner even with no notice at all, and opening it shows "no notices yet". Errors stay until dismissed, the rest expire after 20/8/6 s and the countdown freezes while collapsed. Apply/restore results, tasks reaching a final state, operations the backend refused and update checks all report here; it supplements the inline status text, it does not replace it.
 - **Bilingual UI**: Simplified Chinese by default, Traditional Chinese available; both catalogs hold 395 keys, and a missing key prints `缺文案:key` on screen instead of silently falling back.
 - **Accessibility**: the tree is `role="tree"` with arrow-key navigation, the settings dialog is `aria-modal` and closes on Esc, and save results and errors are announced through `aria-live` / `role="alert"`.
 
@@ -242,15 +262,35 @@ See the release-line notes under "Development and build" for Linux requirements.
 ```sh
 wails3 dev          # hot reload
 wails3 build        # binary for the current platform
-go test ./...       # Go tests
+wails3 task check   # pre-commit self-check: gofmt, go vet, locale key parity, frontend typecheck
+wails3 task test    # Go tests (always re-run, no cache)
 ```
 
 Linux has a single release line: the default GTK4/WebKitGTK 6.0 backend, built on an Ubuntu 26.04 host (the native OS or an equivalent `ubuntu:26.04` container) via `wails3 build` above. Release targets are Debian 13 and Ubuntu 26.04. Debian 12 is out of scope — its repositories lack `webkitgtk-6.0`, so the default backend does not compile; Ubuntu 24.04 was dropped by decision on 2026-10-27 in favour of 26.04 LTS. `-tags gtk3` remains a developer-side fallback only; no official packages and no fix guarantees for it.
 
-Linux builds need `libgtk-4-dev libwebkitgtk-6.0-dev` (plus gcc, pkg-config, binutils, CGO enabled). To build a deb locally:
+Linux builds need `libgtk-4-dev libwebkitgtk-6.0-dev` (plus gcc, pkg-config, binutils, CGO enabled).
+
+### Packaging
+
+One command runs "self-check → tests → build → installer":
 
 ```sh
-wails3 task linux:create:deb     # siblings: create:rpm / create:appimage / create:aur
+wails3 task release:local
+```
+
+The artifacts land in `bin/` and are listed at the end: `bin/github-net` (main app), `bin/github-net-helper` (privileged helper service), `bin/github-net.deb` (the installer — the one in the release matrix). Any failing step aborts the run, so a red self-check never reaches packaging.
+
+The version inside the package comes from `appVersion` in `main.go` (`scripts/version.sh` reads it and it is synced into `build/linux/nfpm/nfpm.yaml` before packaging). `release:local` does not bump it: bumping is a separate release-time action, and the CI tag job compares the tag against `appVersion`, so an automatic +1 would only make the two disagree.
+
+To run one step on its own:
+
+```sh
+wails3 task check              # self-check only, no artifacts
+wails3 task test               # Go tests only
+wails3 task build              # build the two binaries only
+wails3 task linux:create:deb   # deb only (siblings: create:rpm / create:appimage / create:aur)
+wails3 task package            # every format for the host platform (Linux: AppImage + deb + rpm + Arch, needs rpmbuild etc.)
+wails3 task                    # list all tasks
 ```
 
 Whether a binary can be installed on a given machine is decided by two measured gates: `objdump -T` must show no `GLIBC_x.y` above `GLIBC_2.41` (the glibc of Debian 13, the oldest target), and `ldd` must find `libgtk-4.so.1`, `libwebkitgtk-6.0.so.4` and `libjavascriptcoregtk-6.0.so.1` on the target distro. A binary built on Ubuntu 26.04 currently requires `GLIBC_2.38` and links cleanly inside a Debian 13 container (`ldd -r` reports no unresolved symbols), so one 26.04 host serves both lines; on the Debian 13 side only linking has been verified, not a real desktop run. Windows and macOS builds need to be validated on their native runners.
@@ -285,7 +325,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 ├── internal/
 │   ├── accelerator/         # Detection orchestration: budget.go works out one round's budget, detect.go chains candidate lookup with verification and owns concurrency, the 5-second item deadline, per-candidate statuses and sequenced events
 │   │   └── strategies/      # Methods, one file each: contract, registry and the six implementations (three public sources, all-sources, stored IPs, system DNS)
-│   ├── app/                 # The 27 commands bound to the frontend, DTOs and error mapping: 7 queue commands in queue.go, probing in detect_items.go + detect.go, apply/restore in apply_items.go, updates in update.go, automation in startup_automation.go
+│   ├── app/                 # The 28 commands bound to the frontend, DTOs and error mapping: 7 queue commands in queue.go, probing in detect_items.go + detect.go, apply/restore in apply_items.go, updates in update.go, automation in startup_automation.go
 │   ├── catalog/             # Product data: 11 categories / 52 items / 63 hostnames (catalog.json)
 │   ├── config/              # User config: validation, revision, atomic saves, migration from the old location
 │   ├── detector/            # Candidate reachability and certificate checks (TCP+TLS, 2-second budget), called by the orchestration
@@ -294,7 +334,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 │   ├── identity/            # The only handwritten source of product names: identity constants, derived paths and the golden test that pins them
 │   ├── platform/            # Launch-at-login: an XDG autostart entry on Linux; Windows/macOS answer "unsupported"
 │   ├── privilege/           # Privileged helper client, server and whitelisted protocol (Unix socket)
-│   ├── sources/             # The three GitHub public source endpoints and their merged parsing
+│   ├── sources/             # The three GitHub public source endpoints and their merged parsing; one on-disk cache per source per day (sources-cache/), re-downloaded only after it is cleared
 │   ├── store/               # SQLite candidate ledger (detect-history.db)
 │   ├── task/                # In-memory queue: serial execution, nine statuses, cancel/pause/retry/two cleanups, event sequence shared with the snapshot watermark
 │   └── updater/             # Latest-release checks, download with SHA256 + Ed25519 verification, then hand-off to the system installer
@@ -309,7 +349,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 
 ### CI and release
 
-`.github/workflows/ci.yml` runs four steps on push and PR: frontend `npm ci && npm run build` (including tsc); backend `gofmt`, `go vet ./...` and `go test -count=1 ./...` inside an `ubuntu:26.04` container; an x64 build on the default backend on an Ubuntu 26.04 host with gate one (≤`GLIBC_2.41`) and gate two for that distro; and a re-check of gate two inside a `debian:13` container. Only Linux x64 is covered for now — arm64, Windows and macOS have no tasks yet, so before pushing run `go build ./... && go vet ./... && go test ./...`, `gofmt -l .` (must be empty) and `npm run build` in `frontend` locally.
+`.github/workflows/ci.yml` runs four steps on push and PR: frontend `npm ci && npm run build` (including tsc); backend `gofmt`, `go vet ./...` and `go test -count=1 ./...` inside an `ubuntu:26.04` container; an x64 build on the default backend on an Ubuntu 26.04 host with gate one (≤`GLIBC_2.41`) and gate two for that distro; and a re-check of gate two inside a `debian:13` container. Only Linux x64 is covered for now — arm64, Windows and macOS have no tasks yet, so before pushing run `wails3 task check && wails3 task test` locally (that is `gofmt`, `go vet ./...`, `go test -count=1 ./...`, plus frontend locale key parity and `tsc`); use `wails3 task release:local` to cover the artifacts too.
 
 `.github/workflows/release.yml` fires on a `v*` tag: it first checks the tag against `scripts/version.sh` (whose single source is `appVersion` in `main.go`), builds the deb in an Ubuntu 26.04 container, runs both gates, signs with `NET_SIGNING_KEY` into `.deb.sig` plus `checksums.txt`, and publishes the GitHub Release whose body comes from `release-notes.md` — generated by `scripts/gen-release-notes.sh` into the three fixed groups (added / fixed / updated). Windows and macOS are not in the matrix.
 

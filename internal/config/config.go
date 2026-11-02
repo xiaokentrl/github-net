@@ -38,8 +38,11 @@ const (
 	MinCandidateProbes        = 1
 	SidebarWidthMin           = 200
 	SidebarWidthMax           = 600
-	QueueHeightMin            = 120
-	QueueHeightMax            = 2000
+	// QueueHeightMin 取 45（拍板 2026-11-02）：队列收起时那一条也常驻可拖，拖的就是同一个
+	// layout.queueHeight，所以「最薄能拖到哪」必须容纳收起态那一行（队列头 44px + 1px 下边框）。
+	// 展开态想拖到 45 也由用户自己决定，界面不再另设第二道下限。
+	QueueHeightMin = 45
+	QueueHeightMax = 2000
 	// QueueHeightSmall 是队列高度「小」档的值，也是出厂默认（拍板 2026-10-31）；
 	// 前端 LayoutPane 的三档预设里「小」必须同值，相等由 layout_bounds_parity_test 钉住。
 	QueueHeightSmall = 180

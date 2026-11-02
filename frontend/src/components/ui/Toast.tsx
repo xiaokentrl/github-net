@@ -15,12 +15,20 @@ import styles from './Toast.module.css'
 /** 默认贴边距离：CSS 和夹取计算都读这两个数，不另在样式里写第二份。 */
 const RIGHT_DEFAULT = 16
 const BOTTOM_DEFAULT = 40
-/** 面板宽度：同上，样式里用变量拿这一份。 */
-const PANEL_WIDTH = 360
+/** 面板默认宽度：样式里用变量拿这一份。高度没有默认数字——没拖过就跟着内容撑，封顶 45vh。 */
+const WIDTH_DEFAULT = 360
+/** 还没拖出高度时用来夹位置的经验值（一两条提示的高度）。 */
+const HEIGHT_FALLBACK = 96
 /** 拖到边上时至少留这一点，免得面板被推出可视区、只剩一条边能抓。 */
 const EDGE_GAP = 4
+/** 最小宽高（拍板 2026-11-02）：再小就装不下一行「档位＋文字＋两颗钮」，也按不出头部那排按钮。 */
+const WIDTH_MIN = 260
+const HEIGHT_MIN = 120
 
-type Offset = { right: number; bottom: number }
+/** 面板的位置和大小：贴右下锚定，所以「右边/底边离窗口多远」+ 宽高。height 为 null 是「跟着内容撑」。 */
+type Geom = { right: number; bottom: number; width: number; height: number | null }
+/** 这一次按下去抓的是哪几条边：全 false 就是整块移动，四角是相邻两条边同时为真。 */
+type Edges = { left: boolean; right: boolean; top: boolean; bottom: boolean }
 
 function bodyZoom(): number {
   // 界面缩放是给 body 设 CSS zoom（App.tsx 的 applyZoom），缩放进这一层后
@@ -29,20 +37,74 @@ function bodyZoom(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 1
 }
 
-/** 把位置夹回可视区：参数和返回值都在缩放前的 CSS 像素这一层，视口尺寸先除回这一层。 */
-function clampOffset(right: number, bottom: number, panel: HTMLElement | null): Offset {
+/**
+ * 把位置和大小夹回可视区：参数和返回值都在缩放前的 CSS 像素这一层，视口尺寸先除回这一层。
+ * 宽高压在最小值和「窗口减去两边留白」之间；夹完宽高再夹贴边距离，
+ * 顺序反了会出现面板已经贴边、宽高又把它顶出去的状态。
+ */
+function clampGeom(next: Geom, panel: HTMLElement | null): Geom {
   const zoom = bodyZoom()
   const viewWidth = window.innerWidth / zoom
   const viewHeight = window.innerHeight / zoom
-  const width = panel?.offsetWidth ?? PANEL_WIDTH
-  const height = panel?.offsetHeight ?? 96
+  const width = Math.min(Math.max(WIDTH_MIN, next.width), Math.max(WIDTH_MIN, viewWidth - EDGE_GAP * 2))
+  const height =
+    next.height === null
+      ? null
+      : Math.min(Math.max(HEIGHT_MIN, next.height), Math.max(HEIGHT_MIN, viewHeight - EDGE_GAP * 2))
+  const realHeight = height ?? panel?.offsetHeight ?? HEIGHT_FALLBACK
   const maxRight = Math.max(EDGE_GAP, viewWidth - width - EDGE_GAP)
-  const maxBottom = Math.max(EDGE_GAP, viewHeight - height - EDGE_GAP)
+  const maxBottom = Math.max(EDGE_GAP, viewHeight - realHeight - EDGE_GAP)
   return {
-    right: Math.min(Math.max(EDGE_GAP, right), maxRight),
-    bottom: Math.min(Math.max(EDGE_GAP, bottom), maxBottom),
+    right: Math.min(Math.max(EDGE_GAP, next.right), maxRight),
+    bottom: Math.min(Math.max(EDGE_GAP, next.bottom), maxBottom),
+    width,
+    height,
   }
 }
+
+/** 一次拖动的起点：按下时的整份几何 + 抓的哪几条边。baseHeight 是量好的起点高度，用于面板还没拖出高度数字的情况。 */
+type DragState = { pointerId: number; startX: number; startY: number; base: Geom; baseHeight: number; edges: Edges }
+
+/**
+ * 按指针位移算出新的位置和宽高。面板贴右下锚定，所以：
+ * 抓左边＝左边跟着走、右边不动（宽增减 dx 的反号，贴边距离不变）；
+ * 抓右边＝右边跟着走、左边不动（宽 +dx，同时贴右距离 -dx，否则左边会被一起推走）；
+ * 上边、下边同理，只是换成高度和贴底距离。四角就是相邻两条边的算法各算一遍。
+ */
+function dragGeom(state: DragState, dx: number, dy: number): Geom {
+  const { base, baseHeight, edges } = state
+  if (!edges.left && !edges.right && !edges.top && !edges.bottom) {
+    return { right: base.right - dx, bottom: base.bottom - dy, width: base.width, height: base.height }
+  }
+  let { right, bottom, width } = base
+  let height = base.height
+  if (edges.left) width = base.width - dx
+  if (edges.right) {
+    width = base.width + dx
+    right = base.right - dx
+  }
+  if (edges.top) height = baseHeight - dy
+  if (edges.bottom) {
+    height = baseHeight + dy
+    bottom = base.bottom - dy
+  }
+  return { right, bottom, width, height }
+}
+
+/** 抓头部整块移动：四条边都不带。 */
+const MOVE: Edges = { left: false, right: false, top: false, bottom: false }
+
+/** 八条手柄：四条边 + 四个角，形状和鼠标指针在 CSS 里，这里只说每条抓哪几条边。 */
+const HANDLES: { key: string; cls: string; edges: Edges }[] = [
+  { key: 'w', cls: styles.handleW, edges: { left: true, right: false, top: false, bottom: false } },
+  { key: 'e', cls: styles.handleE, edges: { left: false, right: true, top: false, bottom: false } },
+  { key: 'n', cls: styles.handleN, edges: { left: false, right: false, top: true, bottom: false } },
+  { key: 's', cls: styles.handleS, edges: { left: false, right: false, top: false, bottom: true } },
+  { key: 'nw', cls: styles.handleNW, edges: { left: true, right: false, top: true, bottom: false } },
+  { key: 'ne', cls: styles.handleNE, edges: { left: false, right: true, top: true, bottom: false } },
+  { key: 'sw', cls: styles.handleSW, edges: { left: true, right: false, top: false, bottom: true } },
+  { key: 'se', cls: styles.handleSE, edges: { left: false, right: true, top: false, bottom: true } },
+]
 
 // 复制：先走标准剪贴板 API，被拒或没有这条路时退到选中再复制。
 // 两条都不成才报失败——复制这种事静默失败比报错更坑人。
@@ -91,23 +153,27 @@ export function Toast() {
   const notices = useNotices()
   const collapsed = useNoticeCollapsed()
   const panelRef = useRef<HTMLDivElement | null>(null)
-  const [offset, setOffset] = useState<Offset>({ right: RIGHT_DEFAULT, bottom: BOTTOM_DEFAULT })
+  // 位置和宽高都只存在组件状态里（拍板 2026-11-02：宽高不落配置，重开程序回到默认）。
+  const [geom, setGeom] = useState<Geom>({ right: RIGHT_DEFAULT, bottom: BOTTOM_DEFAULT, width: WIDTH_DEFAULT, height: null })
   const [dragging, setDragging] = useState(false)
   // 刚点过复制的那条：按钮文案临时换成「已复制」，1.2 秒后回去。
   const [copiedId, setCopiedId] = useState<number | null>(null)
-  const drag = useRef<{ pointerId: number; startX: number; startY: number; startRight: number; startBottom: number } | null>(null)
-  const offsetRef = useRef(offset)
-  offsetRef.current = offset
+  // 零条提示时点开小按钮：只用组件内的这个开关，不去动 store 里的收起状态——
+  // 那一位管的是「有提示时面板开还是关」，下一批提示来了该按用户上次的选择出现。
+  const [emptyOpen, setEmptyOpen] = useState(false)
+  const drag = useRef<DragState | null>(null)
+  const geomRef = useRef(geom)
+  geomRef.current = geom
   const rafPending = useRef(false)
-  const pendingOffset = useRef<Offset | null>(null)
+  const pendingGeom = useRef<Geom | null>(null)
 
-  // 窗口变小或改了缩放档位，原来那个位置可能已经出去了一半，这里夹回来。
+  // 窗口变小或改了缩放档位，原来那个位置和大小可能已经出去了一半，这里夹回来。
   useEffect(() => {
     const reconcile = () => {
-      const next = clampOffset(offsetRef.current.right, offsetRef.current.bottom, panelRef.current)
-      if (next.right !== offsetRef.current.right || next.bottom !== offsetRef.current.bottom) {
-        offsetRef.current = next
-        setOffset(next)
+      const next = clampGeom(geomRef.current, panelRef.current)
+      if (next.right !== geomRef.current.right || next.bottom !== geomRef.current.bottom || next.width !== geomRef.current.width || next.height !== geomRef.current.height) {
+        geomRef.current = next
+        setGeom(next)
       }
     }
     window.addEventListener('resize', reconcile)
@@ -122,22 +188,25 @@ export function Toast() {
 
   const flushDrag = useCallback(() => {
     rafPending.current = false
-    const next = pendingOffset.current
+    const next = pendingGeom.current
     if (!next) return
-    pendingOffset.current = null
-    offsetRef.current = next
-    setOffset(next)
+    pendingGeom.current = null
+    geomRef.current = next
+    setGeom(next)
   }, [])
 
-  const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+  // 一次按下：edges 全 false 是抓头部整块移动，带边的是抓那条边/那个角调宽高。
+  const startDrag = useCallback((edges: Edges) => (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return
     // 头部那两颗按钮也在这一条里：点在按钮上就不算拖动。
     if ((event.target as HTMLElement).closest('button')) return
     event.preventDefault()
-    const start = offsetRef.current
-    drag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, startRight: start.right, startBottom: start.bottom }
+    const panel = panelRef.current
+    // 还没拖出过高度时面板是内容撑的，这里量一次当下真实高度当作起点数字。
+    const base = { ...geomRef.current, height: edges.top || edges.bottom ? (geomRef.current.height ?? panel?.offsetHeight ?? HEIGHT_FALLBACK) : geomRef.current.height }
+    drag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, base, baseHeight: base.height ?? HEIGHT_FALLBACK, edges }
     event.currentTarget.setPointerCapture(event.pointerId)
-    setDragging(true)
+    setDragging(!(edges.left || edges.right || edges.top || edges.bottom))
   }, [])
 
   const onPointerMove = useCallback(
@@ -146,11 +215,7 @@ export function Toast() {
       if (!state || state.pointerId !== event.pointerId) return
       const zoom = bodyZoom()
       // 往右下拖＝离右边和底边更近，所以两个方向都是减。
-      pendingOffset.current = clampOffset(
-        state.startRight - (event.clientX - state.startX) / zoom,
-        state.startBottom - (event.clientY - state.startY) / zoom,
-        panelRef.current,
-      )
+      pendingGeom.current = clampGeom(dragGeom(state, (event.clientX - state.startX) / zoom, (event.clientY - state.startY) / zoom), panelRef.current)
       if (rafPending.current) return
       rafPending.current = true
       requestAnimationFrame(flushDrag)
@@ -166,10 +231,11 @@ export function Toast() {
     setDragging(false)
   }, [])
 
+  // 双击头部：回到右下角，同时把宽高恢复默认（宽高本来就不落配置，这里给一条回默认的路）。
   const backToCorner = useCallback(() => {
-    const next = { right: RIGHT_DEFAULT, bottom: BOTTOM_DEFAULT }
-    offsetRef.current = next
-    setOffset(next)
+    const next: Geom = { right: RIGHT_DEFAULT, bottom: BOTTOM_DEFAULT, width: WIDTH_DEFAULT, height: null }
+    geomRef.current = next
+    setGeom(next)
   }, [])
 
   const copyNotice = useCallback((id: number, text: string) => {
@@ -182,20 +248,39 @@ export function Toast() {
     })
   }, [])
 
-  if (notices.length === 0) return null
+  // 右下角那颗小按钮常驻：一条提示都没有时也在，点开看到的是「暂无提示」。
+  const showPanel = notices.length > 0 ? !collapsed : emptyOpen
+
+  const openPanel = () => {
+    if (notices.length > 0) {
+      toggleNoticeCollapsed()
+      return
+    }
+    setEmptyOpen(true)
+  }
+
+  const closePanel = () => {
+    if (notices.length === 0) {
+      setEmptyOpen(false)
+      return
+    }
+    toggleNoticeCollapsed()
+  }
 
   const rootStyle = {
-    '--toast-right': `${offset.right}px`,
-    '--toast-bottom': `${offset.bottom}px`,
-    '--toast-width': `${PANEL_WIDTH}px`,
+    '--toast-right': `${geom.right}px`,
+    '--toast-bottom': `${geom.bottom}px`,
+    '--toast-width': `${geom.width}px`,
+    // 没拖过高度就不给这个变量：面板跟着内容撑，列表另有 45vh 上限兜着。
+    ...(geom.height === null ? {} : { '--toast-height': `${geom.height}px` }),
   } as CSSProperties
 
-  if (collapsed) {
+  if (!showPanel) {
     return (
-      <div className={styles.root} style={rootStyle}>
-        <button type="button" className={styles.pill} onClick={toggleNoticeCollapsed} aria-expanded={false} title={t('ui.toast.expand')} aria-label={t('ui.toast.expand')}>
+      <div className={`${styles.root} ${styles.rootPill}`} style={rootStyle}>
+        <button type="button" className={styles.pill} onClick={openPanel} aria-expanded={false} title={t('ui.toast.expand')} aria-label={t('ui.toast.expand')}>
           <span className={styles.pillText}>{t('ui.toast.title')}</span>
-          <span className={styles.pillCount}>{notices.length}</span>
+          {notices.length > 0 ? <span className={styles.pillCount}>{notices.length}</span> : null}
           <span className={styles.pillChevron} aria-hidden="true">
             ▴
           </span>
@@ -206,11 +291,11 @@ export function Toast() {
 
   return (
     <div className={styles.root} style={rootStyle}>
-      <section ref={panelRef} className={styles.panel} aria-label={t('ui.toast.title')}>
+      <section ref={panelRef} className={`${styles.panel} ${geom.height === null ? '' : styles.panelSized}`} aria-label={t('ui.toast.title')}>
         <div
           className={`${styles.header} ${dragging ? styles.headerDragging : ''}`}
           title={t('ui.toast.dragHint')}
-          onPointerDown={onPointerDown}
+          onPointerDown={startDrag(MOVE)}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
@@ -225,7 +310,7 @@ export function Toast() {
           <button
             type="button"
             className={styles.headBtn}
-            onClick={toggleNoticeCollapsed}
+            onClick={closePanel}
             aria-expanded={true}
             title={t('ui.toast.collapse')}
             aria-label={t('ui.toast.collapse')}
@@ -233,35 +318,52 @@ export function Toast() {
             ▾
           </button>
         </div>
-        <ul className={styles.list} aria-live="polite">
-          {notices.map((notice) => (
-            <li key={notice.id} className={styles.item} role={notice.kind === 'error' ? 'alert' : 'status'}>
-              <span className={`${styles.kind} ${kindClass(notice.kind)}`}>{kindText(notice.kind)}</span>
-              <span className={styles.text}>{notice.text}</span>
-              <span className={styles.actions}>
-                <button
-                  type="button"
-                  className={styles.itemBtn}
-                  onClick={() => copyNotice(notice.id, notice.text)}
-                  title={copiedId === notice.id ? t('ui.toast.copied') : t('ui.toast.copy')}
-                  aria-label={copiedId === notice.id ? t('ui.toast.copied') : t('ui.toast.copy')}
-                >
-                  {copiedId === notice.id ? '✓' : '⧉'}
-                </button>
-                <button
-                  type="button"
-                  className={styles.itemBtn}
-                  onClick={() => dismissNotice(notice.id)}
-                  title={t('ui.toast.close')}
-                  aria-label={t('ui.toast.close')}
-                >
-                  ×
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
+        {notices.length === 0 ? (
+          <div className={styles.empty}>{t('ui.toast.empty')}</div>
+        ) : (
+          <ul className={styles.list} aria-live="polite">
+            {notices.map((notice) => (
+              <li key={notice.id} className={styles.item} role={notice.kind === 'error' ? 'alert' : 'status'}>
+                <span className={`${styles.kind} ${kindClass(notice.kind)}`}>{kindText(notice.kind)}</span>
+                <span className={styles.text}>{notice.text}</span>
+                <span className={styles.actions}>
+                  <button
+                    type="button"
+                    className={styles.itemBtn}
+                    onClick={() => copyNotice(notice.id, notice.text)}
+                    title={copiedId === notice.id ? t('ui.toast.copied') : t('ui.toast.copy')}
+                    aria-label={copiedId === notice.id ? t('ui.toast.copied') : t('ui.toast.copy')}
+                  >
+                    {copiedId === notice.id ? '✓' : '⧉'}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.itemBtn}
+                    onClick={() => dismissNotice(notice.id)}
+                    title={t('ui.toast.close')}
+                    aria-label={t('ui.toast.close')}
+                  >
+                    ×
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
+      {/* 八条调节手柄（拍板 2026-11-02：四个方向加四个角）：贴在面板外沿一圈，
+          不遮头部的「清空/收起」和每行的「复制/关闭」，抓哪条就改哪条边对应的宽高。 */}
+      {HANDLES.map((handle) => (
+        <div
+          key={handle.key}
+          className={handle.cls}
+          title={t('ui.toast.resizeHint')}
+          onPointerDown={startDrag(handle.edges)}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        />
+      ))}
     </div>
   )
 }

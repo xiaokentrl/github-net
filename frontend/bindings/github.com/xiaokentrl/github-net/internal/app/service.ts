@@ -29,7 +29,9 @@ import * as $models from "./models.js";
 
 /**
  * ApplyItems 把指定项目排进应用队列：把该项目最近一轮检测的可用候选写进系统 Hosts。
- * 没检测过的项目在入口就被拒——「先检测、再应用」这条顺序不靠用户自觉。
+ * 勾了几项就排几行——做不了的那几项也进同一轮，以「跳过」落定并写明原因，
+ * 不从这一轮里消失（用户勾 6 项、队列只剩 1 行、剩下 5 行去哪了，比报错更难查）。
+ * 整批校验已经换成逐项判定，但项目在不在目录里、清单空不空仍然整批拒。
  */
 export function ApplyItems(itemIDs: string[] | null): $CancellablePromise<task$0.Task[] | null> {
     return $Call.ByID(3426410998, itemIDs);
@@ -65,6 +67,15 @@ export function ClearFinishedTasks(): $CancellablePromise<task$0.Snapshot> {
  */
 export function ClearQueue(): $CancellablePromise<task$0.Snapshot> {
     return $Call.ByID(1553274362);
+}
+
+/**
+ * ClearSourcesCache 清掉勾中项目所涉及的那几份公共源的当天缓存。
+ * 粒度按「勾了哪个菜单就清那个菜单的源」：项目 → 所在加速范围 → 这个范围用哪几份源，去重后一起清。
+ * 校验和检测入口同口径——整批先看，一项对不上就整批拒绝、一份都不清，不留「清了一半」的状态。
+ */
+export function ClearSourcesCache(itemIDs: string[] | null): $CancellablePromise<$models.SourcesCacheResult> {
+    return $Call.ByID(2376257051, itemIDs);
 }
 
 /**

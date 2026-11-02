@@ -1,10 +1,11 @@
 // 组件不直接调用 Wails 绑定，只走这一层；这里也不写业务规则。
-// 后端 27 条命令，这层登记界面用得上的 24 条（另有 Ping、RuntimeInfo、SettingsStore 三条没用到）。
+// 后端 28 条命令，这层登记界面用得上的 25 条（另有 Ping、RuntimeInfo、SettingsStore 三条没用到）。
 // 登记不等于界面都在用：加速方法这 2 条从本轮起由详情页的选择区调用。
 import {
   ApplyItems,
   CancelTask,
   ClearFinishedTasks,
+  ClearSourcesCache,
   DetectBudget,
   ClearQueue,
   DetectItems,
@@ -28,7 +29,7 @@ import {
   SelectStrategy,
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/service'
 import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
-import type { AppStatus, DetectBudgetPreview, DetectResultView, ItemsSnapshot, PoolEntryView, StrategySnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { AppStatus, DetectBudgetPreview, DetectResultView, ItemsSnapshot, PoolEntryView, SourcesCacheResult, StrategySnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { RetryResult, Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
@@ -133,6 +134,12 @@ export function getCandidatePool(): Promise<PoolEntryView[]> {
 // 取一个项目最近一轮的检测结论；没测过时后端给空形状，不是错误。
 export function getDetectResult(itemId: string): Promise<DetectResultView> {
   return GetDetectResult(itemId)
+}
+
+// 清掉勾中项目所涉及的那几份公共源的「当天已下载」记录：清完下一轮检测才会重新下载源。
+// 勾了哪个菜单就清那个菜单的源；回执里的 cleared 是真删掉的份数，可能比 sources 少（今天还没下载过）。
+export function clearSourcesCache(itemIds: string[]): Promise<SourcesCacheResult> {
+  return ClearSourcesCache(itemIds)
 }
 
 export function getTasks(): Promise<Snapshot> {

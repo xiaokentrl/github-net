@@ -130,16 +130,6 @@ export function CategoryNode({
             const hosts = hostsOf.get(item.id)
             const liveKind = liveOf.get(item.id)
             const status = itemStatus(hosts?.status ?? HostsStatus.$zero, liveKind, results[item.id])
-            // 「已替换」到底是哪几条、还差几条：数字和明细都来自后端这次读回来的逐条 Hosts 事实。
-            // 判不出归属（冲突、读不到）时后端给空数组，这里就不出数字，也不自己编明细。
-            const itemEntries = hosts?.entries ?? []
-            const writtenCount = itemEntries.filter((entry) => entry.written).length
-            const entryCount =
-              itemEntries.length > 0 && writtenCount > 0 ? (
-                <span className={styles.entryCount} title={t('tree.entryCount.title', { written: writtenCount, total: itemEntries.length })}>
-                  {writtenCount}/{itemEntries.length}
-                </span>
-              ) : null
             const active = item.id === selectedId
             return (
               <li key={item.id} role="none">
@@ -173,7 +163,6 @@ export function CategoryNode({
                   <span className={styles.name} title={(item.hostnames ?? []).join(', ')}>
                     {item.name}
                   </span>
-                  {entryCount}
                   <span className={`${styles.infoArea} ${styles.infoStatus}`} title={hosts?.message}>
                     <span className={`${styles.dot} ${DOT_CLASS[status.tone]}`} aria-hidden="true" />
                     <span className={`${styles.stext} ${TEXT_CLASS[status.tone]}`}>{t(status.key)}</span>
@@ -195,25 +184,6 @@ export function CategoryNode({
                     ) : null}
                   </span>
                 </div>
-                {/* 逐条替换常驻在项目行下面（拍板 2026-11-02）：哪条域名写到了哪个 IP、哪条还没写上，
-                    一行一条摊开，不用悬停也不用点开。类目收起时（上面 expanded）整块跟着不见。 */}
-                {itemEntries.length > 0 ? (
-                  <ul className={styles.entries}>
-                    {itemEntries.map((entry) => (
-                      <li key={entry.hostname} className={styles.entry} data-entry-hostname={entry.hostname}>
-                        <span className={styles.entryHost} title={entry.hostname}>
-                          {entry.hostname}
-                        </span>
-                        <span className={styles.entryArrow} aria-hidden="true">
-                          →
-                        </span>
-                        <span className={`${styles.entryValue} ${entry.written ? '' : styles.entryUnwritten}`}>
-                          {entry.written ? entry.ip : t('queue.detail.entryNotWritten')}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
               </li>
             )
           })}

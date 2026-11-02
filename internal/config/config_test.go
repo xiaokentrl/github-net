@@ -173,7 +173,7 @@ func TestInvalidValuesRejected(t *testing.T) {
 		{"不在档位的缩放", Patch{Zoom: func() *float64 { z := 1.5; return &z }()}},
 		{"侧栏过窄", Patch{SidebarWidth: num(120)}},
 		{"侧栏过宽", Patch{SidebarWidth: num(900)}},
-		{"队列过矮", Patch{QueueHeight: num(60)}},
+		{"队列过矮", Patch{QueueHeight: num(44)}},
 		{"任务列表过窄", Patch{QueueListWidth: num(149)}},
 		{"任务列表过宽", Patch{QueueListWidth: num(1201)}},
 		{"自动应用没选主菜单", Patch{AutoApplyOnStartup: flag(true)}},
@@ -244,6 +244,41 @@ func TestQueueListWidthBoundsAndRoundTrip(t *testing.T) {
 	}
 	if got.Layout.QueueListWidth != 300 {
 		t.Errorf("只改主题不该动宽度，实际 %d", got.Layout.QueueListWidth)
+	}
+}
+
+// 队列高度：展开态和收起那一条都往这同一个字段写（拍板 2026-11-02 把下限从 120 降到 45，
+// 45 = 队列头 44px + 1px 下边框，收起那条要能拖到这么薄）。下限这一档必须真存得下、
+// 再往下一个像素必须被拒：只测拒绝那一侧的话，哪天有人把下限改回去，界面拖到 45–119
+// 会被后端悄悄拒掉，看上去就是「拖不动」。
+func TestQueueHeightBoundsAndRoundTrip(t *testing.T) {
+	for _, value := range []int{QueueHeightMin, QueueHeightSmall, QueueHeightMax} {
+		path := newPath(t)
+		s := NewStore(path, nil, nil, nil)
+		got, err := s.Save(Patch{QueueHeight: num(value)}, 0, "m-height")
+		if err != nil {
+			t.Fatalf("队列高度 %d 应能保存: %v", value, err)
+		}
+		if got.Layout.QueueHeight != value {
+			t.Errorf("保存回包里的高度 = %d，期望 %d", got.Layout.QueueHeight, value)
+		}
+		reopened := NewStore(path, nil, nil, nil)
+		again, err := reopened.Snapshot()
+		if err != nil {
+			t.Fatalf("重读配置失败: %v", err)
+		}
+		if again.Layout.QueueHeight != value {
+			t.Errorf("落盘再读回的高度 = %d，期望 %d", again.Layout.QueueHeight, value)
+		}
+	}
+	s := NewStore(newPath(t), nil, nil, nil)
+	if _, err := s.Save(Patch{QueueHeight: num(QueueHeightMin - 1)}, 0, "m-low"); err == nil {
+		t.Errorf("队列高度 %d 低于下限 %d，应被拒绝", QueueHeightMin-1, QueueHeightMin)
+	} else if !errors.Is(err, ErrInvalid) {
+		t.Errorf("低于下限该报 ErrInvalid，实际 %v", err)
+	}
+	if _, err := s.Save(Patch{QueueHeight: num(QueueHeightMax + 1)}, 0, "m-high"); err == nil {
+		t.Errorf("队列高度 %d 超过上限 %d，应被拒绝", QueueHeightMax+1, QueueHeightMax)
 	}
 }
 

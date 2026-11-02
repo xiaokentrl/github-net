@@ -1,4 +1,4 @@
-/* 右下角提示面板。位置、宽度由 Toast.tsx 写进这三个变量（同一份数字不在 CSS 里再抄一遍），
+/* 右下角提示面板。位置、宽高由 Toast.tsx 写进这几个变量（同一份数字不在 CSS 里再抄一遍），
    颜色只引用令牌：--ctl/--band/--border/--border-strong/--text/--text-2/--text-3 和四档的 -soft 底 + 彩色字，
    六套主题都已迁这批令牌，所以这里不出现任何写死的颜色。
    层级 64：压在托盘弹出菜单（56）之上、设置对话框遮罩（70）之下——
@@ -32,6 +32,81 @@
   background: var(--ctl);
   box-shadow: var(--pop);
   overflow: hidden;
+  /* 没拖过宽高时这个变量不存在：面板跟着内容撑，列表另有 45vh 上限。 */
+  height: var(--toast-height, auto);
+}
+
+/* 八条调节手柄（拍板 2026-11-02）：贴在面板外沿，四条边各一条、四个角各一块。
+   故意只压住边框那 6px，不遮头部的「清空/收起」和每行的「复制/关闭」。
+   按下之后拖多窄都由 Toast.tsx 算，宽高只活在这次运行里，不落配置。 */
+.handle {
+  position: absolute;
+  z-index: 1;
+  touch-action: none;
+}
+
+.handleW {
+  left: -3px;
+  top: 10px;
+  bottom: 10px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.handleE {
+  right: -3px;
+  top: 10px;
+  bottom: 10px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.handleN {
+  top: -3px;
+  left: 10px;
+  right: 10px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.handleS {
+  bottom: -3px;
+  left: 10px;
+  right: 10px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.handleNW {
+  top: -3px;
+  left: -3px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+
+.handleNE {
+  top: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+
+.handleSW {
+  bottom: -3px;
+  left: -3px;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+
+.handleSE {
+  bottom: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
 }
 
 /* 头部就是拖动条：抓这里整块移动，双击回到右下角。
@@ -96,6 +171,14 @@
   list-style: none;
   max-height: 45vh;
   overflow-y: auto;
+}
+
+/* 拖出具体高度之后（.panelSized）：45vh 那条上限让位给面板自己的高度，
+   列表吃满剩下那一块并自己滚——否则内容会比框高，底下几条永远够不着。 */
+.panel.panelSized .list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
 }
 
 .item {
@@ -187,6 +270,19 @@
   color: var(--text-2);
   font-size: 12px;
   cursor: pointer;
+}
+
+/* 一条提示都没有时面板里的这一行：小按钮常驻，点开总得有个交代。 */
+.empty {
+  padding: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* 只剩小按钮时那一格按字面宽收：面板的 360px 宽会把小按钮顶到左边去，
+   常驻在右下角就变成挂在中间了。 */
+.rootPill {
+  width: auto;
 }
 
 .pill:hover {

@@ -75,7 +75,7 @@
   background: var(--hov);
 }
 
-/* 序号列窄、评分列给一点宽度（原型第 280–281 行给第 5、6 列定过宽）。 */
+/* 序号列窄、延迟列给一点宽度（原型第 280–281 行定过；评分列已删，第 5 列就是延迟）。 */
 .cands th:nth-child(1),
 .cands td:nth-child(1) {
   width: 34px;
@@ -166,11 +166,6 @@
   line-height: 1.4;
   white-space: normal;
   overflow-wrap: anywhere;
-}
-
-.none {
-  color: var(--text-3);
-  font-size: 11px;
 }
 
 .latency {

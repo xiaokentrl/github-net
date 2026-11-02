@@ -6,7 +6,7 @@ import uiStyles from '../ui/ui.module.css'
 import styles from './AppShell.module.css'
 
 // 工具栏照原型第 803–817 行的顺序与分组：
-// 左边 模式 / 打开Hosts，右边 检测全部 / 档位 / 应用队列 / 恢复。
+// 左边 模式 / 打开Hosts，右边 清理已选缓存 / 检测全部 / 档位 / 应用队列 / 恢复。
 // 搜索框已挪进侧栏顶部、跟着菜单宽度走（拍板 2026-10-31），工具栏里不再有它。
 // 档位那一格是原型同一颗快捷按钮（第 813 行，文字「省流 · ≤108 候选」）：显示当前档位和每轮候选上限，
 // 点开进设置中心的网络与流量页去改。这里不再放下拉框、上限说明、跳转按钮和版本号——
@@ -18,8 +18,11 @@ export function Toolbar({
   saveKind,
   saveText,
   busy,
+  clearBusy,
+  clearEnabled,
   onOpenNetwork,
   onDetectChecked,
+  onClearCheckedCache,
   onApplyChecked,
   onOpenHosts,
   restoreBusy,
@@ -30,8 +33,11 @@ export function Toolbar({
   saveKind: SaveKind
   saveText: string
   busy: boolean
+  clearBusy: boolean
+  clearEnabled: boolean
   onOpenNetwork: () => void
   onDetectChecked: () => void
+  onClearCheckedCache: () => void
   onApplyChecked: () => void
   onOpenHosts: () => void
   restoreBusy: boolean
@@ -58,6 +64,18 @@ export function Toolbar({
       </button>
 
       <span className={styles.spacer} />
+
+      {/* 清理已选缓存：只清勾中项目所属菜单的那几份公共源，清完下一轮检测才会重新下载。
+          没勾任何项目时点不动（后端也会整批拒，这里先把按钮关上，省一次无用的确认框）。 */}
+      <button
+        type="button"
+        className={styles.action}
+        disabled={busy || clearBusy || !clearEnabled}
+        title={t(clearEnabled ? 'toolbar.clearCache.title' : 'toolbar.clearCache.needCheck')}
+        onClick={onClearCheckedCache}
+      >
+        {t('toolbar.clearCache')}
+      </button>
 
       <button type="button" className={styles.action} disabled={busy} onClick={onDetectChecked}>
         {t('toolbar.detectChecked')}

@@ -1,10 +1,13 @@
+import type { ReactNode } from 'react'
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
 import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
-import type { CatalogCategory, CatalogItem, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { CatalogCategory, CatalogItem, DetectHostView, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import uiStyles from '../../components/ui/ui.module.css'
+import { pickBestCandidate } from '../detect/candidateChoice'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
 import { useTaskQueue } from '../tasks/taskStore'
 import styles from './ItemDetail.module.css'
@@ -37,8 +40,26 @@ export function detectableItems(items: CatalogItem[]): CatalogItem[] {
   return items.filter((it) => !it.userSupplied && (it.hostnames?.length ?? 0) > 0)
 }
 
+// 后端标了「当前写入」的那几条，按域名摊成一行一条：域名取这一行候选自己的主机名，
+// 地址取候选自己的 IP。同一域名同一地址只记一次（IPv4／IPv6 可能各被标一条）。
+function appliedLinesOf(rows: DetectHostView[]): { hostname: string; ip: string }[] {
+  const seen = new Set<string>()
+  const lines: { hostname: string; ip: string }[] = []
+  for (const host of rows) {
+    for (const candidate of host.candidates ?? []) {
+      if (!candidate.applied || !candidate.ip) continue
+      const key = `${host.hostname} ${candidate.ip}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      lines.push({ hostname: host.hostname ?? '', ip: candidate.ip })
+    }
+  }
+  return lines
+}
+
 // 详情里每一行都来自后端 GetItems / GetDetectResult / 事件：没有的字段就说没有，不补演示数据。
-// 六格指标里「检测最优 IP」「综合评分」「IP 来源」后端还没给，一律显示未提供；要填它们得先加后端字段。
+// 六格指标全都有来源（拍板 2026-11-02）：写入地址和本轮最优都取候选自己标的字段，
+// 耗时和可用数是候选现算，方法名与上次检测时间取结果字段。拿不到值就显示「—」，不摆恒为占位符的列。
 export function ItemDetail({
   item,
   category,
@@ -84,41 +105,42 @@ export function ItemDetail({
   const rows = result?.hosts ?? []
   const candidates = rows.flatMap((host) => host.candidates ?? [])
   // 当前写入 IP 只有一个来源：后端在这轮候选里标了 applied 的那几条。界面不自己认。
-  const appliedIps = [...new Set(candidates.filter((c) => c.applied).map((c) => c.ip))]
+  // 一条域名一行摊全（拍板 2026-11-02）：一个地址被几条域名共用就各写一行，
+  // 不再收成「N 个域名各有各的写入」那种要人回头数的说法。
+  const appliedLines = appliedLinesOf(rows)
   const restorable = status === HostsStatus.HostsApplied || status === HostsStatus.HostsPartial
   const canApply = candidates.some((c) => c.status === 'available')
 
-  // 候选表只装当前二级菜单自己的 IP（拍板 2026-10-31）：所有候选共用一张表、
-  // 域名是一列；排序按延迟升序，没测出延迟（0）的按原顺序排在后面。
+  // 候选表只装当前二级菜单自己的 IP（拍板 2026-10-31）：所有候选共用一张表、域名是一列。
+  // 排序先分档再比延迟（拍板 2026-11-02）：可用的一律排在不可用／超时／没测的前面，
+  // 档内按延迟升序，没测出延迟（0）的排在该档最后，同档同延迟按原顺序稳定保持。
+  // 只按延迟排会出这种结果：一条 30ms 但连不通的排在 90ms 且能用的前面，看着像选错了。
   const flatCandidates = rows
     .flatMap((host) => (host.candidates ?? []).map((candidate) => ({ host, candidate })))
     .map((row, order) => ({ ...row, order }))
     .sort((a, b) => {
-      const la = a.candidate.latencyMs > 0 ? a.candidate.latencyMs : Number.MAX_SAFE_INTEGER
-      const lb = b.candidate.latencyMs > 0 ? b.candidate.latencyMs : Number.MAX_SAFE_INTEGER
-      return la - lb || a.order - b.order
+      const usableRank = (candidate: Candidate) => (candidate.status === 'available' ? 0 : 1)
+      const latencyOf = (candidate: Candidate) => (candidate.latencyMs > 0 ? candidate.latencyMs : Number.MAX_SAFE_INTEGER)
+      return usableRank(a.candidate) - usableRank(b.candidate) || latencyOf(a.candidate) - latencyOf(b.candidate) || a.order - b.order
     })
   // 解析失败的域名没有候选行，单独在表上方说一句，不混进表里冒充候选。
   const failedHosts = rows.filter((h) => !h.resolved)
 
   // 指标六格的数据（拍板 2026-10-31）：全部来自本轮候选，前端现算。
-  // 最优可用 = 延迟最低（并列时 IPv4 优先），和后端写 Hosts 的选址规则同一口径。
-  const bestCandidate = candidates.reduce<((typeof candidates)[number]) | null>((acc, c) => {
-    if (c.status !== 'available') return acc
-    const better = acc === null || c.latencyMs < acc.latencyMs || (c.latencyMs === acc.latencyMs && acc.ipv6 && !c.ipv6)
-    return better ? c : acc
-  }, null)
+  // 最优可用的算法住在 detect/candidateChoice（队列明细的逐条用的是同一份），这里传整个项目的候选。
+  const bestCandidate = pickBestCandidate(candidates)
   const availableCount = candidates.filter((c) => c.status === 'available').length
   const strategyLabel = result?.strategyName || result?.strategyId || ''
 
   // 一格指标：检测中整块换微光条；值没来源时用 dim 那档字色，和原型的 b.dim 同一处理。
-  const metricCell = (labelKey: string, value: string) => (
+  // 值可以是节点——「当前写入 IP」那一格摊成逐条域名→地址，样式自己带等宽，不再整格套 mono。
+  const metricCell = (labelKey: string, value: ReactNode) => (
     <div key={labelKey} className={styles.metric}>
       <span className={styles.metricLabel}>{t(labelKey)}</span>
       {detecting ? (
         <span className={styles.skeleton} aria-hidden="true" />
       ) : (
-        <span className={`${styles.metricValue} ${labelKey === 'detail.metric.appliedIp' || labelKey === 'detail.metric.bestIp' ? styles.mono : ''}`}>{value}</span>
+        <span className={`${styles.metricValue} ${labelKey === 'detail.metric.bestIp' ? styles.mono : ''}`}>{value}</span>
       )}
     </div>
   )
@@ -159,11 +181,21 @@ export function ItemDetail({
         <div className={styles.metrics}>
           {metricCell(
             'detail.metric.appliedIp',
-            appliedIps.length === 0
-              ? '—'
-              : appliedIps.length === 1
-                ? appliedIps[0]
-                : t('detail.metric.appliedIp.many', { count: appliedIps.length }),
+            appliedLines.length === 0 ? (
+              '—'
+            ) : (
+              <span className={styles.entryList}>
+                {appliedLines.map((line) => (
+                  <span key={`${line.hostname} ${line.ip}`} className={styles.entryLine}>
+                    <span className={styles.entryHost}>{line.hostname}</span>
+                    <span className={styles.entryArrow} aria-hidden="true">
+                      →
+                    </span>
+                    <span className={styles.entryIp}>{line.ip}</span>
+                  </span>
+                ))}
+              </span>
+            ),
           )}
           {metricCell('detail.metric.bestIp', bestCandidate?.ip ?? '—')}
           {metricCell(
@@ -283,13 +315,12 @@ export function ItemDetail({
               <th scope="col">{t('detect.col.hostname')}</th>
               <th scope="col">{t('detect.col.mark')}</th>
               <th scope="col">{t('detect.col.latency')}</th>
-              <th scope="col">{t('detect.col.score')}</th>
             </tr>
           </thead>
           <tbody>
             {flatCandidates.length === 0 ? (
               <tr className={detectStyles.emptyRow}>
-                <td colSpan={6}>{t('detect.empty')}</td>
+                <td colSpan={5}>{t('detect.empty')}</td>
               </tr>
             ) : (
               flatCandidates.map(({ candidate, host }, index) => (
@@ -310,7 +341,6 @@ export function ItemDetail({
                   <td className={candidate.latencyMs > 0 ? detectStyles.latency : detectStyles.latencyNone}>
                     {candidate.latencyMs > 0 ? t('detect.latency', { ms: candidate.latencyMs }) : '—'}
                   </td>
-                  <td className={detectStyles.none}>—</td>
                 </tr>
               ))
             )}

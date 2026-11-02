@@ -245,6 +245,19 @@ export interface RuntimeInfo {
 }
 
 /**
+ * SourcesCacheResult 是「清理已选缓存」的回执，只报事实、界面按数字说话。
+ * 两个数组永远可解成数组（没清到是空数组不是 null），界面无需判空指针。
+ * 
+ * Sources 是这批勾中项目涉及到的公共源（可读名字）——勾的菜单里没有用公共源的，这里就是空的；
+ * Cleared 是真删掉当天缓存的那几份。Cleared 比 Sources 少是正常情况：那几份今天还没下载过，本来就没有可清的文件。
+ */
+export interface SourcesCacheResult {
+    "items": number;
+    "sources": string[] | null;
+    "cleared": string[] | null;
+}
+
+/**
  * StrategyOption 是方法选择区里的一行：可读的文案、能力，和它「是不是这个范围当前保存的选择」。
  * 能力位摊成三个布尔，是因为前端要按它决定要不要提示隐私影响，
  * 而把 Go 侧的位掩码原样发出去等于让界面去猜第几位是什么。
