@@ -356,7 +356,7 @@ export function Toast() {
       {HANDLES.map((handle) => (
         <div
           key={handle.key}
-          className={handle.cls}
+          className={`${styles.handle} ${handle.cls}`}
           title={t('ui.toast.resizeHint')}
           onPointerDown={startDrag(handle.edges)}
           onPointerMove={onPointerMove}
