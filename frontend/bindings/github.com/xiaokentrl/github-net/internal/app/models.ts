@@ -108,6 +108,19 @@ export interface DetectResultView {
 }
 
 /**
+ * HostEntryState 是这个项目的一个主机名在 Hosts 上的当前事实。
+ * 界面上「已替换」这三个字背后到底是哪几条、写成了什么地址，就靠这一条一条摊开。
+ *   - Written=true：这条映射是本项目现在认领的，IP 就是写进去的地址；
+ *   - Written=false：这个主机名当前不由本项目生效——从没写过，或者写的已被别的项目改写。
+ *     这时 IP 给空串，不猜区段里那个地址归谁。
+ */
+export interface HostEntryState {
+    "hostname": string;
+    "ip"?: string;
+    "written": boolean;
+}
+
+/**
  * HostsAccess 是「当前进程对系统 Hosts 的写权限」探测结果。
  * 这里只探测、不写入：Hosts 写入仍属后面的特权服务阶段。
  */
@@ -136,6 +149,8 @@ export enum HostsAccess {
 /**
  * HostsState 是某个项目的 Hosts 状态快照。
  * Revision 单调递增，前端只接受更高的值；Message 只在冲突和读取失败时给出可展示原因。
+ * Entries 是逐条主机名的落点：只有区段判读得懂、且和写入记录对得上时才给——
+ * 对不上时报不出「哪几条是我们写的」，硬凑一份就是编。
  */
 export interface HostsState {
     "itemId": string;
@@ -143,6 +158,7 @@ export interface HostsState {
     "revision": number;
     "readAt": string;
     "message"?: string;
+    "entries": HostEntryState[] | null;
 }
 
 /**

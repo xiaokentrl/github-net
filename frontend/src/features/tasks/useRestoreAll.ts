@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { clearQueue, getTasks, restoreAllHosts } from '../../api/client'
+import { pushNotice } from '../../components/ui/toastStore'
 import { t } from '../../i18n'
 import { applyTaskSnapshot, refreshAllResults, useTaskQueue } from './taskStore'
 
@@ -19,8 +20,11 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
     if (!window.confirm(t('queue.restoreAll.confirm'))) return
     restoreAllHosts()
       .then((count) => {
-        if (count > 0) return clearQueue().catch(() => undefined)
-        return undefined
+        if (count === 0) return undefined
+        // 全部还原不进队列、也没有任务落定事件：除了树里那行状态退回「未替换」，
+        // 界面上本来没有别的回执，这里补一条。成功档是回执，读完自己走。
+        pushNotice('success', t('hosts.restoreAll.done', { count }))
+        return clearQueue().catch(() => undefined)
       })
       .then(() => getTasks().then(applyTaskSnapshot))
       // 「当前写入 IP」的权威在后端检测结果里，还原后整批重拉一遍。

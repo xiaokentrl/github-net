@@ -73,6 +73,8 @@ export function ItemDetail({
 
   const status = hosts?.status ?? HostsStatus.HostsUnknown
   const hostnames = item.hostnames ?? []
+  // 逐条替换的当前事实：每条域名现在指向哪个 IP、有没有被本工具写进区段。
+  const entryList = hosts?.entries ?? []
   // 批量按钮的口径是「这一分类里能测的那几项」，不是分类里的全部条目：文案、提示和真正发出去的批次必须同一个数。
   const batch = detectableItems(category.items ?? [])
   const selfDetectable = !item.userSupplied && hostnames.length > 0
@@ -173,12 +175,26 @@ export function ItemDetail({
           {metricCell('detail.metric.lastCheck', result?.finishedAt ? formatRelativeTime(result.finishedAt) : '—')}
         </div>
 
+        {/* 域名这一行摊成逐条：每条域名现在写到哪个 IP、还是没写，全用后端这次读回来的事实。
+            判不出归属（冲突、读不到）时后端给空数组，退回原来的域名清单，不自己编 IP。 */}
         <div className={styles.domainsLine}>
           <span className={styles.lbl}>{t('detail.domains')}</span>
           {item.userSupplied ? (
             <span className={styles.dim}>{t('detail.hostnames.userSupplied')}</span>
           ) : hostnames.length === 0 ? (
             <span className={styles.dim}>{t('detail.hostnames.none')}</span>
+          ) : entryList.length > 0 ? (
+            <span className={styles.entryList}>
+              {entryList.map((entry) => (
+                <span key={entry.hostname} className={styles.entryLine}>
+                  <span className={styles.entryHost}>{entry.hostname}</span>
+                  <span className={styles.entryArrow} aria-hidden="true">
+                    →
+                  </span>
+                  {entry.written ? <span className={styles.entryIp}>{entry.ip}</span> : <span className={styles.entryNone}>{t('queue.detail.entryNotWritten')}</span>}
+                </span>
+              ))}
+            </span>
           ) : (
             hostnames.map((hostname) => (
               <span key={hostname} className={styles.chip}>

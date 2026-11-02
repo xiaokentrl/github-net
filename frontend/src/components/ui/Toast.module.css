@@ -1,0 +1,217 @@
+/* 右下角提示面板。位置、宽度由 Toast.tsx 写进这三个变量（同一份数字不在 CSS 里再抄一遍），
+   颜色只引用令牌：--ctl/--band/--border/--border-strong/--text/--text-2/--text-3 和四档的 -soft 底 + 彩色字，
+   六套主题都已迁这批令牌，所以这里不出现任何写死的颜色。
+   层级 64：压在托盘弹出菜单（56）之上、设置对话框遮罩（70）之下——
+   提示是全局回执，不该盖住用户正在操作的模态框，也不该被模态框挡住看不见。 */
+.root {
+  position: fixed;
+  right: var(--toast-right);
+  bottom: var(--toast-bottom);
+  z-index: 64;
+  width: var(--toast-width);
+  max-width: calc(100vw - 8px);
+  animation: toastIn 0.15s ease;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--ctl);
+  box-shadow: var(--pop);
+  overflow: hidden;
+}
+
+/* 头部就是拖动条：抓这里整块移动，双击回到右下角。
+   按钮自己挡在 pointerdown 外面（Toast.tsx 里 closest('button') 那条判断）。 */
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--band);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.headerDragging {
+  cursor: grabbing;
+  border-bottom-color: var(--primary);
+}
+
+.title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.count {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.headBtn {
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--ctl);
+  color: var(--text-2);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.headBtn:hover {
+  color: var(--text);
+  background: var(--hov);
+}
+
+.headBtn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+}
+
+.item + .item {
+  border-top: 1px solid var(--border);
+}
+
+.kind {
+  flex: none;
+  margin-top: 1px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.kindError {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.kindWarning {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.kindInfo {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.kindSuccess {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.text {
+  flex: 1;
+  color: var(--text);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.itemBtn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--ctl);
+  color: var(--text-2);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.itemBtn:hover {
+  color: var(--text);
+  background: var(--hov);
+}
+
+.itemBtn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* 收起：整块缩成一颗胶囊，上面留着条数，点开还原。位置和展开时同一个变量，不另算一套。 */
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--ctl);
+  box-shadow: var(--shadow);
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pill:hover {
+  color: var(--text);
+  background: var(--hov);
+}
+
+.pill:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.pillText {
+  font-weight: 600;
+}
+
+.pillCount {
+  min-width: 14px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  text-align: center;
+}
+
+.pillChevron {
+  color: var(--text-3);
+}

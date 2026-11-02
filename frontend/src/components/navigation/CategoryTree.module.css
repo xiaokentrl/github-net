@@ -9,6 +9,9 @@
   margin: 0;
   padding: 0;
   list-style: none;
+  /* 侧栏宽度可拖（200–600）：项目行多一枚计数徽章就要少一截名字，
+     所以按树的实际宽度决定徽章出不出，见下面 .entryCount 那条容器查询。 */
+  container: gn-tree / inline-size;
 }
 
 .group {
@@ -316,6 +319,67 @@
 
 .stextDetected {
   color: var(--primary);
+}
+
+/* 项目行名字后面的「已写几条/共几条」：紧贴状态字左侧，逐条明细（每条域名写到哪个 IP）
+   在这段的悬浮提示里。宽度按字面内容给（不加固定宽），少挤名字一点。
+   侧栏窄到名字只剩两三个字时不显示——那时明细看悬浮提示和详情页。 */
+.entryCount {
+  display: none;
+  flex: none;
+  color: var(--text-3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+
+@container gn-tree (min-width: 250px) {
+  .entryCount {
+    display: block;
+  }
+}
+
+/* 项目行下面常驻的逐条替换：每条域名一行，写成「域名 → IP」或「域名 → 未写入」。
+   悬停和点开都不需要——侧栏宽度够就把值显示全，不够则域名那端截断、值那端保完整。
+   左内边距 = 项目行的 34px + 名字前面那格 14px，和上面的名字对齐。 */
+.entries {
+  margin: 0;
+  padding: 0 var(--tree-pad-x, 12px) 4px 0;
+  list-style: none;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 16px;
+  padding-left: 48px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.entryHost {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entryArrow {
+  flex: none;
+}
+
+.entryValue {
+  flex: none;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 「未写入」不是错误，只是这一条还没生效：用中性字色，不套红。 */
+.entryUnwritten {
+  color: var(--text-3);
 }
 
 /* 行尾 20px 空槽：没有可还原项时它是空的，但有项目的行字才不会被挤来挤去。 */

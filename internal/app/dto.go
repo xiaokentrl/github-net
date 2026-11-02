@@ -61,14 +61,28 @@ const (
 	HostsReadFailed HostsStatus = "readFailed"
 )
 
+// HostEntryState 是这个项目的一个主机名在 Hosts 上的当前事实。
+// 界面上「已替换」这三个字背后到底是哪几条、写成了什么地址，就靠这一条一条摊开。
+//   - Written=true：这条映射是本项目现在认领的，IP 就是写进去的地址；
+//   - Written=false：这个主机名当前不由本项目生效——从没写过，或者写的已被别的项目改写。
+//     这时 IP 给空串，不猜区段里那个地址归谁。
+type HostEntryState struct {
+	Hostname string `json:"hostname"`
+	IP       string `json:"ip,omitempty"`
+	Written  bool   `json:"written"`
+}
+
 // HostsState 是某个项目的 Hosts 状态快照。
 // Revision 单调递增，前端只接受更高的值；Message 只在冲突和读取失败时给出可展示原因。
+// Entries 是逐条主机名的落点：只有区段判读得懂、且和写入记录对得上时才给——
+// 对不上时报不出「哪几条是我们写的」，硬凑一份就是编。
 type HostsState struct {
-	ItemID   string      `json:"itemId"`
-	Status   HostsStatus `json:"status"`
-	Revision int64       `json:"revision"`
-	ReadAt   string      `json:"readAt"`
-	Message  string      `json:"message,omitempty"`
+	ItemID   string           `json:"itemId"`
+	Status   HostsStatus      `json:"status"`
+	Revision int64            `json:"revision"`
+	ReadAt   string           `json:"readAt"`
+	Message  string           `json:"message,omitempty"`
+	Entries  []HostEntryState `json:"entries"`
 }
 
 // ItemsSnapshot 是 GetItems 的返回形状：目录 + 每项的真实 Hosts 状态。
@@ -161,10 +175,14 @@ func HostsStates(c *catalog.Catalog, snap hosts.Snapshot, applied AppliedState, 
 				Message:  message,
 				Revision: revision,
 				ReadAt:   readAt,
+				// 数组字段给空切片不给 null，前端直接读不用判空。
+				Entries: []HostEntryState{},
 			}
 			switch {
 			case byOwnership:
-				covered, total := itemCoverage(applied.Written.Entries, item.ID, item.Hostnames)
+				entries := itemEntries(applied.Written.Entries, item.ID, item.Hostnames)
+				state.Entries = entries
+				covered, total := countWrittenEntries(entries)
 				switch {
 				case covered == 0 || total == 0:
 					state.Status = HostsNone
@@ -191,19 +209,20 @@ func HostsStates(c *catalog.Catalog, snap hosts.Snapshot, applied AppliedState, 
 	return out
 }
 
-// itemCoverage 数这个项目的主机名里有几条是它自己认领的工具映射。
+// itemEntries 把这个项目管下的每个主机名摊成一条当前事实，顺序按目录里的顺序、同名去重。
 // 认领关系从写入记录来，不从区段猜：同一个主机名的 IP 可能被别的项目改写过，
-// 那时区段里有记录，但已经不是这个项目的映射了。
-func itemCoverage(entries []hosts.Entry, itemID string, hostnames []string) (covered, total int) {
-	owned := make(map[string]bool, len(entries))
+// 那时区段里有记录，但已经不是这个项目的映射了——这条就报 written=false。
+func itemEntries(entries []hosts.Entry, itemID string, hostnames []string) []HostEntryState {
+	owned := make(map[string]string, len(entries))
 	for _, e := range entries {
 		for _, owner := range e.Owners {
 			if owner == itemID {
-				owned[e.Hostname] = true
+				owned[hosts.NormalizeHostname(e.Hostname)] = e.IP
 				break
 			}
 		}
 	}
+	out := make([]HostEntryState, 0, len(hostnames))
 	seen := make(map[string]bool, len(hostnames))
 	for _, h := range hostnames {
 		name := hosts.NormalizeHostname(h)
@@ -211,8 +230,17 @@ func itemCoverage(entries []hosts.Entry, itemID string, hostnames []string) (cov
 			continue
 		}
 		seen[name] = true
+		ip, written := owned[name]
+		out = append(out, HostEntryState{Hostname: name, IP: ip, Written: written})
+	}
+	return out
+}
+
+// countWrittenEntries 数逐条事实里「已写入」和总数，供 applied / partial / none 三档判定。
+func countWrittenEntries(entries []HostEntryState) (covered, total int) {
+	for _, e := range entries {
 		total++
-		if owned[name] {
+		if e.Written {
 			covered++
 		}
 	}

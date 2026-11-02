@@ -59,7 +59,8 @@ func (s *Service) DownloadUpdate(info updater.Info) (UpdateDownloadResult, error
 	}
 	installer, sig, checksums, err := updater.PickAssets(info)
 	if err != nil {
-		return UpdateDownloadResult{}, NewError(CodeUpdateBadData, err.Error(), err)
+		// 具体缺哪个资产由 cause 追加在消息后面，这里再拼一遍界面上就是同一句两遍。
+		return UpdateDownloadResult{}, NewError(CodeUpdateBadData, "这次发布的可安装包不完整", err)
 	}
 	destDir, err := s.updatesDir()
 	if err != nil {

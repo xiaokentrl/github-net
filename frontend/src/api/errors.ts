@@ -2,7 +2,11 @@
 // 线上文本形状是 `code: 可展示消息[: 内部原因]`，前端按码判断，不解析中文。
 import { t } from '../i18n'
 
+// 后端 internal/app 声明的稳定错误码，整份抄一遍——漏登的码摘不掉前缀，
+// 界面上就会直接印出「hosts_failed: 没能打开 Hosts 文件」这种机器话。
+// 两边不一致由 internal/app/error_codes_parity_test.go 这条门抓着。
 export const APP_ERROR_CODES = [
+  // 目录与配置
   'empty_token',
   'catalog_invalid',
   'internal_error',
@@ -10,6 +14,30 @@ export const APP_ERROR_CODES = [
   'revision_conflict',
   'settings_save_failed',
   'config_schema_newer',
+  // 加速方法选择
+  'unknown_scope',
+  'strategy_unavailable',
+  // 队列
+  'invalid_task_id',
+  'task_not_found',
+  'task_finished',
+  'queue_running',
+  // 检测与应用/还原
+  'invalid_item_id',
+  'no_strategy_selected',
+  'no_detect_result',
+  'helper_unavailable',
+  'hosts_failed',
+  // 启动自启与平台能力
+  'autostart_failed',
+  'platform_unsupported',
+  // 更新
+  'update_bad_data',
+  'update_handoff_failed',
+  'update_rate_limited',
+  'update_network',
+  'update_no_release',
+  'update_verify_failed',
 ] as const
 
 export type AppErrorCode = (typeof APP_ERROR_CODES)[number] | 'unknown'

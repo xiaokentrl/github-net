@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -318,6 +319,55 @@ func TestHostsStatesDigestMismatchIsConflict(t *testing.T) {
 	}
 	if conflicted != 2 {
 		t.Errorf("报冲突的项目数 = %d，期望 2", conflicted)
+	}
+}
+
+func TestHostsStatesCarryPerHostnameEntries(t *testing.T) {
+	c := mustCatalog(t)
+	written, content := writtenState(t, "127.0.0.1 localhost\n", map[string][]hosts.Mapping{
+		// gh-main 三个主机名只写两个：第三条要照实报「未写入」，不能整项含糊成「部分生效」。
+		"gh-main": {{IP: "140.82.113.4", Hostnames: []string{"github.com", "api.github.com"}}},
+		"gh-raw":  {{IP: "185.199.108.133", Hostnames: []string{"raw.githubusercontent.com"}}},
+	}, "gh-main", "gh-raw")
+	states := HostsStates(c, readHosts(t, content), AppliedState{Known: true, Written: written}, 5)
+
+	// 逐条断言用相等，不用包含：多一条、少一条、顺序变了、IP 串到别的主机名上都得红。
+	mainWant := []HostEntryState{
+		{Hostname: "github.com", IP: "140.82.113.4", Written: true},
+		{Hostname: "api.github.com", IP: "140.82.113.4", Written: true},
+		{Hostname: "gist.github.com", IP: "", Written: false},
+	}
+	if got := stateFor(t, states, "gh-main").Entries; !reflect.DeepEqual(got, mainWant) {
+		t.Errorf("gh-main 的逐条替换 = %+v，期望 %+v", got, mainWant)
+	}
+	rawWant := []HostEntryState{{Hostname: "raw.githubusercontent.com", IP: "185.199.108.133", Written: true}}
+	if got := stateFor(t, states, "gh-raw").Entries; !reflect.DeepEqual(got, rawWant) {
+		t.Errorf("gh-raw 的逐条替换 = %+v，期望 %+v", got, rawWant)
+	}
+	// 一条没写的项也要给逐条清单：界面要说清「这几条都还没写」，不能给空列表让人以为是没数据。
+	cdnWant := []HostEntryState{
+		{Hostname: "github.githubassets.com", IP: "", Written: false},
+		{Hostname: "github.global.ssl.fastly.net", IP: "", Written: false},
+	}
+	if got := stateFor(t, states, "gh-cdn").Entries; !reflect.DeepEqual(got, cdnWant) {
+		t.Errorf("没写过的 gh-cdn 逐条替换 = %+v，期望 %+v", got, cdnWant)
+	}
+
+	// 区段和写入记录对不上时报不出「哪几条是我们写的」，逐条清单必须留空，不硬凑。
+	mismatch := written
+	mismatch.Digest = strings.Repeat("0", 64)
+	states = HostsStates(c, readHosts(t, content), AppliedState{Known: true, Written: mismatch}, 1)
+	if got := stateFor(t, states, "gh-main").Entries; len(got) != 0 {
+		t.Errorf("摘要对不上时 gh-main 还给出了逐条清单 %+v，这时判不出归属，必须为空", got)
+	}
+
+	// 数组字段给空切片不给 null：前端直接读，不用每处判空。
+	data, err := json.Marshal(stateFor(t, states, "gh-main"))
+	if err != nil {
+		t.Fatalf("序列化失败：%v", err)
+	}
+	if !strings.Contains(string(data), `"entries":[]`) {
+		t.Errorf("冲突状态的 entries 要序列化成空数组，实际 %s", data)
 	}
 }
 

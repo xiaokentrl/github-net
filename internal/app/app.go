@@ -352,5 +352,6 @@ func (s *Service) applyAutostart(enabled bool) error {
 	if errors.Is(err, platform.ErrUnsupported) {
 		return NewError(CodePlatformUnsupported, "当前平台还不支持开机自启动", err)
 	}
-	return NewError(CodeAutostartFailed, "设置已保存，但开机自启动没能改成："+err.Error(), err)
+	// 具体为什么没改成，由 Error() 把 cause 追加在消息后面；这里拼进去会变成同一句两遍。
+	return NewError(CodeAutostartFailed, "设置已保存，但开机自启动没有改成", err)
 }

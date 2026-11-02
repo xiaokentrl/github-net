@@ -341,8 +341,8 @@ func (s *Service) automationDetect(itemIDs []string) ([]string, error) {
 }
 
 // automationApply 只把「最近一轮检测里拿到可用候选」的项目排进应用队列。
-// ApplyItems 是整批校验的：一个没测出来的项目会把整批一起挡下，
-// 所以这里先筛一遍，让检测失败的那几个留在队列里被看见，不拖累其余。
+// ApplyItems 现在会逐项判定、做不了的以「跳过」进同一轮，所以这里先筛一遍不是为了躲报错，
+// 而是为了不让自动化给自己造一堆「跳过的任务」刷屏——检测失败的那几个本来就在检测那一轮里看得见。
 // 一个都没筛中时返回 0 条、不开轮——空轮不该在界面上占一个点不开的空根节点。
 func (s *Service) automationApply(itemIDs []string) ([]string, int, error) {
 	ready := make([]string, 0, len(itemIDs))

@@ -104,20 +104,78 @@ func TestApplyItemsEntryValidation(t *testing.T) {
 	if _, err := svc.ApplyItems([]string{"no-such"}); codeOf(t, err) != CodeInvalidItemID {
 		t.Fatalf("未知项目该被挡下，实际 %v", err)
 	}
-	if _, err := svc.ApplyItems([]string{"api"}); codeOf(t, err) != CodeNoDetectResult {
-		t.Fatalf("没检测过的项目该在入口被挡下（no_detect_result），实际 %v", err)
+	if got := len(svc.GetTasks().Tasks); got != 0 {
+		t.Fatalf("形状不对的清单不该在队列里留任务，实际 %d 条", got)
 	}
-	// 有结果但全不可用：同样挡在入口。
+}
+
+// 勾了但这一会儿做不了的项不再整批拒——它们进同一轮、以「跳过」落定，原因跟着这条任务走。
+// 界面据此能列出「哪几项没做、为什么没做」，不用用户对着剩下的行猜。
+func TestApplyItemsSkipsItemsWithoutUsableResult(t *testing.T) {
+	svc := newApplyService(t, &fakePriv{})
+	// 有结果但全不可用。
 	svc.detectResults.put(detectScopeGitHub, "live.one", &accelerator.Result{
 		ItemID:     "api",
 		Candidates: []accelerator.Candidate{{ID: "c1", Hostname: "api.github.com", IP: "203.0.113.10", Status: accelerator.StatusTimeout}},
 		Hostnames:  []accelerator.HostOutcome{{Hostname: "api.github.com", Resolved: true}},
 	})
-	if _, err := svc.ApplyItems([]string{"api"}); codeOf(t, err) != CodeNoDetectResult {
-		t.Fatalf("没有可用候选该被挡下，实际 %v", err)
+	tasks, err := svc.ApplyItems([]string{"api", "bare"})
+	if err != nil {
+		t.Fatalf("做不了的项不该把整批挡下: %v", err)
 	}
-	if got := len(svc.GetTasks().Tasks); got != 0 {
-		t.Fatalf("被拒的请求不该在队列里留任务，实际 %d 条", got)
+	want := map[string]string{
+		// bare 从没检测过，两句原因不能混成一句：下一步动作不一样。
+		"api":  "最近一轮检测没有可用的候选地址，先重新检测",
+		"bare": "这个项目还没有检测结果，先检测再应用",
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("勾 2 项就该有 2 条任务，实际 %d 条: %+v", len(tasks), tasks)
+	}
+	for _, tk := range tasks {
+		if tk.Status != task.StatusSkipped {
+			t.Errorf("%s 该以「跳过」落定，实际 %s", tk.ItemID, tk.Status)
+		}
+		if tk.ErrorMsg != want[tk.ItemID] {
+			t.Errorf("%s 的原因 = %q，期望 %q", tk.ItemID, tk.ErrorMsg, want[tk.ItemID])
+		}
+	}
+	snap := svc.GetTasks()
+	if len(snap.Rounds) != 1 || snap.Rounds[0].Name != "应用队列 · 2 项" {
+		t.Fatalf("两条都该归进同一个新轮、轮名按勾选项数给: %+v", snap.Rounds)
+	}
+}
+
+// 混合一批：能做的照常排进队列，做不了的以「跳过」同轮落定，两者不会互相顶掉。
+func TestApplyItemsMixedBatchPutsEveryCheckedItemInOneRound(t *testing.T) {
+	priv := &fakePriv{}
+	svc := newApplyService(t, priv)
+	putAvailableResult(svc, "api")
+
+	tasks, err := svc.ApplyItems([]string{"api", "bare"})
+	if err != nil {
+		t.Fatalf("混合批次该排进队列: %v", err)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("该排 2 条，实际 %d 条: %+v", len(tasks), tasks)
+	}
+	byID := map[string]task.Task{}
+	for _, tk := range tasks {
+		byID[tk.ItemID] = tk
+	}
+	if byID["api"].Status == task.StatusSkipped {
+		t.Errorf("有可用候选的 api 不该被跳过: %+v", byID["api"])
+	}
+	if byID["bare"].Status != task.StatusSkipped {
+		t.Errorf("没检测过的 bare 该以跳过落定，实际 %s", byID["bare"].Status)
+	}
+	if byID["api"].RoundID == "" || byID["api"].RoundID != byID["bare"].RoundID {
+		t.Errorf("两条都该归进同一轮: api=%q bare=%q", byID["api"].RoundID, byID["bare"].RoundID)
+	}
+	// 跳过的那条永远不会被执行器领走：领走的判据是「等待」，它一进来就是终态。
+	for _, tk := range svc.GetTasks().Tasks {
+		if tk.ItemID == "bare" && tk.Status != task.StatusSkipped {
+			t.Errorf("跳过的任务被队列改成了 %s，它不该被领走: %+v", tk.Status, tk)
+		}
 	}
 }
 

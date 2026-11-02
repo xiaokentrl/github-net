@@ -255,6 +255,52 @@ func TestEnqueueDedupeWhileActive(t *testing.T) {
 	drain(t, q)
 }
 
+func TestEnqueueSkippedLandsTerminalAndNeverRuns(t *testing.T) {
+	g := newGate()
+	defer g.open()
+	f := gateExecutor(g)
+	q, _ := newEnv(f)
+
+	roundID := q.BeginRound(KindApply, "", "应用队列 · 2 项")
+	normal := mustEnqueue(t, q, NewRequest{Kind: KindApply, ItemID: "api", RoundID: roundID})
+	skipped, err := q.EnqueueSkipped(NewRequest{Kind: KindApply, ItemID: "bare", RoundID: roundID}, "这个项目还没有检测结果，先检测再应用")
+	if err != nil {
+		t.Fatalf("该能排一条跳过: %v", err)
+	}
+	if skipped.Status != StatusSkipped {
+		t.Errorf("跳过任务排进去就该是终态, 实际 %s", skipped.Status)
+	}
+	if skipped.ErrorMsg != "这个项目还没有检测结果，先检测再应用" {
+		t.Errorf("原因要写在这条任务上，界面才有得显示, 实际 %q", skipped.ErrorMsg)
+	}
+	if skipped.FinishedAt == "" {
+		t.Error("终态任务要有结束时间，不然轮次进度算不出「这一轮做完了」")
+	}
+	if skipped.RoundID != roundID {
+		t.Errorf("跳过那条也归在这一轮里, 实际 %q vs %q", skipped.RoundID, roundID)
+	}
+
+	// 同项目同类已经在队列里（哪怕还没跑完）时，跳过不能把它改写成终态。
+	again, err := q.EnqueueSkipped(NewRequest{Kind: KindApply, ItemID: "api", RoundID: roundID}, "不该盖掉在途任务")
+	if err != nil {
+		t.Fatalf("重复排同项目该返回已在的那条: %v", err)
+	}
+	if again.ID != normal.ID || again.Status == StatusSkipped {
+		t.Errorf("在途任务不该被跳过那条顶掉: %+v vs %+v", again, normal)
+	}
+
+	g.open()
+	drain(t, q)
+
+	if got := f.seen(); got != "api" {
+		t.Errorf("只有等待那条该被执行器领走, 实际领走了 %q", got)
+	}
+	tk, ok := statusOf(q, skipped.ID)
+	if !ok || tk.Status != StatusSkipped {
+		t.Errorf("跑完整批后跳过那条仍是跳过, 实际 %+v ok=%v", tk, ok)
+	}
+}
+
 func TestSerialOrderAndSingleConcurrency(t *testing.T) {
 	g := newGate()
 	defer g.open()

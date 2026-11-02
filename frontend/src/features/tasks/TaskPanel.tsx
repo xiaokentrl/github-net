@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { HostEntryState, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import { cancelTask, clearFinishedTasks, clearQueue, getTasks, pauseQueue, retryFailedTasks, resumeQueue } from '../../api/client'
 import { getErrorMessage } from '../../api/errors'
@@ -35,6 +36,32 @@ function qdFocusIndex(kids: Task[]): number {
   return i >= 0 ? i : Math.max(0, kids.length - 1)
 }
 
+// 明细第二列「当前阶段 / 结果」的文字。以前落定的行只剩一个色点和一个「—」，
+// 用户看不出这一项到底做成了什么，所以逐档给一句实话：
+// 写了几条、还差几条、还是没写；检测给「几可用」；排队和取消也照实说。
+// 数字来源是后端这次读回来的逐条 Hosts 事实（HostsState.entries），界面不自己数区段。
+function stageResultOf(task: Task, entries: HostEntryState[], detect: { hosts: number; available: number } | null): string {
+  if (task.status === 'running' || task.status === 'restoring') return task.phaseText || t('queue.detail.running')
+  if (task.status === 'failed' || task.status === 'rolledback' || task.status === 'skipped') {
+    return task.errorMsg || t(statusKeyOf(task.status))
+  }
+  if (task.status === 'waiting') return t('queue.status.waiting')
+  if (task.status === 'cancelled') return t('queue.status.cancelled')
+  const written = entries.filter((e) => e.written).length
+  if (task.status === 'done') {
+    if (task.kind === 'detect') {
+      return detect === null ? t('queue.status.done') : t('queue.detail.detected', { hosts: detect.hosts, available: detect.available })
+    }
+    // 应用成功：说清这个项目的哪几条现在写在 Hosts 上（covered/total 一物二用，partial 一眼能看出）。
+    return entries.length === 0 ? t('queue.status.done') : t('queue.detail.applied', { covered: written, total: entries.length })
+  }
+  if (task.status === 'restored') {
+    return entries.length === 0 ? t('queue.status.restored') : t('queue.detail.restored', { total: entries.length })
+  }
+  return '—'
+}
+
+
 // 队列面板：双栏——左「任务列表」（轮，对应原型包裹任务），右「任务明细」（轮下的项目任务，
 // 三列：名称 / 当前阶段结果 / 进度耗时）。切页面不丢进度——状态住 taskStore，不在这里。
 // height 来自配置里的队列高度（布局屏预设和面板上方那条横向手柄都写这一个字段；null 用默认）。
@@ -43,6 +70,8 @@ function qdFocusIndex(kids: Task[]): number {
 // activeItemId + onPickItem 承担双向联动：点明细行 → 主详情显示该子菜单的候选 IP；
 // 主详情/左树选中子菜单 → 明细行高亮并翻到所在页。
 // onHostsChanged：面板里的「全部还原」改的是系统 Hosts，改完要让主界面重读一遍目录状态。
+// hostsOf：后端每次 GetItems 现读的 Hosts 事实（含逐条主机名写到哪个地址）。
+// 明细那一列要说「写了几条、哪几条」，这份数字只能从这儿来，界面不自己数区段。
 export function TaskPanel({
   height,
   onHeightChange,
@@ -51,6 +80,7 @@ export function TaskPanel({
   activeItemId,
   onPickItem,
   onHostsChanged,
+  hostsOf,
 }: {
   height: number | null
   onHeightChange: (height: number) => void
@@ -59,6 +89,7 @@ export function TaskPanel({
   activeItemId: string
   onPickItem: (itemId: string) => void
   onHostsChanged: () => void
+  hostsOf: Map<string, HostsState>
 }) {
   const state = useTaskQueue()
 
@@ -146,6 +177,18 @@ export function TaskPanel({
   // 翻页：每页行数按明细面板高度现算；焦点跨页自动跟随，箭头手动翻后保持。
   // 收起/展开只藏正文（原型 .queue.collapsed），也不落配置——重开窗口还是展开的。
   const [collapsed, setCollapsed] = useState(false)
+  // 逐条替换默认就铺开：应用一轮跑完，每一项的每条域名写到了哪个 IP（或没写上）要一眼看到，
+  // 不该一行一行点开才知道。▸/▾ 留着给手动收起；切轮时重置，上一轮收起的那几条不带到这一轮。
+  const [collapsedRows, setCollapsedRows] = useState<ReadonlySet<string>>(new Set())
+  const toggleRow = useCallback((id: string) => {
+    setCollapsedRows((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+  useEffect(() => setCollapsedRows(new Set()), [selectedRoundId])
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const [perPage, setPerPage] = useState(6)
   const [page, setPage] = useState(0)
@@ -360,29 +403,66 @@ export function TaskPanel({
                   </thead>
                   <tbody>
                     {slice.map((task) => {
-                      const stageResult = task.status === 'running' || task.status === 'restoring'
-                        ? task.phaseText || t('queue.detail.running')
-                        : task.status === 'failed' || task.status === 'rolledback'
-                          ? task.errorMsg || t('queue.status.failed')
-                          : task.status === 'skipped'
-                            ? task.errorMsg || t('queue.status.skipped')
-                            : '—'
+                      const entries = (task.itemId && hostsOf.get(task.itemId)?.entries) || []
+                      const result = task.itemId ? state.results[task.itemId] : undefined
+                      const stageResult = stageResultOf(
+                        task,
+                        entries,
+                        result ? { hosts: (result.hosts ?? []).length, available: result.available } : null,
+                      )
                       const prog = task.progress > 0 || task.status === 'running'
                         ? `${task.progress}%${task.duration ? ' · ' + task.duration : ''}`
                         : task.duration || '—'
+                      // 只有应用/还原这两种任务有「逐条替换」可看；检测的逐条在详情页那张候选表里。
+                      const expandable = entries.length > 0 && (task.kind === 'apply' || task.kind === 'restore')
+                      const open = !collapsedRows.has(task.id)
                       return (
-                        <tr
-                          key={task.id}
-                          className={`${task.id === kids[focus]?.id ? styles.focus : ''} ${task.itemId && task.itemId === activeItemId ? styles.sel : ''}`}
-                          onClick={() => pickItem(task.itemId)}
-                        >
-                          <td>
-                            <span className={`${styles.dot} ${styles['dot-' + task.status]}`} />
-                            <span title={task.name}>{task.name}</span>
-                          </td>
-                          <td className={task.status === 'failed' ? styles.err : ''}>{stageResult}</td>
-                          <td className={styles.dim}>{prog}</td>
-                        </tr>
+                        <Fragment key={task.id}>
+                          <tr
+                            className={`${task.id === kids[focus]?.id ? styles.focus : ''} ${task.itemId && task.itemId === activeItemId ? styles.sel : ''}`}
+                            onClick={() => pickItem(task.itemId)}
+                          >
+                            <td>
+                              {expandable ? (
+                                <button
+                                  type="button"
+                                  className={styles.expandBtn}
+                                  aria-expanded={open}
+                                  aria-label={open ? t('queue.detail.collapseEntries') : t('queue.detail.expandEntries')}
+                                  title={open ? t('queue.detail.collapseEntries') : t('queue.detail.expandEntries')}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    toggleRow(task.id)
+                                  }}
+                                >
+                                  {open ? '▾' : '▸'}
+                                </button>
+                              ) : (
+                                <span className={styles.expandSlot} aria-hidden="true" />
+                              )}
+                              <span className={`${styles.dot} ${styles['dot-' + task.status]}`} />
+                              <span title={task.name}>{task.name}</span>
+                            </td>
+                            <td className={task.status === 'failed' ? styles.err : ''}>{stageResult}</td>
+                            <td className={styles.dim}>{prog}</td>
+                          </tr>
+                          {expandable && open ? (
+                            <tr className={styles.entryRow}>
+                              <td colSpan={4}>
+                                <ul className={styles.entryList}>
+                                  {entries.map((entry) => (
+                                    <li key={entry.hostname} className={styles.entryItem}>
+                                      <span className={styles.entryHost}>{entry.hostname}</span>
+                                      <span className={`${styles.entryIp} ${entry.written ? '' : styles.entryMissing}`}>
+                                        {entry.written ? entry.ip : t('queue.detail.entryNotWritten')}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
                       )
                     })}
                     {slice.length === 0 && (

@@ -127,6 +127,36 @@ func (q *Queue) Enqueue(req NewRequest) (Task, error) {
 	return t.task, nil
 }
 
+// EnqueueSkipped 排一条「这一轮不做」的任务：它以「跳过」落定，永远不会被执行器领走。
+// 用途是批量应用那一轮——勾了 6 项但有 1 项还没检测过，那一项也得在这一轮的明细里现身、
+// 写明为什么没做，而不是从这一轮消失，让用户对着剩下的 5 行猜另外 1 行去哪了。
+// 同类型同项目已有在途任务时照旧不重复排，返回已在的那条。
+func (q *Queue) EnqueueSkipped(req NewRequest, reason string) (Task, error) {
+	if err := normalize(&req); err != nil {
+		return Task{}, err
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.stopped {
+		return Task{}, ErrQueueStopped
+	}
+	if existing := q.findActiveLocked(req.Kind, req.ItemID); existing != nil {
+		return existing.task, nil
+	}
+	e := q.appendLocked(Task{
+		Kind:       req.Kind,
+		ItemID:     req.ItemID,
+		Name:       req.Name,
+		ScopeID:    req.ScopeID,
+		StrategyID: req.StrategyID,
+		RoundID:    req.RoundID,
+		Status:     StatusSkipped,
+		ErrorMsg:   reason,
+		FinishedAt: q.now().UTC().Format(time.RFC3339),
+	})
+	return e.task, nil
+}
+
 // BeginRound 开一轮，返回轮 ID；接着排进这个 ID 的任务都属于这一轮。
 // 名字给空时按任务类型顶上（检测/应用/恢复），界面不会拿到一个空标题。
 // 开轮本身不算错误：一轮还没有任务时它不进快照，等第一条任务排进来才现身。

@@ -126,6 +126,52 @@
   overflow-wrap: anywhere;
 }
 
+/* 逐条替换（读得懂归属时替掉上面那串 chip）：一行一条域名，域名 → 本工具这次写进去的 IP。
+   没写的那条不编 IP，只说「未写入」。窄了域名自己省略，IP 不换行。 */
+.entryList {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.entryLine {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.entryHost {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entryArrow {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.entryIp {
+  flex: none;
+  color: var(--green);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.entryNone {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
 /* 出错那条（原型 .error-box 第 269–271 行）：淡红底、红字；有候选时的软失败走淡琥珀。
    原型那条上边框是写死的浅色，这里靠底色本身就够了，和 components/ui 的报错条同一形状。 */
 .errorBox {

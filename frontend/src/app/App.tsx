@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
+import type { Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import { applyItems, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
 import { subscribeAutomationStatus, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
 import { getErrorMessage } from '../api/errors'
@@ -13,6 +14,8 @@ import { Toolbar } from '../components/layout/Toolbar'
 import { CategoryTree } from '../components/navigation/CategoryTree'
 import type { HostsLookup } from '../components/navigation/CategoryNode'
 import { liveByItem } from '../components/navigation/treeStatus'
+import { Toast } from '../components/ui/Toast'
+import { pushNotice } from '../components/ui/toastStore'
 import { SettingsDialog, type SettingsPaneID } from '../features/settings/SettingsDialog'
 import { ItemDetail } from '../features/items/ItemDetail'
 import { TaskPanel } from '../features/tasks/TaskPanel'
@@ -34,6 +37,15 @@ function applyTheme(theme: string) {
 // 缩放抄原型第 1631 行：给 body 设 CSS zoom，只作用在本机界面上，不写进任何文件。
 function applyZoom(zoom: number) {
   document.body.style.zoom = String(zoom)
+}
+
+// 入口被后端整批拒了：原位那句话照旧留着（结构规划要求错误必须在操作附近可见，不能只靠会消失的提示），
+// 这里再递一条常驻提示进右下角面板——用户可能正在别的分类、别的屏幕，光看按钮旁边那一句看不到。
+// 只递后端给的那句：本地前置条件（「还没勾选项目」）就留在按钮旁边，不额外喊一嗓子。
+function reportRejection(setter: (text: string) => void, err: unknown): void {
+  const message = getErrorMessage(err)
+  setter(message)
+  pushNotice('error', message)
 }
 
 export function App() {
@@ -183,12 +195,26 @@ export function App() {
     // 应用/还原类任务落定后重读目录，详情页的 Hosts 状态才会跟着变；检测类不用（结果存储自己追）。
     const unsubscribeTasks = subscribeTaskEvents((settled) => {
       if (settled.kind === 'apply' || settled.kind === 'restore') loadCatalog()
+      // 写系统 Hosts 的结果递进右下角面板：辅助服务没在跑、写失败被回滚这两种，
+      // 光靠队列面板那一行很容易被划过去；检测类不递（一轮几十条，递出来就是刷屏）。
+      // 文字里不带项目名，同一批的同一种失败自然并成一条。
+      const reason = settled.errorMsg || t('error.unknown')
+      if (settled.status === 'failed') pushNotice('error', t('hosts.task.failed', { reason }))
+      if (settled.status === 'rolledback') pushNotice('error', t('hosts.task.rolledback', { reason }))
+      if (settled.kind === 'apply' && settled.status === 'done') pushNotice('info', t('hosts.apply.doneHint'))
     })
 
     // 启动自动检查的结果落到顶栏徽标；详情看设置中心的检测升级屏。
+    // 徽标只在「有新版本」时出现，检查失败在界面上本来完全无声——这里给一条会自己走的警告：
+    // 更新检查不是主流程，不值得留一条常驻错误。
     const unsubscribeUpdate = subscribeUpdateStatus((payload) => {
+      if (payload.error) {
+        pushNotice('warning', t('update.checkFailed', { reason: payload.error }))
+        return
+      }
       if (payload.info?.updateAvailable && payload.info.latestVersion) {
         setUpdateLatest(payload.info.latestVersion)
+        pushNotice('info', t('update.available', { version: payload.info.latestVersion }))
       }
     })
 
@@ -505,15 +531,29 @@ export function App() {
         return
       }
       for (const ids of groups.values()) {
-        detectItems(ids).catch((err: unknown) => {
-          setDetectError(getErrorMessage(err))
-        })
+        detectItems(ids).catch((err: unknown) => reportRejection(setDetectError, err))
       }
     },
     [snapshot],
   )
 
-  // 批量应用：勾选项里已检测且有可用候选的，交给后端建应用轮。
+  // 这一轮里「没做」的项不能悄悄消失：右下角给一句、工具栏原位也留一句，
+  // 但事实的主场是队列——每一行都带着自己的状态和原因，这里只负责把用户引过去。
+  const reportSkippedApply = useCallback((tasks: Task[] | null) => {
+    const skipped = (tasks ?? []).filter((tk) => tk.status === 'skipped')
+    if (skipped.length === 0) return
+    const notice = t('toolbar.applyChecked.skipped', {
+      skipped: skipped.length,
+      total: (tasks ?? []).length,
+      names: skipped.map((tk) => tk.name || tk.itemId).join('、'),
+    })
+    setHostsError(notice)
+    pushNotice('warning', notice)
+  }, [])
+
+  // 批量应用：勾选项整批交给后端。界面不再自己筛「有没有可用候选」——
+  // 自己筛就是第二套判断标准，用户勾 6 项、队列只剩 1 行时说不清另外 5 行去哪了；
+  // 现在做不了的项也在同一轮里以「跳过」落定并写明原因。
   const startApplyChecked = useCallback(
     (checked: ReadonlySet<string>) => {
       setHostsError('')
@@ -521,27 +561,17 @@ export function App() {
         setHostsError(t('toolbar.applyChecked.none'))
         return
       }
-      const ids = [...checked].filter((id) => {
-        const view = queue.results[id]
-        return (view?.hosts ?? []).some((h) => (h.candidates ?? []).some((c) => c.status === 'available'))
-      })
-      if (ids.length === 0) {
-        setHostsError(t('toolbar.applyChecked.unavailable'))
-        return
-      }
-      applyItems(ids).catch((err: unknown) => {
-        setHostsError(getErrorMessage(err))
-      })
+      applyItems([...checked])
+        .then(reportSkippedApply)
+        .catch((err: unknown) => reportRejection(setHostsError, err))
     },
-    [queue.results],
+    [reportSkippedApply],
   )
 
   // strategyId 给空走范围默认；选择区那颗「检测」按钮会带上下拉选中的方法。
   const startDetect = useCallback((itemId: string, strategyId?: string) => {
     setDetectError('')
-    detectItems([itemId], strategyId ?? '').catch((err: unknown) => {
-      setDetectError(getErrorMessage(err))
-    })
+    detectItems([itemId], strategyId ?? '').catch((err: unknown) => reportRejection(setDetectError, err))
   }, [])
 
   // 批量检测：项目清单已由详情页按 detectableItems 过滤，这里不再重算第二遍口径。
@@ -555,23 +585,19 @@ export function App() {
           if (budget.shortfall > 0 && !window.confirm(t('detect.budget.confirm', { needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall }))) {
             return
           }
-          return detectItems(ids).catch((err: unknown) => {
-            setDetectError(getErrorMessage(err))
-          })
+          return detectItems(ids).catch((err: unknown) => reportRejection(setDetectError, err))
         })
-        .catch((err: unknown) => {
-          setDetectError(getErrorMessage(err))
-        })
+        .catch((err: unknown) => reportRejection(setDetectError, err))
     },
     [],
   )
 
   const startApply = useCallback((itemId: string) => {
     setHostsError('')
-    applyItems([itemId]).catch((err: unknown) => {
-      setHostsError(getErrorMessage(err))
-    })
-  }, [])
+    applyItems([itemId])
+      .then(reportSkippedApply)
+      .catch((err: unknown) => reportRejection(setHostsError, err))
+  }, [reportSkippedApply])
 
   // 树侧焦点跟随（原型 followItem，第 2676–2689 行 + 开关说明第 1002–1030 行）：
   // 开启时临时收起其他类目、只展开当前项所属类目，跑完恢复开跑前的展开状态；
@@ -628,23 +654,19 @@ export function App() {
   // 落定后由上面的任务订阅重读目录，树上的状态字、色点和 ↺ 是否还在都会跟着变。
   const startRestoreItems = useCallback((itemIds: string[]) => {
     setHostsError('')
-    restoreItems(itemIds).catch((err: unknown) => {
-      setHostsError(getErrorMessage(err))
-    })
+    restoreItems(itemIds).catch((err: unknown) => reportRejection(setHostsError, err))
   }, [])
 
   const startRestore = useCallback((itemId: string) => startRestoreItems([itemId]), [startRestoreItems])
 
   const openHostsFile = useCallback(() => {
     setHostsError('')
-    openHosts().catch((err: unknown) => {
-      setHostsError(getErrorMessage(err))
-    })
+    openHosts().catch((err: unknown) => reportRejection(setHostsError, err))
   }, [])
 
-  // 工具栏「恢复」和队列面板那颗共用同一条实现（useRestoreAll）；失败挂在详情页的 hostsError 上。
+  // 工具栏「恢复」和队列面板那颗共用同一条实现（useRestoreAll）；失败按同一条规矩：原位一句 + 右下角一条。
   // 还原不进队列、没有任务落定事件，所以成功后在这里重读目录，树上的状态才跟着回到「未替换」。
-  const handleRestoreError = useCallback((err: unknown) => setHostsError(getErrorMessage(err)), [])
+  const handleRestoreError = useCallback((err: unknown) => reportRejection(setHostsError, err), [])
   const { busy: restoreBusy, restoreAll } = useRestoreAllTasks(handleRestoreError, loadCatalog)
 
   const sidebar = (
@@ -740,6 +762,7 @@ export function App() {
               focusManualRef.current = true
             }}
             onHostsChanged={loadCatalog}
+            hostsOf={hostsOf}
           />
         }
         updateLatest={updateLatest}
@@ -787,6 +810,8 @@ export function App() {
           onApplyFocusFollow={changeApplyFocusFollow}
         />
       )}
+      {/* 右下角提示面板：挂在应用根上、整应用只有一份，数据在 components/ui/toastStore 里。 */}
+      <Toast />
     </>
   )
 }

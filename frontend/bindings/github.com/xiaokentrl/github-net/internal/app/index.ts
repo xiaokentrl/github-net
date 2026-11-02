@@ -18,6 +18,7 @@ export type {
     DetectBudgetPreview,
     DetectHostView,
     DetectResultView,
+    HostEntryState,
     HostsState,
     ItemsSnapshot,
     PoolEntryView,

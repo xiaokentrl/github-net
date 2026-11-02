@@ -16,22 +16,47 @@ import (
 // 这一批命令都不自己写 Hosts：写系统的只有特权辅助服务（internal/privilege）。
 
 // ApplyItems 把指定项目排进应用队列：把该项目最近一轮检测的可用候选写进系统 Hosts。
-// 没检测过的项目在入口就被拒——「先检测、再应用」这条顺序不靠用户自觉。
+// 勾了几项就排几行——做不了的那几项也进同一轮，以「跳过」落定并写明原因，
+// 不从这一轮里消失（用户勾 6 项、队列只剩 1 行、剩下 5 行去哪了，比报错更难查）。
+// 整批校验已经换成逐项判定，但项目在不在目录里、清单空不空仍然整批拒。
 func (s *Service) ApplyItems(itemIDs []string) ([]task.Task, error) {
 	ids, err := s.uniqueKnownItems(itemIDs)
 	if err != nil {
 		return nil, err
 	}
+	roundID := s.tasks.BeginRound(task.KindApply, s.batchScope(ids), applyRoundName(len(ids)))
+	tasks := make([]task.Task, 0, len(ids))
 	for _, id := range ids {
-		view, ok := s.detectResults.view(id)
-		if !ok {
-			return nil, NewError(CodeNoDetectResult, "这个项目还没有检测结果，先检测再应用", nil)
+		name, scope, _ := s.findItem(id)
+		req := task.NewRequest{Kind: task.KindApply, ItemID: id, Name: name, ScopeID: scope, RoundID: roundID}
+		if reason := s.applyBlocker(id); reason != "" {
+			t, err := s.tasks.EnqueueSkipped(req, reason)
+			if err != nil {
+				return nil, ToPublicError(err)
+			}
+			tasks = append(tasks, t)
+			continue
 		}
-		if !hasAvailable(view) {
-			return nil, NewError(CodeNoDetectResult, "最近一轮检测没有可用的候选地址，先重新检测", nil)
+		t, err := s.tasks.Enqueue(req)
+		if err != nil {
+			return nil, ToPublicError(err)
 		}
+		tasks = append(tasks, t)
 	}
-	return s.enqueueAll(task.KindApply, ids, applyRoundName(len(ids)))
+	return tasks, nil
+}
+
+// applyBlocker 说清这个项目这会儿为什么还不能应用；能应用返回空串。
+// 返回的句子直接进任务并显示到队列明细，所以写的是用户照着能做的下一步，不是内部原因。
+func (s *Service) applyBlocker(itemID string) string {
+	view, ok := s.detectResults.view(itemID)
+	if !ok {
+		return "这个项目还没有检测结果，先检测再应用"
+	}
+	if !hasAvailable(view) {
+		return "最近一轮检测没有可用的候选地址，先重新检测"
+	}
+	return ""
 }
 
 // RestoreItems 把指定项目排进还原队列：退回它应用前的映射。
@@ -82,7 +107,8 @@ func (s *Service) OpenHosts() error {
 		cmd = exec.Command("xdg-open", path)
 	}
 	if err := cmd.Start(); err != nil {
-		return NewError(CodeHostsFailed, "没能打开 Hosts 文件："+err.Error(), err)
+		// 内部原因交给 Error() 追加一次，这里不再拼进消息：拼了界面上就是同一句两遍。
+		return NewError(CodeHostsFailed, "没能打开 Hosts 文件", err)
 	}
 	// 不等编辑器退出：打开成功就算完成，进程交给系统。
 	go func() { _ = cmd.Wait() }()
@@ -132,20 +158,7 @@ func hasAvailable(view DetectResultView) bool {
 // 返回任务快照。轮名由调用方按原型规则给（界面根节点显示它），范围只在整批同属一个范围时记下。
 // 排到一半失败只剩「应用正在退出」，前面已排进去的有效任务会随队列关闭被取消。
 func (s *Service) enqueueAll(kind task.Kind, ids []string, roundName string) ([]task.Task, error) {
-	scopeID := ""
-	for _, id := range ids {
-		_, sc, ok := s.findItem(id)
-		if !ok {
-			continue
-		}
-		if scopeID == "" {
-			scopeID = sc
-		} else if sc != scopeID {
-			scopeID = ""
-			break
-		}
-	}
-	roundID := s.tasks.BeginRound(kind, scopeID, roundName)
+	roundID := s.tasks.BeginRound(kind, s.batchScope(ids), roundName)
 	tasks := make([]task.Task, 0, len(ids))
 	for _, id := range ids {
 		name, itemScope, _ := s.findItem(id)
@@ -156,6 +169,23 @@ func (s *Service) enqueueAll(kind task.Kind, ids []string, roundName string) ([]
 		tasks = append(tasks, t)
 	}
 	return tasks, nil
+}
+
+// batchScope 只在整批同属一个范围时记下那个范围；混了范围或项目不在目录里就给空串。
+func (s *Service) batchScope(ids []string) string {
+	scopeID := ""
+	for _, id := range ids {
+		_, sc, ok := s.findItem(id)
+		if !ok {
+			continue
+		}
+		if scopeID == "" {
+			scopeID = sc
+		} else if sc != scopeID {
+			return ""
+		}
+	}
+	return scopeID
 }
 
 // applyRoundName / restoreRoundName 是原型定下的两条轮名规则，写在一处免得界面自己拼第二套：
