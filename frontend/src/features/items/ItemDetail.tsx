@@ -82,6 +82,39 @@ export function ItemDetail({
   const detecting = state.tasks.some(
     (task) => item !== null && task.itemId === item.id && task.kind === 'detect' && (task.status === 'running' || task.status === 'waiting'),
   )
+
+  // 列宽：拖过一次就转固定布局（px），没拖过是 null（auto 自适应）。
+  const tableRef = useRef<HTMLTableElement | null>(null)
+  const [colWidths, setColWidths] = useState<number[] | null>(null)
+  const colDrag = useRef<{ pointerId: number; index: number; startX: number; startWidths: number[] } | null>(null)
+
+  const startColDrag = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const row = tableRef.current?.rows[0]
+    if (!row) return
+    const startWidths = Array.from(row.cells).map((cell) => cell.offsetWidth)
+    colDrag.current = { pointerId: event.pointerId, index, startX: event.clientX, startWidths }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setColWidths(startWidths)
+  }
+  const onColDragMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const state = colDrag.current
+    if (!state || state.pointerId !== event.pointerId) return
+    const dx = event.clientX - state.startX
+    const MIN = 70
+    const next = [...state.startWidths]
+    next[state.index] = Math.max(MIN, state.startWidths[state.index] + dx)
+    next[state.index + 1] = Math.max(MIN, state.startWidths[state.index + 1] - dx)
+    setColWidths(next)
+  }
+  const onColDragUp = (event: ReactPointerEvent<HTMLElement>) => {
+    const state = colDrag.current
+    if (!state || state.pointerId !== event.pointerId) return
+    colDrag.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
   if (!item || !category) return <EmptyState message={t('detail.empty')} />
 
   const status = hosts?.status ?? HostsStatus.HostsUnknown
@@ -118,38 +151,6 @@ export function ItemDetail({
   // 解析失败的域名没有候选行，单独在表上方说一句，不混进表里冒充候选。
   const failedHosts = rows.filter((h) => !h.resolved)
 
-  // 列宽：拖过一次就转固定布局（px），没拖过是 null（auto 自适应）。
-  const tableRef = useRef<HTMLTableElement | null>(null)
-  const [colWidths, setColWidths] = useState<number[] | null>(null)
-  const colDrag = useRef<{ pointerId: number; index: number; startX: number; startWidths: number[] } | null>(null)
-
-  const startColDrag = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0) return
-    event.preventDefault()
-    event.stopPropagation()
-    const row = tableRef.current?.rows[0]
-    if (!row) return
-    const startWidths = Array.from(row.cells).map((cell) => cell.offsetWidth)
-    colDrag.current = { pointerId: event.pointerId, index, startX: event.clientX, startWidths }
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setColWidths(startWidths)
-  }
-  const onColDragMove = (event: ReactPointerEvent<HTMLElement>) => {
-    const state = colDrag.current
-    if (!state || state.pointerId !== event.pointerId) return
-    const dx = event.clientX - state.startX
-    const MIN = 70
-    const next = [...state.startWidths]
-    next[state.index] = Math.max(MIN, state.startWidths[state.index] + dx)
-    next[state.index + 1] = Math.max(MIN, state.startWidths[state.index + 1] - dx)
-    setColWidths(next)
-  }
-  const onColDragUp = (event: ReactPointerEvent<HTMLElement>) => {
-    const state = colDrag.current
-    if (!state || state.pointerId !== event.pointerId) return
-    colDrag.current = null
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
-  }
 
   return (
     <div className={styles.wrap}>
