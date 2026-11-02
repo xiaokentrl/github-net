@@ -170,13 +170,15 @@ export function Toast() {
   // 用户亲手拖过（面板或小胶囊）就完全交给用户；没拖过则自动给队列让位。
   const userMoved = useRef(false)
 
-  // 队列面板当前的显示高度（缩放归一到 CSS 像素层）。找不到就退回默认贴底距离。
-  // +6 是拖拽手柄那条线的高度：胶囊正好坐在手柄上沿。
+  // 胶囊下缘要贴的是「拖拽条的上缘」。胶囊 fixed 锚在窗口底，而队列面板底下还有状态栏，
+  // 所以量的是「窗口底到队列面板顶」的真实视口距离（含状态栏），再加手柄那 6px。
+  // 全部用 rect 现量，缩放和窗口尺寸的变化都自动含在里面。找不到队列就退回默认贴底距离。
   const queueBottomOffset = useCallback(() => {
     const zoom = bodyZoom()
     const el = document.querySelector(`section[aria-label="${t('queue.title')}"]`)
     if (!el) return BOTTOM_DEFAULT
-    return Math.round(el.getBoundingClientRect().height / zoom) + 6
+    const top = el.getBoundingClientRect().top
+    return Math.round((window.innerHeight - top) / zoom) + 6
   }, [])
 
   // 窗口变小或改了缩放档位，原来那个位置和大小可能已经出去了一半，这里夹回来。
