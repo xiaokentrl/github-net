@@ -57,6 +57,7 @@ export type SettingsPatch = {
   autoCloseAfterApply?: boolean
   detectFocusFollow?: boolean
   applyFocusFollow?: boolean
+  checkedItemIds?: string[]
 }
 
 export function getAppStatus(): Promise<AppStatus> {
@@ -96,6 +97,7 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     autoStart: patch.autoStart ?? null,
     detectFocusFollow: patch.detectFocusFollow ?? null,
     applyFocusFollow: patch.applyFocusFollow ?? null,
+    checkedItemIds: patch.checkedItemIds ?? null,
     autoDetectMenus: patch.autoDetectMenus ?? null,
     autoApplyOnStartup: patch.autoApplyOnStartup ?? null,
     autoCloseAfterApply: patch.autoCloseAfterApply ?? null,

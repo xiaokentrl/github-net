@@ -99,10 +99,14 @@ type LayoutConfig struct {
 	QueueListWidth int `json:"queueListWidth"`
 }
 
-// TreeBehaviorConfig 是两个独立的分类树展开开关。
+// TreeBehaviorConfig 是两个独立的分类树展开开关，加上树侧勾选的持久化。
 type TreeBehaviorConfig struct {
 	DetectFocusFollow bool `json:"detectFocusFollow"`
 	ApplyFocusFollow  bool `json:"applyFocusFollow"`
+	// CheckedItemIDs 是树侧勾选的项目 ID（拍板 2026-11-03：勾选跨重装有效）。
+	// 只做长度兜底不校验 ID 存在性：目录改版后前端会把不认识的 ID 过滤掉，
+	// 配置层不认识目录，硬校验只会让「目录刚删了项」的合法老配置整份被拒。
+	CheckedItemIDs []string `json:"checkedItemIds"`
 }
 
 // StartupConfig 是启动相关开关。自动检测→自动应用→自动退出是一条链，下游依赖上游：
@@ -146,6 +150,7 @@ type Patch struct {
 	QueueListWidth                 *int               `json:"queueListWidth"`
 	DetectFocusFollow              *bool              `json:"detectFocusFollow"`
 	ApplyFocusFollow               *bool              `json:"applyFocusFollow"`
+	CheckedItemIDs                 *[]string          `json:"checkedItemIds"`
 	AutoStart                      *bool              `json:"autoStart"`
 	StartMinimized                 *bool              `json:"startMinimized"`
 	CloseToTray                    *bool              `json:"closeToTray"`
@@ -560,6 +565,24 @@ func applyPatch(c *Config, p Patch) {
 	}
 	if p.ApplyFocusFollow != nil {
 		c.TreeBehavior.ApplyFocusFollow = *p.ApplyFocusFollow
+	}
+	if p.CheckedItemIDs != nil {
+		ids := *p.CheckedItemIDs
+		// 去重 + 长度兜底：目录总共几十项，超限的只截到上限，不报错——
+		// 勾选是意图不是事实，坏清单不值得让整份保存失败。
+		seen := make(map[string]bool, len(ids))
+		out := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			out = append(out, id)
+		}
+		if len(out) > 512 {
+			out = out[:512]
+		}
+		c.TreeBehavior.CheckedItemIDs = out
 	}
 	if p.AutoStart != nil {
 		c.Startup.AutoStart = *p.AutoStart

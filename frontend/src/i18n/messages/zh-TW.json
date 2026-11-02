@@ -96,6 +96,7 @@
   "settings.save.pending": "儲存中…",
   "settings.save.failed": "儲存失敗（{label}）：{reason}",
   "settings.subject.profile": "流量檔位",
+  "settings.subject.checkedItems": "勾選的項目",
   "settings.subject.budget": "每輪候選上限",
   "settings.subject.sidebar": "主選單寬度",
   "settings.subject.queueHeight": "佇列高度",

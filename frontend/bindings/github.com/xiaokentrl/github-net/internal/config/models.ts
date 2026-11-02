@@ -70,6 +70,7 @@ export interface Patch {
     "queueListWidth": number | null;
     "detectFocusFollow": boolean | null;
     "applyFocusFollow": boolean | null;
+    "checkedItemIds": string[] | null;
     "autoStart": boolean | null;
     "startMinimized": boolean | null;
     "closeToTray": boolean | null;
@@ -104,9 +105,16 @@ export interface Store {
 }
 
 /**
- * TreeBehaviorConfig 是两个独立的分类树展开开关。
+ * TreeBehaviorConfig 是两个独立的分类树展开开关，加上树侧勾选的持久化。
  */
 export interface TreeBehaviorConfig {
     "detectFocusFollow": boolean;
     "applyFocusFollow": boolean;
+
+    /**
+     * CheckedItemIDs 是树侧勾选的项目 ID（拍板 2026-11-03：勾选跨重装有效）。
+     * 只做长度兜底不校验 ID 存在性：目录改版后前端会把不认识的 ID 过滤掉，
+     * 配置层不认识目录，硬校验只会让「目录刚删了项」的合法老配置整份被拒。
+     */
+    "checkedItemIds": string[] | null;
 }

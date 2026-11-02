@@ -276,8 +276,24 @@ export function App() {
   const queue = useTaskQueue()
   const liveOf = useMemo(() => liveByItem(queue.tasks), [queue.tasks])
 
-  // 默认无选中（拍板 2026-10-31，替代原型的「默认勾选 GitHub+Steam」）：
-  // 勾选是「接下来要操作哪些」的意图，不该替用户预设；要用谁自己勾。
+  // 默认无选中；勾选持久化（拍板 2026-11-03）：目录和设置都就绪后恢复上次的勾选
+  // （配置里的 ID 目录里没有的就过滤掉），之后的每次变化防抖写回配置，跨重装有效。
+  const checkedInitializedRef = useRef(false)
+  const savedCheckedRef = useRef('')
+  useEffect(() => {
+    if (checkedInitializedRef.current || catalogLoad !== 'ready' || !settings) return
+    checkedInitializedRef.current = true
+    const stored = new Set(settings.treeBehavior.checkedItemIds ?? [])
+    const restored = new Set<string>()
+    for (const cat of snapshot?.categories ?? []) {
+      for (const it of cat.items ?? []) {
+        if (stored.has(it.id)) restored.add(it.id)
+      }
+    }
+    savedCheckedRef.current = [...restored].sort().join('\n')
+    setCheckedIds(restored)
+  }, [catalogLoad, snapshot, settings])
+
 
   const toggleChecked = useCallback((itemId: string, checked: boolean) => {
     setCheckedIds((current) => {
@@ -374,6 +390,18 @@ export function App() {
 
   // 工具栏和设置对话框共用这一条保存链路：同一份 revision 只数一遍，不会出现两边各存各的。
   const { state: save, save: submit } = useSettingsSave(settings, applyConfig, loadSettings)
+
+  // 勾选变化的防抖写回：和初始化时记录的那份一致就不写，避免白涨 revision。
+  useEffect(() => {
+    if (!checkedInitializedRef.current) return
+    const serialized = [...checkedIds].sort().join('\n')
+    if (serialized === savedCheckedRef.current) return
+    const timer = window.setTimeout(() => {
+      savedCheckedRef.current = serialized
+      submit({ checkedItemIds: [...checkedIds] }, t('settings.subject.checkedItems'), 'checkedItems')
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [checkedIds, submit])
 
   const changeProfile = useCallback(
     (profile: NetworkProfile) => {
