@@ -341,3 +341,13 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
 }
+
+/* 当前写入列：每个域名→地址一条独立行，行内自动换行兜长内容。 */
+.writeStack {
+  display: block;
+}
+
+.writeItem {
+  display: block;
+  overflow-wrap: anywhere;
+}
