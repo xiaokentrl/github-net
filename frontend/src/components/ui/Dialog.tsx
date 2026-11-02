@@ -204,7 +204,6 @@ export function Dialog({
           }}
         >
           <span className={styles.title}>{title}</span>
-          <span className={styles.spacer} />
           <button type="button" className={styles.closeBtn} onClick={onClose} title={t('ui.dialog.close')} aria-label={t('ui.dialog.close')}>
             ✕
           </button>

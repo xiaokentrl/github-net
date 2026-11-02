@@ -24,6 +24,7 @@
 }
 
 .header {
+  position: relative;
   display: flex;
   flex: none;
   align-items: center;
@@ -38,17 +39,19 @@
   --wails-draggable: no-drag;
 }
 
+/* 标题默认居中：绝对定位压在头部中线，右侧关闭按钮的宽度不影响居中位置。 */
 .title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 76px);
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.spacer {
-  flex: 1;
+  text-align: center;
 }
 
 .closeBtn {
@@ -78,6 +81,9 @@
 
 .footer {
   flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
   padding: 10px 16px;
   border-top: 1px solid var(--border);
   background: var(--bg);
