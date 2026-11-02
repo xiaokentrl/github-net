@@ -188,8 +188,9 @@ export function TaskPanel({
 
   // ===== 双栏状态 =====
   // 轮次状态由它的任务推出来：有在跑的=执行中，全排队=排队中，有失败=失败，其余=完成。
+  // 显示顺序后进在前（拍板 2026-11-03）：最新一轮在最上面，老轮往下沉。
   const roundRows = useMemo(() => {
-    return state.rounds.map((round) => {
+    return [...state.rounds].reverse().map((round) => {
       const kids = state.tasks.filter((task) => task.roundId === round.id)
       let status: string = 'queued'
       if (kids.some((k) => k.status === 'running' || k.status === 'restoring')) status = 'running'
@@ -212,10 +213,10 @@ export function TaskPanel({
       manualRef.current = false
     }
     if (runningRound && selectedRoundId !== runningRound.round.id) setSelectedRoundId(runningRound.round.id)
-    else if (!runningRound && !selectedRoundId && roundRows.length) setSelectedRoundId(roundRows[roundRows.length - 1].round.id)
+    else if (!runningRound && !selectedRoundId && roundRows.length) setSelectedRoundId(roundRows[0].round.id)
   }, [roundRows, runningRound, selectedRoundId])
 
-  const selected = roundRows.find((r) => r.round.id === selectedRoundId) ?? roundRows.find((r) => r.round.id === (runningRound || roundRows[roundRows.length - 1])?.round.id) ?? null
+  const selected = roundRows.find((r) => r.round.id === selectedRoundId) ?? roundRows.find((r) => r.round.id === (runningRound || roundRows[0])?.round.id) ?? null
   const kids = selected ? selected.kids : []
   const focus = qdFocusIndex(kids)
 
