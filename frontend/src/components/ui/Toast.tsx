@@ -267,10 +267,16 @@ export function Toast() {
     toggleNoticeCollapsed()
   }
 
-  // 关闭整块面板（含右下角小按钮）：提示全部清掉，下一条进来才重新出现。
+  // 关闭整块面板（拍板 2026-11-03：✕ 就是让它消失）——连右下角小按钮一起藏，
+  // 下一条提示进来才重新出现。
+  const [hidden, setHidden] = useState(false)
+  useEffect(() => {
+    if (hidden && notices.length > 0) setHidden(false)
+  }, [hidden, notices.length])
   const hidePanel = () => {
     clearNotices()
     setEmptyOpen(false)
+    setHidden(true)
   }
 
   const rootStyle = {
@@ -280,6 +286,8 @@ export function Toast() {
     // 没拖过高度就不给这个变量：面板跟着内容撑，列表另有 45vh 上限兜着。
     ...(geom.height === null ? {} : { '--toast-height': `${geom.height}px` }),
   } as CSSProperties
+
+  if (hidden) return null
 
   if (!showPanel) {
     return (
