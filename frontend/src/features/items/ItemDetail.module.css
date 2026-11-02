@@ -305,7 +305,7 @@
 .itemTable td {
   padding: 7px 10px;
   border-bottom: 1px solid var(--band);
-  vertical-align: top;
+  vertical-align: middle;
   overflow-wrap: anywhere;
 }
 
@@ -350,4 +350,25 @@
 .writeItem {
   display: block;
   overflow-wrap: anywhere;
+}
+
+/* 列宽拖拽把手：贴在表头右缘的细条，按住横向拖动改列宽。 */
+.colGrip {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.itemTable th {
+  position: relative;
+}
+
+/* 标识常驻占位：未选中时隐藏不占字但占位，自动布局下列宽不随选中跳动。 */
+.rowMarkHidden {
+  visibility: hidden;
 }

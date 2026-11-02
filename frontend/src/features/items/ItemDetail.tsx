@@ -1,3 +1,4 @@
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
 import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
@@ -32,6 +33,9 @@ const CANDIDATE_TONE: Record<string, string> = {
   probing: detectStyles.tagBusy,
   queued: detectStyles.tagBusy,
 }
+
+// 全二级菜单表的表头，顺序和渲染一一对应；拖拽分隔线只在前四列的表头上。
+const ITEM_TABLE_HEADERS = ['detail.table.item', 'detail.metric.appliedIp', 'detail.metric.bestIp', 'detail.metric.available', 'detail.metric.lastCheck']
 
 // 「哪些项目能进批量检测」只有一个主人：这里算，App 拿到的是已经算好的那批。
 // 挡在外面的是两类——域名由用户自填的手动映射，和目录里没给主机名的项：都没有可解析的目标。
@@ -114,6 +118,39 @@ export function ItemDetail({
   // 解析失败的域名没有候选行，单独在表上方说一句，不混进表里冒充候选。
   const failedHosts = rows.filter((h) => !h.resolved)
 
+  // 列宽：拖过一次就转固定布局（px），没拖过是 null（auto 自适应）。
+  const tableRef = useRef<HTMLTableElement | null>(null)
+  const [colWidths, setColWidths] = useState<number[] | null>(null)
+  const colDrag = useRef<{ pointerId: number; index: number; startX: number; startWidths: number[] } | null>(null)
+
+  const startColDrag = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const row = tableRef.current?.rows[0]
+    if (!row) return
+    const startWidths = Array.from(row.cells).map((cell) => cell.offsetWidth)
+    colDrag.current = { pointerId: event.pointerId, index, startX: event.clientX, startWidths }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setColWidths(startWidths)
+  }
+  const onColDragMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const state = colDrag.current
+    if (!state || state.pointerId !== event.pointerId) return
+    const dx = event.clientX - state.startX
+    const MIN = 70
+    const next = [...state.startWidths]
+    next[state.index] = Math.max(MIN, state.startWidths[state.index] + dx)
+    next[state.index + 1] = Math.max(MIN, state.startWidths[state.index + 1] - dx)
+    setColWidths(next)
+  }
+  const onColDragUp = (event: ReactPointerEvent<HTMLElement>) => {
+    const state = colDrag.current
+    if (!state || state.pointerId !== event.pointerId) return
+    colDrag.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
   return (
     <div className={styles.wrap}>
       {/* 第一张卡：这是哪个服务、用什么方法加速、当前 Hosts 是什么结论。 */}
@@ -148,14 +185,35 @@ export function ItemDetail({
 
         {/* 全二级菜单表（拍板 2026-11-03）：当前主菜单下每一项一行，数据各从各的来源现取；
             切换二级菜单只换选中行的底色和标识，表本身不动。列宽自适应（auto 布局）。 */}
-        <table className={styles.itemTable}>
+        <table
+          ref={tableRef}
+          className={styles.itemTable}
+          style={colWidths ? { tableLayout: 'fixed', width: '100%' } : undefined}
+        >
+          {colWidths ? (
+            <colgroup>
+              {colWidths.map((width, i) => (
+                <col key={i} style={{ width: `${width}px` }} />
+              ))}
+            </colgroup>
+          ) : null}
           <thead>
             <tr>
-              <th>{t('detail.table.item')}</th>
-              <th>{t('detail.metric.appliedIp')}</th>
-              <th>{t('detail.metric.bestIp')}</th>
-              <th>{t('detail.metric.available')}</th>
-              <th>{t('detail.metric.lastCheck')}</th>
+              {ITEM_TABLE_HEADERS.map((header, i) => (
+                <th key={header}>
+                  {t(header)}
+                  {i < ITEM_TABLE_HEADERS.length - 1 ? (
+                    <span
+                      className={styles.colGrip}
+                      title={t('layout.queueListResizer.title')}
+                      onPointerDown={startColDrag(i)}
+                      onPointerMove={onColDragMove}
+                      onPointerUp={onColDragUp}
+                      onPointerCancel={onColDragUp}
+                    />
+                  ) : null}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
