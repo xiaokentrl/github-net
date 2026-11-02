@@ -54,8 +54,11 @@
   text-align: center;
 }
 
+/* 关闭按钮固定在头部右上角（标题绝对居中后它不再参与 flex 排布）。 */
 .closeBtn {
-  flex: none;
+  position: absolute;
+  right: 10px;
+  top: 8px;
   width: 26px;
   height: 26px;
   border: 0;
