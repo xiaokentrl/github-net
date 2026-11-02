@@ -103,11 +103,19 @@ function entryLinesOf(
   }
   if (entries.length > 0) {
     // written 为真但后端没给地址（理论上不会）也按「未写入」显示：这一栏宁可不给数，也不给空的。
-    return entries.map((entry) => ({
-      hostname: entry.hostname,
-      value: entry.written && entry.ip ? withLatency(entry.ip, latency.get(entry.hostname)) : t('queue.detail.entryNotWritten'),
-      ip: Boolean(entry.written && entry.ip),
-    }))
+    // 未写入的行能从检测结果推出原因的就带上（解析失败／没有可用候选），推不出才说「未写入」。
+    const hostByName = new Map((result?.hosts ?? []).map((h) => [h.hostname, h]))
+    return entries.map((entry) => {
+      let value = t('queue.detail.entryNotWritten')
+      if (entry.written && entry.ip) {
+        value = withLatency(entry.ip, latency.get(entry.hostname))
+      } else {
+        const host = hostByName.get(entry.hostname)
+        if (host && host.resolved === false) value = t('queue.detail.resolveFailed')
+        else if (host && !pickBestCandidate(host.candidates ?? [])) value = t('queue.detail.noUsableAddress')
+      }
+      return { hostname: entry.hostname, value, ip: Boolean(entry.written && entry.ip) }
+    })
   }
   return hostnames.map((hostname) => ({ hostname, value: t('queue.detail.entryUnowned'), ip: false }))
 }
