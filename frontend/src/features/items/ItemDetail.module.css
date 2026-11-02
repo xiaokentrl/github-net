@@ -398,3 +398,59 @@
   white-space: nowrap;
   text-align: center;
 }
+
+/* 行操作列：主按钮 + 次级小按钮 + ⋯ 菜单（单独检测）。 */
+.rowStage {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.rowMore {
+  position: relative;
+  display: inline-block;
+}
+
+.rowMoreBtn {
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.rowMoreBtn:hover {
+  color: var(--text);
+}
+
+.rowMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: 30;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--ctl);
+  box-shadow: var(--pop);
+}
+
+.rowMenuItem {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rowMenuItem:hover {
+  background: var(--hov);
+}
