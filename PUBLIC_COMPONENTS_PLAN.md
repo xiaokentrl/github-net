@@ -246,7 +246,7 @@
 - 依据 Go 官方 TLS API，可使用可取消的 TLS 握手进行连通性验证而不下载网页；Go HTTP 的 HEAD 仍是 HTTP 请求，不能视为绝对零流量。Apple 能通过 `NWPath.isExpensive` 标识蜂窝/个人热点，但该 API 不代表 Windows/Linux 均有同等能力。参考：[Go TLS](https://pkg.go.dev/crypto/tls)、[Go HTTP](https://pkg.go.dev/net/http)、[Apple `NWPath.isExpensive`](https://developer.apple.com/documentation/network/nwpath/isexpensive)。
 - 用户在设置对话框的“网络与流量”分类调整档位和每轮上限；检测按钮旁常驻一个紧凑状态标签（当前档位 + 本轮候选预算），点击可快速切档或跳转完整设置。
 - 设置页必须解释各档对候选覆盖、并发和流量的区别；提供“自动检测”与计量网络下载确认选项，省流档默认关闭自动全量检测。设置保存失败要显示在控件旁，不允许只更新标签就当成功。
-- 首次安装或没有有效配置时默认“省流”（每 hostname 最多 2 个候选、并发 2）；用户设置的总候选探测上限**已于 2026-10-29 落句：默认 130、可填上限 1040**，来源是目录实数（去重后 65 个 hostname × 档位每 hostname 候选上限 2／16），不再用原型那份「54 个菜单项目 × 每项 2 个候选 = 108」的估算——菜单项目数不等于唯一 hostname 数。默认 130 就是默认档位默认能盖住一轮全量，上限 1040 让完整档一轮全量也开得满。实际每轮预算仍随范围和档位动态计算，只统计实际启动的候选 IP 探测，DNS 查询单独计数；预算不够覆盖本轮范围时启动前给确认并标出未检测项。自动检测默认关闭。前后端数字由 `internal/config/budget_parity_test.go` 与 `internal/app/budget_parity_test.go` 钉住。
+- 首次安装或没有有效配置时默认“省流”（每 hostname 最多 2 个候选、并发 2）；用户设置的总候选探测上限**默认 126、可填上限 1008**（2026-10-29 按当时目录实数落句为 130／1040；2026-10-31 目录删掉 Pages 和 Gist 两个项目后换成现在这两个数），来源是目录实数（去重后 63 个 hostname × 档位每 hostname 候选上限 2／16），不再用原型那份「54 个菜单项目 × 每项 2 个候选 = 108」的估算——菜单项目数不等于唯一 hostname 数。默认 126 就是默认档位默认能盖住一轮全量，上限 1008 让完整档一轮全量也开得满。实际每轮预算仍随范围和档位动态计算，只统计实际启动的候选 IP 探测，DNS 查询单独计数；预算不够覆盖本轮范围时启动前给确认并标出未检测项。自动检测默认关闭。前后端数字由 `internal/config/budget_parity_test.go` 与 `internal/app/budget_parity_test.go` 钉住。
 
 ## 7. 建议目录
 

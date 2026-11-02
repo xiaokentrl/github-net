@@ -10,7 +10,7 @@
 4. Add the task queue panel: detection, apply and restore run through a queue with pause, cancel, retry-failed and restore-all, and both the list width and the panel height are draggable
 5. Add acceleration methods: GitHub scope defaults to "all public sources" (aggregating GitCDN, HelloGitHub and GitLab), plus "auto-find usable IPs" and "use stored IPs" which re-verifies cached addresses without refetching sources
 6. Add a local SQLite ledger: every detection round is recorded, and the candidate pool caches the latest usable addresses per hostname plus IP
-7. Add network and traffic settings: low / standard / full profiles plus a per-run candidate probe limit (default 130, up to 1040), with the real per-round budget enforced by the backend
+7. Add network and traffic settings: low / standard / full profiles plus a per-run candidate probe limit (default 126, up to 1008), with the real per-round budget enforced by the backend
 8. Add startup automation: auto-detect the selected top-level menus after boot, optionally auto-apply when detection finishes and quit the program once the apply queue settles
 9. Add appearance and preferences: six themes, four zoom steps (90% / 100% / 110% / 125%), Simplified and Traditional Chinese
 10. Add the tray and a frameless window: closing the window can minimize to the tray, the app can start at login, and the title bar carries minimize / maximize / close
@@ -41,7 +41,7 @@ None
 4. 新增任务队列面板：检测、应用、恢复排队执行，支持暂停、取消、重试失败项和全部还原，任务列表宽度与面板高度都能拖动
 5. 新增加速方法：GitHub 范围默认使用「全部公共源」（GitCDN、HelloGitHub、GitLab 三源汇总），另有「自动查找可用 IP」和「使用已有储存」——后者直接复验缓存里的可用地址，不重新拉源
 6. 新增本机 SQLite 底账：每轮检测整笔记账，候选池按「域名 + IP」缓存最近一轮的可用地址
-7. 新增网络与流量设置：省流／标准／完整三档，外加每轮候选探测上限（默认 130，最多可填 1040），一轮实际发多少次探测由后端统一收口
+7. 新增网络与流量设置：省流／标准／完整三档，外加每轮候选探测上限（默认 126，最多可填 1008），一轮实际发多少次探测由后端统一收口
 8. 新增启动自动化：按勾中的主菜单在开机后自动检测，可选检测完成后自动应用、应用队列跑完后自动退出程序
 9. 新增外观与偏好：六套主题、界面缩放四档（90%／100%／110%／125%）、简体中文与繁体中文
 10. 新增托盘与无边框窗口：关窗可最小化到托盘、登录系统后自动启动，标题栏内是最小化／最大化／关闭三颗按钮

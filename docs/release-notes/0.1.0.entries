@@ -13,8 +13,8 @@ added|zh|新增加速方法：GitHub 范围默认使用「全部公共源」（G
 added|en|Add acceleration methods: GitHub scope defaults to "all public sources" (aggregating GitCDN, HelloGitHub and GitLab), plus "auto-find usable IPs" and "use stored IPs" which re-verifies cached addresses without refetching sources
 added|zh|新增本机 SQLite 底账：每轮检测整笔记账，候选池按「域名 + IP」缓存最近一轮的可用地址
 added|en|Add a local SQLite ledger: every detection round is recorded, and the candidate pool caches the latest usable addresses per hostname plus IP
-added|zh|新增网络与流量设置：省流／标准／完整三档，外加每轮候选探测上限（默认 130，最多可填 1040），一轮实际发多少次探测由后端统一收口
-added|en|Add network and traffic settings: low / standard / full profiles plus a per-run candidate probe limit (default 130, up to 1040), with the real per-round budget enforced by the backend
+added|zh|新增网络与流量设置：省流／标准／完整三档，外加每轮候选探测上限（默认 126，最多可填 1008），一轮实际发多少次探测由后端统一收口
+added|en|Add network and traffic settings: low / standard / full profiles plus a per-run candidate probe limit (default 126, up to 1008), with the real per-round budget enforced by the backend
 added|zh|新增启动自动化：按勾中的主菜单在开机后自动检测，可选检测完成后自动应用、应用队列跑完后自动退出程序
 added|en|Add startup automation: auto-detect the selected top-level menus after boot, optionally auto-apply when detection finishes and quit the program once the apply queue settles
 added|zh|新增外观与偏好：六套主题、界面缩放四档（90%／100%／110%／125%）、简体中文与繁体中文
