@@ -328,8 +328,8 @@
 }
 
 .rowSel .itemName {
+  /* 只变色不加粗：加粗会改变文字宽度，auto 布局下首列变宽带动全部列跳。 */
   color: var(--primary);
-  font-weight: 600;
 }
 
 .rowMark {
