@@ -24,10 +24,12 @@ type dispatchExecutor struct {
 	// appliedIPs 读「这些主机名当前写在系统 Hosts 上的是哪些地址」；应用/还原收尾时
 	// 用它把候选的「当前生效」标记重标一遍，详情页的「当前写入 IP」才有实时事实。
 	appliedIPs func(hostnames []string) map[string][]string
+	// usableMappings 和入口的 applyBlocker 同源：内存优先、候选池兜底的当前可写映射。
+	usableMappings func(itemID string) []hosts.Mapping
 }
 
-func newDispatchExecutor(detect task.Executor, priv privilege.Caller, results *detectResultStore, appliedIPs func(hostnames []string) map[string][]string) *dispatchExecutor {
-	return &dispatchExecutor{detect: detect, priv: priv, results: results, appliedIPs: appliedIPs}
+func newDispatchExecutor(detect task.Executor, priv privilege.Caller, results *detectResultStore, appliedIPs func(hostnames []string) map[string][]string, usableMappings func(itemID string) []hosts.Mapping) *dispatchExecutor {
+	return &dispatchExecutor{detect: detect, priv: priv, results: results, appliedIPs: appliedIPs, usableMappings: usableMappings}
 }
 
 func (e *dispatchExecutor) Execute(ctx context.Context, t task.Task, report task.Report) task.Outcome {
@@ -46,29 +48,32 @@ func (e *dispatchExecutor) Execute(ctx context.Context, t task.Task, report task
 	}
 }
 
-// apply 把一个项目最近一轮的可用候选写进 Hosts。
+// apply 把一个项目当前可用的候选写进 Hosts。
 // 选址规则：每个主机名取延迟最低的可用候选（并列时 IPv4 优先，写 Hosts 的兼容面更大）。
-// 应用前在这里再验一遍「有结果、有可用候选」——入口（ApplyItems）验的是形状，这里验的是内容。
+// 地址来源和入口的 applyBlocker 同一份 usableMappingsFor：内存里最近一轮优先，
+// 重启过后退回候选池缓存的可用地址——「检测一次，重启也能应用」是候选缓存存在的意义。
 func (e *dispatchExecutor) apply(t task.Task, report task.Report) task.Outcome {
 	if e.priv == nil {
 		return task.Outcome{Status: task.StatusFailed, Message: pendingExecutorMessage}
 	}
-	view, ok := e.results.view(t.ItemID)
-	if !ok {
-		return task.Outcome{Status: task.StatusFailed, Message: "这个项目还没有检测结果，先检测再应用"}
+	// 接缝没接（纯测试场景）就退回内存一份：nil 直接调会炸。
+	var mappings []hosts.Mapping
+	if e.usableMappings != nil {
+		mappings = e.usableMappings(t.ItemID)
+	} else if view, ok := e.results.view(t.ItemID); ok {
+		mappings = bestMappings(view)
 	}
-	mappings := bestMappings(view)
 	if len(mappings) == 0 {
-		return task.Outcome{Status: task.StatusFailed, Message: "最近一轮检测没有可用的候选地址，先重新检测"}
+		return task.Outcome{Status: task.StatusFailed, Message: "内存和候选缓存里都没有可用的地址，先检测再应用"}
 	}
 	report("apply", "正在写入系统 Hosts", 0)
 	if err := e.priv.Apply(t.ItemID, mappings); err != nil {
 		return task.Outcome{Status: task.StatusFailed, Message: privilegeErrorText(err)}
 	}
 	// 写完把「当前生效」标记按 Hosts 现状重标一遍：检测那轮的标记是写入前的旧事实。
-	hostnames := make([]string, 0, len(view.Hosts))
-	for _, h := range view.Hosts {
-		hostnames = append(hostnames, h.Hostname)
+	hostnames := make([]string, 0)
+	for _, m := range mappings {
+		hostnames = append(hostnames, m.Hostnames...)
 	}
 	e.markApplied(t.ItemID, hostnames)
 	return task.Outcome{Status: task.StatusDone}

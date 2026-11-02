@@ -179,7 +179,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	s.updater = updater.NewClient()
 	s.pubKey = updater.PublicKey()
 	s.autostart = platform.NewAutostart()
-	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results, s.appliedIPsFor), taskEmit)
+	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results, s.appliedIPsFor, s.usableMappingsFor), taskEmit)
 	return s
 }
 

@@ -4,9 +4,11 @@ import (
 	"errors"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/xiaokentrl/github-net/internal/hosts"
 	"github.com/xiaokentrl/github-net/internal/privilege"
 	"github.com/xiaokentrl/github-net/internal/task"
 )
@@ -49,14 +51,80 @@ func (s *Service) ApplyItems(itemIDs []string) ([]task.Task, error) {
 // applyBlocker 说清这个项目这会儿为什么还不能应用；能应用返回空串。
 // 返回的句子直接进任务并显示到队列明细，所以写的是用户照着能做的下一步，不是内部原因。
 func (s *Service) applyBlocker(itemID string) string {
-	view, ok := s.detectResults.view(itemID)
-	if !ok {
-		return "这个项目还没有检测结果，先检测再应用"
+	// 内存和候选池里有一样可用的地址就放行（拍板 2026-11-03）：重启过后内存是空的，
+	// 池里缓存的可用地址照样能写——以前只看内存，重启一次就逼用户重新检测。
+	if len(s.usableMappingsFor(itemID)) > 0 {
+		return ""
 	}
-	if !hasAvailable(view) {
+	// 拦下了也要分清两种说法，下一步动作不一样：有检测结果但全不可用 → 重新检测；
+	// 连检测结果都没有（含重启后内存已空、缓存也没货）→ 先检测。
+	if _, ok := s.detectResults.view(itemID); ok {
 		return "最近一轮检测没有可用的候选地址，先重新检测"
 	}
-	return ""
+	return "这个项目还没有检测结果，先检测再应用"
+}
+
+// usableMappingsFor 给一个项目挑「现在就能写」的映射：优先用内存里最近一轮的检测结果，
+// 内存没有（重启过）或那轮全不可用，就退回候选池里缓存的可用地址（拍板 2026-11-03）。
+// 选址规则和 bestMappings 同一条：每主机名延迟最低、并列 IPv4 优先。两边都没有给空。
+func (s *Service) usableMappingsFor(itemID string) []hosts.Mapping {
+	if view, ok := s.detectResults.view(itemID); ok {
+		if m := bestMappings(view); len(m) > 0 {
+			return m
+		}
+	}
+	if s.candidateStore == nil {
+		return nil
+	}
+	_, _, item, ok := s.lookupItem(itemID)
+	if !ok || len(item.Hostnames) == 0 {
+		return nil
+	}
+	want := make(map[string]bool, len(item.Hostnames))
+	for _, h := range item.Hostnames {
+		if n := hosts.NormalizeHostname(h); n != "" {
+			want[n] = true
+		}
+	}
+	rows, err := s.candidateStore.Pool("")
+	if err != nil {
+		return nil
+	}
+	type pick struct {
+		ip      string
+		latency int64
+		ipv6    bool
+	}
+	best := make(map[string]pick)
+	for _, r := range rows {
+		if r.Status != "available" || !want[r.Hostname] {
+			continue
+		}
+		current, ok := best[r.Hostname]
+		better := !ok || r.LatencyMS < current.latency || (r.LatencyMS == current.latency && current.ipv6 && !r.IPv6)
+		if better {
+			best[r.Hostname] = pick{ip: r.IP, latency: r.LatencyMS, ipv6: r.IPv6}
+		}
+	}
+	if len(best) == 0 {
+		return nil
+	}
+	byIP := make(map[string][]string)
+	for hostname, p := range best {
+		byIP[p.ip] = append(byIP[p.ip], hostname)
+	}
+	ips := make([]string, 0, len(byIP))
+	for ip := range byIP {
+		ips = append(ips, ip)
+	}
+	sort.Strings(ips)
+	out := make([]hosts.Mapping, 0, len(ips))
+	for _, ip := range ips {
+		names := byIP[ip]
+		sort.Strings(names)
+		out = append(out, hosts.Mapping{IP: ip, Hostnames: names})
+	}
+	return out
 }
 
 // RestoreItems 把指定项目排进还原队列：退回它应用前的映射。
