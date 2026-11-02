@@ -267,6 +267,12 @@ export function Toast() {
     toggleNoticeCollapsed()
   }
 
+  // 关闭整块面板（含右下角小按钮）：提示全部清掉，下一条进来才重新出现。
+  const hidePanel = () => {
+    clearNotices()
+    setEmptyOpen(false)
+  }
+
   const rootStyle = {
     '--toast-right': `${geom.right}px`,
     '--toast-bottom': `${geom.bottom}px`,
@@ -316,6 +322,10 @@ export function Toast() {
             aria-label={t('ui.toast.collapse')}
           >
             ▾
+          </button>
+          {/* 关闭整块：清掉全部提示并收起小按钮，下一条提示进来才会再出现。 */}
+          <button type="button" className={styles.headBtn} onClick={hidePanel} title={t('ui.toast.closePanel')} aria-label={t('ui.toast.closePanel')}>
+            ✕
           </button>
         </div>
         {notices.length === 0 ? (

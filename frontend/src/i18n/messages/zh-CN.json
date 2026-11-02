@@ -389,6 +389,7 @@
   "ui.toast.count": "共 {count} 条",
   "ui.toast.clear": "清空",
   "ui.toast.collapse": "收起",
+  "ui.toast.closePanel": "关闭",
   "ui.toast.expand": "展开",
   "ui.toast.copy": "复制这条内容",
   "ui.toast.copied": "已复制",
