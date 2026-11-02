@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import type { DetectResultView, HostEntryState, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import { cancelTask, clearFinishedTasks, clearQueue, getTasks, pauseQueue, retryFailedTasks, resumeQueue } from '../../api/client'
@@ -135,6 +135,7 @@ function entryLinesOf(
 export function TaskPanel({
   height,
   onHeightChange,
+  expandRef,
   listWidth,
   onListWidthChange,
   activeItemId,
@@ -145,6 +146,8 @@ export function TaskPanel({
 }: {
   height: number | null
   onHeightChange: (height: number) => void
+  // 外部（检测全部/应用队列/恢复/清理缓存这些按钮）要动队列时拉一下：收起态自动展开。
+  expandRef?: MutableRefObject<(() => void) | null>
   listWidth: number | null
   onListWidthChange: (width: number) => void
   activeItemId: string
@@ -299,6 +302,12 @@ export function TaskPanel({
       onHeightChange(QUEUE_HEIGHT_MIN)
     }
   }, [queueCollapsed, shownHeight, onHeightChange])
+  // 收起态下的展开动作交给外部按钮拉一把：展开到记住的那份高度。
+  const expandQueue = useCallback(() => {
+    if (!queueCollapsed) return
+    onHeightChange(expandedHeightRef.current)
+  }, [queueCollapsed, onHeightChange])
+  if (expandRef) expandRef.current = expandQueue
 
   // 窗口变窄或变矮后，配置里的宽度、高度可能已经超过当前天花板：
   // CSS 只是压着显示，配置里仍留着超界值，布局屏会显示一个界面拿不到的数字。

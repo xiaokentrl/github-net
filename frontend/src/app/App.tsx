@@ -302,6 +302,9 @@ export function App() {
   // 树上那一行的状态字和色点要跟着队列走：正在检测、正在写 Hosts、正在还原的项目，原型是整行变色。
   // 队列只有 taskStore 这一份，TaskPanel 和树读的是同一个快照，不存在两份真相。
   const queue = useTaskQueue()
+  // 让队列面板展开的把手：点「检测全部/应用队列/恢复/清理缓存」这类要动队列的按钮时拉一下，
+  // 队列面板在收起态就自动回到展开高度。把手由 TaskPanel 塞进来。
+  const queueExpandRef = useRef<(() => void) | null>(null)
   const liveOf = useMemo(() => liveByItem(queue.tasks), [queue.tasks])
 
   // 默认无选中；勾选持久化（拍板 2026-11-03）：目录和设置都就绪后恢复上次的勾选
@@ -606,6 +609,7 @@ export function App() {
         }
       }
       setDetectError('')
+      queueExpandRef.current?.()
       if (groups.size === 0) {
         setDetectError(t('toolbar.detectChecked.none'))
         return
@@ -641,6 +645,7 @@ export function App() {
         setHostsError(t('toolbar.applyChecked.none'))
         return
       }
+      queueExpandRef.current?.()
       applyItems([...checked])
         .then(reportSkippedApply)
         .catch((err: unknown) => reportRejection(setHostsError, err))
@@ -653,6 +658,7 @@ export function App() {
   // 数字全部来自后端回执：清掉几份、今天到底下载过没有，只有那份落盘记录知道。
   const [clearBusy, setClearBusy] = useState(false)
   const clearCheckedCache = useCallback((checked: ReadonlySet<string>) => {
+    queueExpandRef.current?.()
     if (checked.size === 0) return
     if (!window.confirm(t('toolbar.clearCache.confirm', { count: checked.size }))) return
     setClearBusy(true)
@@ -682,6 +688,7 @@ export function App() {
           if (budget.shortfall > 0 && !window.confirm(t('detect.budget.confirm', { needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall }))) {
             return
           }
+          queueExpandRef.current?.()
           return detectItems(ids).catch((err: unknown) => reportRejection(setDetectError, err))
         })
         .catch((err: unknown) => reportRejection(setDetectError, err))
@@ -691,6 +698,7 @@ export function App() {
 
   const startApply = useCallback((itemId: string) => {
     setHostsError('')
+    queueExpandRef.current?.()
     applyItems([itemId])
       .then(reportSkippedApply)
       .catch((err: unknown) => reportRejection(setHostsError, err))
@@ -816,7 +824,10 @@ export function App() {
             onApplyChecked={() => startApplyChecked(checkedIds)}
             onOpenHosts={openHostsFile}
             restoreBusy={restoreBusy}
-            onRestoreAll={restoreAll}
+            onRestoreAll={() => {
+              queueExpandRef.current?.()
+              restoreAll()
+            }}
           />
         }
         sidebar={sidebar}
@@ -854,6 +865,7 @@ export function App() {
           <TaskPanel
             height={settings?.layout.queueHeight ?? null}
             onHeightChange={changeQueueHeight}
+            expandRef={queueExpandRef}
             listWidth={settings?.layout.queueListWidth ?? null}
             onListWidthChange={changeQueueListWidth}
             activeItemId={selectedId}
