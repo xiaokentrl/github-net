@@ -221,8 +221,6 @@ export function TaskPanel({
   const focus = qdFocusIndex(kids)
 
   // 翻页：一页能放几行按明细面板高度现算；焦点跨页自动跟随，箭头手动翻后保持。
-  // 收起/展开只藏正文（原型 .queue.collapsed），也不落配置——重开窗口还是展开的。
-  const [collapsed, setCollapsed] = useState(false)
   // 逐条替换默认就铺开：应用一轮跑完，每一项的每条域名写到了哪个 IP（或没写上）要一眼看到，
   // 不该一行一行点开才知道。▸/▾ 留着给手动收起；切轮时重置，上一轮收起的那几条不带到这一轮。
   const [collapsedRows, setCollapsedRows] = useState<ReadonlySet<string>>(new Set())
@@ -252,12 +250,6 @@ export function TaskPanel({
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const [paneHeight, setPaneHeight] = useState(0)
   const [page, setPage] = useState(0)
-  useEffect(() => {
-    const measure = () => setPaneHeight(bodyRef.current?.clientHeight ?? 0)
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [selectedRoundId, collapsed])
 
   // 一页放几行不再是固定行数：从第一条开始逐行累加占高，装不下就断页；行序、行数都不动。
   const pageRanges = useMemo(() => {
@@ -305,15 +297,35 @@ export function TaskPanel({
   // 配置还没读回来那一下也用默认高度顶着，不留「按内容撑开」这一种第三态。
   const shownHeight = heightResize.liveValue ?? height ?? QUEUE_HEIGHT_DEFAULT
 
+  // 收起不再是独立的开关布尔（拍板 2026-11-03 重写）：高度压到 45——正好一行工具条——就是收起。
+  // 拖动条、小箭头、配置值改的是同一个数，三条路永远一致；旧实现两边各说各话，箭头和拖动会互相打架。
+  const queueCollapsed = shownHeight <= QUEUE_HEIGHT_MIN
+  // 展开时记住当时多高，箭头展开回这份高度；重开窗口从默认来。
+  const expandedHeightRef = useRef(QUEUE_HEIGHT_DEFAULT)
+  const toggleQueue = useCallback(() => {
+    if (queueCollapsed) onHeightChange(expandedHeightRef.current)
+    else {
+      expandedHeightRef.current = shownHeight
+      onHeightChange(QUEUE_HEIGHT_MIN)
+    }
+  }, [queueCollapsed, shownHeight, onHeightChange])
+
+  // 面板高度（拖动、箭头、窗口变化）一变就重测明细区的可用高度，翻页才不会按旧高度多算一页。
+  useEffect(() => {
+    const measure = () => setPaneHeight(bodyRef.current?.clientHeight ?? 0)
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [selectedRoundId, shownHeight])
 
   // 窗口变窄或变矮后，配置里的宽度、高度可能已经超过当前天花板：
   // CSS 只是压着显示，配置里仍留着超界值，布局屏会显示一个界面拿不到的数字。
   // 这里在尺寸稳定 300ms 后把合法值写回去；和后端一致时 App 那层直接吞掉，不会白涨 revision。
-  // 拖动期间与收起状态都不插手：松手那一下提交的本就是夹好的值，再叠一条写盘会打架。
+  // 拖动期间不插手：松手那一下提交的本就是夹好的值，再叠一条写盘会打架。
   const draggingList = listResize.dragging
   const draggingHeight = heightResize.dragging
   useEffect(() => {
-    if (draggingList || draggingHeight || collapsed) return
+    if (draggingList || draggingHeight) return
     let timer = 0
     const heal = () => {
       window.clearTimeout(timer)
@@ -335,7 +347,7 @@ export function TaskPanel({
       window.clearTimeout(timer)
       window.removeEventListener('resize', heal)
     }
-  }, [collapsed, draggingList, draggingHeight, listWidth, height, onListWidthChange, onHeightChange])
+  }, [queueCollapsed, draggingList, draggingHeight, listWidth, height, onListWidthChange, onHeightChange])
 
   const pickItem = useCallback(
     (itemId: string) => {
@@ -364,7 +376,7 @@ export function TaskPanel({
       )}
       <section
         ref={heightResize.targetRef}
-        className={`${styles.panel} ${collapsed ? styles.panelCollapsed : ''}`}
+        className={`${styles.panel} ${queueCollapsed ? styles.panelCollapsed : ''}`}
         style={{ height: `${shownHeight}px`, minHeight: `${QUEUE_HEIGHT_MIN}px` }}
         aria-label={t('queue.title')}
       >
@@ -407,12 +419,12 @@ export function TaskPanel({
           <button
             type="button"
             className={styles.toggleBtn}
-            aria-expanded={!collapsed}
-            title={collapsed ? t('queue.expand') : t('queue.collapse')}
-            aria-label={collapsed ? t('queue.expand') : t('queue.collapse')}
-            onClick={() => setCollapsed((value) => !value)}
+            aria-expanded={!queueCollapsed}
+            title={queueCollapsed ? t('queue.expand') : t('queue.collapse')}
+            aria-label={queueCollapsed ? t('queue.expand') : t('queue.collapse')}
+            onClick={toggleQueue}
           >
-            {collapsed ? '▴' : '▾'}
+            {queueCollapsed ? '▴' : '▾'}
           </button>
         </header>
 
