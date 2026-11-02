@@ -177,7 +177,9 @@ export function ServiceStrategySelector({
         ) : null}
       </div>
       {/* 保存状态和提示一律放面板外面：面板里只留选择框和按钮，宽度不再被一句话挤来挤去。 */}
-      <InlineStatus kind={kind} text={text} />
+      <div className={styles.statusLine}>
+        <InlineStatus kind={kind} text={text} />
+      </div>
       {snap?.savedNote ? <p className={styles.warn}>{t('strategy.stale', { note: snap.savedNote })}</p> : null}
       {current === '' && !snap?.savedNote ? <p className={styles.note}>{t('strategy.unsaved')}</p> : null}
       {notices.length > 0 ? <p className={styles.warn}>{t('strategy.notice', { reason: notices.join('；') })}</p> : null}

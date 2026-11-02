@@ -32,7 +32,8 @@
 /* 第一张卡的标题行：项目名在左、加速方法居中、徽章与还原在右（原型 .service-card-head 第 244 行）。 */
 .headGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  /* 中列 minmax(0, auto)：方法选择器的报错条很长，auto 会把它撑到顶穿两边的列。 */
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
 }
