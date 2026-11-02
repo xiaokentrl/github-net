@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
-import { Kind, type Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
 import type { CatalogCategory, CatalogItem, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
@@ -10,8 +9,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import uiStyles from '../../components/ui/ui.module.css'
 import { pickBestCandidate } from '../detect/candidateChoice'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
-import { RestoreFlowDialog } from './RestoreFlowDialog'
-import { isTerminalTask, useTaskQueue } from '../tasks/taskStore'
+import { useTaskQueue } from '../tasks/taskStore'
 import styles from './ItemDetail.module.css'
 import detectStyles from './DetectResult.module.css'
 
@@ -34,52 +32,6 @@ const CANDIDATE_TONE: Record<string, string> = {
   timeout: detectStyles.tagWarn,
   probing: detectStyles.tagBusy,
   queued: detectStyles.tagBusy,
-}
-
-// 行操作列的状态推导（拍板 2026-11-03 定稿）：
-//   该行有任务在跑/排队 → 禁用，显示当前阶段（检测中…/写入中…/还原中…/排队中…）
-//   部分生效 → 主按钮「应用 · 补齐」（仍走检测+写入流水线）＋ 次级小按钮「还原」
-//   完全生效 → 主按钮「还原」
-//   其余（未生效/刚还原/没测过）→ 主按钮「应用」（= 自动预检 + 写入的流水线）
-// 单独检测一律收进 ⋯ 菜单，不单独占位。
-type RowAction = {
-  stage: string
-  disabled: boolean
-  main: { label: string; kind: 'apply' | 'applyPatch' | 'restore' } | null
-  secondary: { label: string; kind: 'restore' } | null
-}
-
-function rowActionOf(
-  status: HostsStatus,
-  tasks: Task[],
-): RowAction {
-  const active = tasks.find(
-    (tk) => tk.status === 'waiting' || tk.status === 'running' || tk.status === 'restoring',
-  )
-  if (active) {
-    const stage =
-      active.kind === Kind.KindDetect
-        ? t('queue.row.detecting')
-        : active.kind === Kind.KindApply
-          ? active.status === 'waiting'
-            ? t('queue.row.queued')
-            : t('queue.row.writing')
-          : t('queue.row.restoring')
-    return { stage, disabled: true, main: null, secondary: null }
-  }
-  if (status === HostsStatus.HostsApplied) {
-    return { stage: '', disabled: false, main: { label: t('hosts.restore'), kind: 'restore' }, secondary: null }
-  }
-  if (status === HostsStatus.HostsPartial) {
-    return {
-      stage: '',
-      disabled: false,
-      main: { label: t('hosts.applyPatch'), kind: 'applyPatch' },
-      secondary: { label: t('hosts.restore'), kind: 'restore' },
-    }
-  }
-  // 未生效：检测完有可用候选和没测过都显示「应用」——按钮内部会先自动预检。
-  return { stage: '', disabled: false, main: { label: t('hosts.applySmart'), kind: 'apply' }, secondary: null }
 }
 
 // 全二级菜单表的表头，顺序和渲染一一对应；拖拽分隔线只在前四列的表头上。
@@ -110,7 +62,6 @@ export function ItemDetail({
   onApply,
   onRestore,
   onRestoreCategory,
-  onApplySmart,
   onStrategySaved,
 }: {
   item: CatalogItem | null
@@ -126,7 +77,6 @@ export function ItemDetail({
   onApply: (itemId: string) => void
   onRestore: (itemId: string) => void
   onRestoreCategory: (itemIds: string[]) => void
-  onApplySmart: (itemId: string, strategyId?: string) => void
   onStrategySaved: () => void
 }) {
   const state = useTaskQueue()
@@ -138,12 +88,6 @@ export function ItemDetail({
   // 列宽：拖过一次就转固定布局（px），没拖过是 null（auto 自适应）。
   const tableRef = useRef<HTMLTableElement | null>(null)
   const [colWidths, setColWidths] = useState<number[] | null>(null)
-  // ⋯ 菜单：只对当前展开的那一行生效，点别处收起（详情卡每行一个）。
-  const [soloMenuFor, setSoloMenuFor] = useState<string | null>(null)
-  // 「还原此项」弹框（拍板 2026-11-03）：还原后用户三选一——接着检测 / 接着应用 / 放弃。
-  // mode 从 choose 切到 detect/apply 后，effect 在还原任务落定那一刻触发后续动作。
-  const [restoreFlow, setRestoreFlow] = useState<{ itemId: string; mode: 'choose' | 'detect' | 'apply' } | null>(null)
-  const flowFiredRef = useRef(false)
   const colDrag = useRef<{ pointerId: number; index: number; startX: number; startWidths: number[] } | null>(null)
 
   const startColDrag = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
@@ -173,24 +117,6 @@ export function ItemDetail({
     colDrag.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
-  // 还原任务落定后按弹框里选的模式接后续动作：检测只触发一次，应用走智能流水线。
-  useEffect(() => {
-    if (!restoreFlow || restoreFlow.mode === 'choose') return
-    const flowTasks = state.tasks.filter((tk) => tk.itemId === restoreFlow.itemId)
-    const restoreTask = flowTasks.find((tk) => tk.kind === 'restore')
-    if (!restoreTask || !isTerminalTask(restoreTask.status)) return
-    const detectTask = flowTasks.find((tk) => tk.kind === 'detect')
-    if (restoreFlow.mode === 'detect' && !detectTask && !flowFiredRef.current) {
-      flowFiredRef.current = true
-      onDetect(restoreFlow.itemId)
-      return
-    }
-    if (restoreFlow.mode === 'apply' && !flowFiredRef.current) {
-      flowFiredRef.current = true
-      onApplySmart(restoreFlow.itemId)
-    }
-  }, [restoreFlow, state.tasks, onDetect, onApplySmart])
-
   if (!item || !category) return <EmptyState message={t('detail.empty')} />
 
   const status = hosts?.status ?? HostsStatus.HostsUnknown
@@ -341,79 +267,19 @@ export function ItemDetail({
                   <td>{cands.length > 0 ? `${formatInteger(availableCount)}/${formatInteger(cands.length)}` : '—'}</td>
                   <td>{res?.finishedAt ? formatRelativeTime(res.finishedAt) : '—'}</td>
                   <td className={styles.rowAction}>
-                    {(() => {
-                      const action = rowActionOf(
-                        hostsOf.get(it.id)?.status ?? HostsStatus.HostsUnknown,
-                        state.tasks.filter((tk) => tk.itemId === it.id),
-                      )
-                      const soloDetect = (
-                        <button
-                          type="button"
-                          className={styles.rowMenuItem}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            setSoloMenuFor(null)
-                            onDetect(it.id)
-                          }}
-                        >
-                          {t('hosts.detectSolo')}
-                        </button>
-                      )
-                      return (
-                        <>
-                          {action.disabled ? (
-                            <span className={styles.rowStage}>{action.stage}</span>
-                          ) : action.main ? (
-                            <button
-                              type="button"
-                              className={`${uiStyles.btn} ${uiStyles.small} ${
-                                action.main.kind === 'restore' ? uiStyles.restore : action.main.kind === 'applyPatch' ? uiStyles.primary : ''
-                              }`}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                if (action.main!.kind === 'restore') {
-                                  flowFiredRef.current = false
-                                  setRestoreFlow({ itemId: it.id, mode: 'choose' })
-                                } else onApplySmart(it.id)
-                              }}
-                            >
-                              {action.main.label}
-                            </button>
-                          ) : null}
-                          {action.secondary ? (
-                            <button
-                              type="button"
-                              className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.restore}`}
-                              title={t('hosts.restoreHint')}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                flowFiredRef.current = false
-                                setRestoreFlow({ itemId: it.id, mode: 'choose' })
-                              }}
-                            >
-                              {action.secondary.label}
-                            </button>
-                          ) : null}
-                          {selfDetectable ? (
-                            <span className={styles.rowMore}>
-                              <button
-                                type="button"
-                                className={styles.rowMoreBtn}
-                                aria-expanded={soloMenuFor === it.id}
-                                title={t('hosts.detectSoloHint')}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  setSoloMenuFor(soloMenuFor === it.id ? null : it.id)
-                                }}
-                              >
-                                ⋯
-                              </button>
-                              {soloMenuFor === it.id ? <div className={styles.rowMenu}>{soloDetect}</div> : null}
-                            </span>
-                          ) : null}
-                        </>
-                      )
-                    })()}
+                    {restorableItems.some((r) => r.id === it.id) ? (
+                      <button
+                        type="button"
+                        className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.restore}`}
+                        title={t('hosts.restore')}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onRestore(it.id)
+                        }}
+                      >
+                        {t('hosts.restoreRow')}
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               )
@@ -535,29 +401,6 @@ export function ItemDetail({
           </tbody>
         </table>
       </div>
-
-      {restoreFlow ? (
-        <RestoreFlowDialog
-          flow={restoreFlow}
-          itemName={(() => {
-            const found = (category.items ?? []).find((it) => it.id === restoreFlow.itemId)
-            return found ? found.name : restoreFlow.itemId
-          })()}
-          onChooseDetect={() => {
-            if (restoreFlow.mode === 'choose') {
-              setRestoreFlow({ ...restoreFlow, mode: 'detect' })
-              onRestore(restoreFlow.itemId)
-            }
-          }}
-          onChooseApply={() => {
-            if (restoreFlow.mode === 'choose') {
-              setRestoreFlow({ ...restoreFlow, mode: 'apply' })
-              onRestore(restoreFlow.itemId)
-            }
-          }}
-          onClose={() => setRestoreFlow(null)}
-        />
-      ) : null}
     </div>
   )
 }

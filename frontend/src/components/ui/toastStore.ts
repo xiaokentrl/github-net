@@ -11,8 +11,6 @@ export type Notice = {
   id: number
   kind: NoticeKind
   text: string
-  /** 可选的动作按钮（拍板 2026-11-03）：失败回执带「重试应用/查看详情」这类下一步。 */
-  actions?: { label: string; run: () => void }[]
   /** 到点自己消失的时刻（毫秒）；null＝不自己消失，或此刻正收起、时间冻在 remainingMs 里。 */
   expiresAt: number | null
   /** 收起期间冻结下来的剩余毫秒；没冻结时为 null。收起＝暂停，展开接着数，不重新给一整轮。 */
@@ -108,10 +106,10 @@ function tick(): void {
 /** 递一条提示，返回它的 ID。
  *  同样的文字已经在屏上就不再叠第二条，只把它的时间续上：连点五次「应用」被拒五次，
  *  该看到的是一条还在那儿的，而不是五条一模一样。错误档不续也不消失。 */
-export function pushNotice(kind: NoticeKind, text: string, actions?: { label: string; run: () => void }[]): number {
+export function pushNotice(kind: NoticeKind, text: string): number {
   const trimmed = text.trim()
   if (trimmed === '') return 0
-  const existing = notices.find((notice) => notice.text === trimmed && !notice.actions)
+  const existing = notices.find((notice) => notice.text === trimmed)
   if (existing) {
     if (willExpire(existing) || LIFESPAN[kind] > 0) {
       const timing = timingFor(kind)
@@ -121,7 +119,7 @@ export function pushNotice(kind: NoticeKind, text: string, actions?: { label: st
     }
     return existing.id
   }
-  const notice: Notice = { id: nextId, kind, text: trimmed, actions, ...timingFor(kind) }
+  const notice: Notice = { id: nextId, kind, text: trimmed, ...timingFor(kind) }
   nextId += 1
   notices = [...notices, notice]
   // 超出上限先丢最老的，但「永不消失」的错误档不能被成功回执挤掉：

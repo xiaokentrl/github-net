@@ -409,16 +409,6 @@ export function Toast() {
                 <span className={`${styles.kind} ${kindClass(notice.kind)}`}>{kindText(notice.kind)}</span>
                 <span className={styles.text}>{notice.text}</span>
                 <span className={styles.actions}>
-                  {(notice.actions ?? []).map((action) => (
-                    <button
-                      key={action.label}
-                      type="button"
-                      className={styles.itemBtn}
-                      onClick={() => action.run()}
-                    >
-                      {action.label}
-                    </button>
-                  ))}
                   <button
                     type="button"
                     className={styles.itemBtn}
