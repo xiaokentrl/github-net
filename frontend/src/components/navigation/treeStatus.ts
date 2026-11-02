@@ -1,6 +1,7 @@
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { Kind, Status } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
+import { pickBestCandidate } from '../../features/detect/candidateChoice'
 
 // 树上那一行的状态字与色点：把「后端读出来的 Hosts 状态」和「队列里正在跑的那几条」折算成一句话。
 // 原型每个项目自己维护一套 8 档生命周期（ItemMeta，第 1299–1308 行），那是演示状态机；
@@ -41,10 +42,28 @@ export function itemStatus(status: HostsStatus, live: LiveKind | undefined, resu
   if (status === HostsStatus.HostsConflict) return { key: 'badge.conflict', tone: 'error' }
   if (status === HostsStatus.HostsReadFailed) return { key: 'badge.readFailed', tone: 'error' }
 
-  // 查出来的可用候选里有一条不是当前生效的那条：这一项还能再应用一次（原型叫「待更新」）。
+  // 「待更新」要有实义（拍板 2026-11-03）：按主机名判断——有域名没被当前写入覆盖，
+  // 或写入的不是它当下的最优可用（新检测找到更快的 IP），才叫待更新。
+  // 旧条件「存在不是当前生效的候选」在一个域名有多个可用地址时永远成立，菜单就常驻待更新。
   const usable = usableCandidates(result)
   if (usable.length > 0 && (status === HostsStatus.HostsApplied || status === HostsStatus.HostsPartial)) {
-    return usable.some((c) => !c.applied) ? { key: 'tree.status.stale', tone: 'stale' } : { key: 'badge.applied', tone: 'applied' }
+    const byHost = new Map<string, typeof usable>()
+    for (const c of usable) {
+      const list = byHost.get(c.hostname) ?? []
+      list.push(c)
+      byHost.set(c.hostname, list)
+    }
+    let allCovered = true
+    let allBest = true
+    for (const list of byHost.values()) {
+      const best = pickBestCandidate(list)
+      const appliedC = list.find((c) => c.applied)
+      if (!appliedC) allCovered = false
+      if (appliedC && best && appliedC.ip !== best.ip) allBest = false
+    }
+    return allCovered && allBest
+      ? { key: 'badge.applied', tone: 'applied' }
+      : { key: 'tree.status.stale', tone: 'stale' }
   }
   if (usable.length > 0 && (status === HostsStatus.HostsNone || status === HostsStatus.HostsUnknown || status === HostsStatus.$zero)) {
     return { key: 'tree.status.detected', tone: 'detected' }
