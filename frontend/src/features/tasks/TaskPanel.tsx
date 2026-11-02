@@ -37,13 +37,6 @@ function qdFocusIndex(kids: Task[]): number {
   return i >= 0 ? i : Math.max(0, kids.length - 1)
 }
 
-// 明细表翻页按实测占高分配（px）：主行 30，展开后每条域名一行约 18（11px 字 + 2px 行距），
-// 子表那一行自己还有上下 10 留白；表头另外占 40，要先从面板可用高度里扣掉。
-const ROW_HEIGHT = 30
-const ENTRY_ROW_HEIGHT = 18
-const ENTRY_ROW_PADDING = 10
-const DETAIL_HEAD_HEIGHT = 40
-
 // 明细第二列「当前阶段 / 结果」的文字。以前落定的行只剩一个色点和一个「—」，
 // 用户看不出这一项到底做成了什么，所以逐档给一句实话：
 // 写了几条、还差几条、还是没写；检测给「几可用」；排队和取消也照实说。
@@ -248,41 +241,14 @@ export function TaskPanel({
   )
 
   const bodyRef = useRef<HTMLDivElement | null>(null)
-  const [paneHeight, setPaneHeight] = useState(0)
-  const [page, setPage] = useState(0)
 
-  // 一页放几行不再是固定行数：从第一条开始逐行累加占高，装不下就断页；行序、行数都不动。
-  const pageRanges = useMemo(() => {
-    if (kids.length === 0) return [{ start: 0, end: 0 }]
-    const budget = Math.max(ROW_HEIGHT, paneHeight - DETAIL_HEAD_HEIGHT)
-    const ranges: { start: number; end: number }[] = []
-    let start = 0
-    let used = 0
-    for (let i = 0; i < kids.length; i++) {
-      const lines = lineRows[i]
-      const open = lines.length > 0 && !collapsedRows.has(kids[i].id)
-      const cost = ROW_HEIGHT + (open ? lines.length * ENTRY_ROW_HEIGHT + ENTRY_ROW_PADDING : 0)
-      if (i > start && used + cost > budget) {
-        ranges.push({ start, end: i })
-        start = i
-        used = 0
-      }
-      used += cost
-    }
-    ranges.push({ start, end: kids.length })
-    return ranges
-  }, [kids, lineRows, collapsedRows, paneHeight])
-  const pages = pageRanges.length
-  const focusPage = Math.max(0, pageRanges.findIndex((r) => focus >= r.start && focus < r.end))
+  // 焦点行滚进视野（拍板 2026-11-03：明细不再翻页，全部行直接渲染、容器自己滚；
+  // 之前按面板高度断页，量高失准的时候一页只剩一行，六项要看五页）。
+  const focusTaskId = kids[focus]?.id
   useEffect(() => {
-    if (focusPage !== page) {
-      setPage(focusPage)
-    }
-  }, [focusPage, page])
-  const safePage = Math.min(page, pages - 1)
-  const range = pageRanges[safePage]
-  const sliceStart = range.start
-  const slice = kids.slice(range.start, range.end)
+    if (!focusTaskId) return
+    document.querySelector(`[data-task-id="${focusTaskId}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [focusTaskId, kids, selectedRoundId])
 
   // 两栏之间的分隔条：拖动期间只有本地预览，松手提交一次给配置（和侧栏同一套实现）。
   // 上限当场算——按队列区实测宽度取一份比例，右边明细必须留过半才看得清三列。
@@ -309,14 +275,6 @@ export function TaskPanel({
       onHeightChange(QUEUE_HEIGHT_MIN)
     }
   }, [queueCollapsed, shownHeight, onHeightChange])
-
-  // 面板高度（拖动、箭头、窗口变化）一变就重测明细区的可用高度，翻页才不会按旧高度多算一页。
-  useEffect(() => {
-    const measure = () => setPaneHeight(bodyRef.current?.clientHeight ?? 0)
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [selectedRoundId, shownHeight])
 
   // 窗口变窄或变矮后，配置里的宽度、高度可能已经超过当前天花板：
   // CSS 只是压着显示，配置里仍留着超界值，布局屏会显示一个界面拿不到的数字。
@@ -480,21 +438,10 @@ export function TaskPanel({
                       <th>{t('queue.detail.name')}</th>
                       <th>{t('queue.detail.stage')}</th>
                       <th>{t('queue.detail.progress')}</th>
-                      <th className={styles.qdCtl}>
-                        <span className={styles.qdPage}>
-                          {pages > 1 ? `${safePage + 1}/${pages} 页` : ''}
-                        </span>
-                        <button type="button" className={styles.qdArrow} id="qdPrev" title="上一页" disabled={safePage <= 0} onClick={() => setPage(Math.max(0, safePage - 1))}>
-                          ↑
-                        </button>
-                        <button type="button" className={styles.qdArrow} id="qdNext" title="下一页" disabled={safePage >= pages - 1} onClick={() => setPage(Math.min(pages - 1, safePage + 1))}>
-                          ↓
-                        </button>
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {slice.map((task, i) => {
+                    {kids.map((task, i) => {
                       const entries = (task.itemId && hostsOf.get(task.itemId)?.entries) || []
                       const result = task.itemId ? state.results[task.itemId] : undefined
                       const stageResult = stageResultOf(
@@ -506,7 +453,7 @@ export function TaskPanel({
                         ? `${task.progress}%${task.duration ? ' · ' + task.duration : ''}`
                         : task.duration || '—'
                       // 逐条子表用的就是翻页那一份：检测给这一轮每条域名的结果，应用/还原给每条域名现在的下落。
-                      const lines = lineRows[sliceStart + i] ?? []
+                      const lines = lineRows[i] ?? []
                       const expandable = lines.length > 0
                       const open = !collapsedRows.has(task.id)
                       // 展开按钮的说法跟着任务走：检测那行摊开的是这一轮每条域名的结果，不是替换。
@@ -514,6 +461,7 @@ export function TaskPanel({
                       return (
                         <Fragment key={task.id}>
                           <tr
+                            data-task-id={task.id}
                             className={`${task.id === kids[focus]?.id ? styles.focus : ''} ${task.itemId && task.itemId === activeItemId ? styles.sel : ''}`}
                             onClick={() => pickItem(task.itemId)}
                           >
@@ -543,7 +491,7 @@ export function TaskPanel({
                           </tr>
                           {expandable && open ? (
                             <tr className={styles.entryRow}>
-                              <td colSpan={4}>
+                              <td colSpan={3}>
                                 <ul className={styles.entryList}>
                                   {lines.map((line) => (
                                     <li key={line.hostname} className={styles.entryItem}>
@@ -558,7 +506,7 @@ export function TaskPanel({
                         </Fragment>
                       )
                     })}
-                    {slice.length === 0 && (
+                    {kids.length === 0 && (
                       <tr>
                         <td colSpan={4} className={styles.dim}>
                           {t('queue.detail.none')}
