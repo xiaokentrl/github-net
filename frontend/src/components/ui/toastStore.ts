@@ -20,13 +20,14 @@ export type Notice = {
 /** 一屏最多留几条：超了丢最老的，不让一次批量失败把界面刷成日志。 */
 const MAX_NOTICES = 50
 
-/** 每档活多久（毫秒），0＝不自动消失。
- *  错误和警告要留着——看一眼就没了等于没说；提醒和成功是回执，读完就该走。 */
+/** 每档活多久（毫秒），0＝不自动消失。全部 0（拍板 2026-11-03）：
+ *  提示内容一律不自动删，留到用户自己「清空 / 关闭 ✕ / 删除该条」为止——
+ *  回执类的「读完就走」会让人错过写入结果，宁多勿丢。上限 MAX_NOTICES 兜住刷屏。 */
 const LIFESPAN: Record<NoticeKind, number> = {
   error: 0,
-  warning: 20000,
-  info: 8000,
-  success: 6000,
+  warning: 0,
+  info: 0,
+  success: 0,
 }
 
 let notices: Notice[] = []
