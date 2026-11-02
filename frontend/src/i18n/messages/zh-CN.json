@@ -220,6 +220,7 @@
   "detail.field.hostnames": "预设域名",
   "detail.hostnames.userSupplied": "由用户自己填写，后端没有预设值。",
   "detail.hostnames.none": "无",
+  "detail.table.item": "二级菜单",
   "detail.metric.appliedIp": "当前写入 IP",
   "detail.metric.latency": "连接耗时",
   "detail.metric.available": "可用候选",

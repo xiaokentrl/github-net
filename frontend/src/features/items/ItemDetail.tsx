@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
 import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
@@ -49,6 +48,8 @@ export function ItemDetail({
   item,
   category,
   hosts,
+  hostsOf,
+  onSelectItem,
   detectReady,
   detectError,
   hostsError,
@@ -61,6 +62,8 @@ export function ItemDetail({
   item: CatalogItem | null
   category: CatalogCategory | null
   hosts: HostsState | undefined
+  hostsOf: Map<string, HostsState>
+  onSelectItem: (itemId: string) => void
   detectReady: boolean
   detectError: string
   hostsError: string
@@ -113,31 +116,6 @@ export function ItemDetail({
   // 解析失败的域名没有候选行，单独在表上方说一句，不混进表里冒充候选。
   const failedHosts = rows.filter((h) => !h.resolved)
 
-  // 当前写入（拍板 2026-11-03 改源）：hosts.entries 是后端这次读回来的真值，
-  // 只列已写入的；未写入的域名在下面那行域名清单里已经有，不重复列。
-  const writtenLines = entryList
-    .filter((entry) => entry.written && entry.ip)
-    .map((entry) => ({ hostname: entry.hostname, ip: entry.ip }))
-
-  // 指标五格（拍板 2026-11-03 精简）：当前写入（真值）/ 检测最优（含耗时）/
-  // 可用候选 / 上次检测。原「检测方法」格和选择器重复，删。
-  // 最优可用的算法住在 detect/candidateChoice（队列明细的逐条用的是同一份），这里传整个项目的候选。
-  const bestCandidate = pickBestCandidate(candidates)
-  const availableCount = candidates.filter((c) => c.status === 'available').length
-
-  // 一格指标：检测中整块换微光条；值没来源时用 dim 那档字色，和原型的 b.dim 同一处理。
-  // 值可以是节点——「当前写入 IP」那一格摊成逐条域名→地址，样式自己带等宽，不再整格套 mono。
-  const metricCell = (labelKey: string, value: ReactNode) => (
-    <div key={labelKey} className={styles.metric}>
-      <span className={styles.metricLabel}>{t(labelKey)}</span>
-      {detecting ? (
-        <span className={styles.skeleton} aria-hidden="true" />
-      ) : (
-        <span className={`${styles.metricValue} ${labelKey === 'detail.metric.bestIp' ? styles.mono : ''}`}>{value}</span>
-      )}
-    </div>
-  )
-
   return (
     <div className={styles.wrap}>
       {/* 第一张卡：这是哪个服务、用什么方法加速、当前 Hosts 是什么结论。 */}
@@ -170,37 +148,48 @@ export function ItemDetail({
           </div>
         </div>
 
-        {/* 六格指标是布局骨架，常驻：没值显示「—」，全部有数据来源（拍板 2026-10-31）。 */}
-        <div className={styles.metrics}>
-          {metricCell(
-            'detail.metric.appliedIp',
-            writtenLines.length === 0 ? (
-              '—'
-            ) : (
-              <span className={styles.entryList}>
-                {writtenLines.map((line) => (
-                  <span key={`${line.hostname} ${line.ip}`} className={styles.entryLine}>
-                    <span className={styles.entryHost}>{line.hostname}</span>
-                    <span className={styles.entryArrow} aria-hidden="true">
-                      →
-                    </span>
-                    <span className={styles.entryIp}>{line.ip}</span>
-                  </span>
-                ))}
-              </span>
-            ),
-          )}
-          {metricCell(
-            'detail.metric.bestIp',
-            bestCandidate
-              ? bestCandidate.latencyMs > 0
-                ? `${bestCandidate.ip} · ${bestCandidate.latencyMs}ms`
-                : bestCandidate.ip
-              : '—',
-          )}
-          {metricCell('detail.metric.available', candidates.length > 0 ? `${formatInteger(availableCount)}/${formatInteger(candidates.length)}` : '—')}
-          {metricCell('detail.metric.lastCheck', result?.finishedAt ? formatRelativeTime(result.finishedAt) : '—')}
-        </div>
+        {/* 全二级菜单表（拍板 2026-11-03）：当前主菜单下每一项一行，数据各从各的来源现取；
+            切换二级菜单只换选中行的底色和标识，表本身不动。列宽自适应（auto 布局）。 */}
+        <table className={styles.itemTable}>
+          <thead>
+            <tr>
+              <th>{t('detail.table.item')}</th>
+              <th>{t('detail.metric.appliedIp')}</th>
+              <th>{t('detail.metric.bestIp')}</th>
+              <th>{t('detail.metric.available')}</th>
+              <th>{t('detail.metric.lastCheck')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(category.items ?? []).map((it) => {
+              const hs = hostsOf.get(it.id)
+              const res = state.results[it.id]
+              const written = (hs?.entries ?? []).filter((entry) => entry.written && entry.ip)
+              const cands = (res?.hosts ?? []).flatMap((host) => host.candidates ?? [])
+              const best = pickBestCandidate(cands)
+              const availableCount = cands.filter((c) => c.status === 'available').length
+              const selectedRow = it.id === item.id
+              return (
+                <tr key={it.id} className={selectedRow ? styles.rowSel : undefined} onClick={() => onSelectItem(it.id)}>
+                  <td className={styles.itemName}>
+                    {selectedRow ? (
+                      <span className={styles.rowMark} aria-hidden="true">
+                        ▸
+                      </span>
+                    ) : null}
+                    {it.name}
+                  </td>
+                  <td>{written.length > 0 ? written.map((entry) => `${entry.hostname}→${entry.ip}`).join('、') : '—'}</td>
+                  <td className={styles.cellMono}>
+                    {best ? (best.latencyMs > 0 ? `${best.ip} · ${best.latencyMs}ms` : best.ip) : '—'}
+                  </td>
+                  <td>{cands.length > 0 ? `${formatInteger(availableCount)}/${formatInteger(cands.length)}` : '—'}</td>
+                  <td>{res?.finishedAt ? formatRelativeTime(res.finishedAt) : '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
 
         {/* 域名这一行摊成逐条：每条域名现在写到哪个 IP、还是没写，全用后端这次读回来的事实。
             判不出归属（冲突、读不到）时后端给空数组，退回原来的域名清单，不自己编 IP。 */}

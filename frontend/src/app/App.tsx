@@ -851,6 +851,11 @@ export function App() {
             item={selected.item}
             category={selected.category}
             hosts={hostsOf.get(selectedId)}
+            hostsOf={hostsOf}
+            onSelectItem={(itemId) => {
+              setSelectedId(itemId)
+              focusManualRef.current = true
+            }}
             detectReady={status?.dnsDetectionReady ?? false}
             detectError={detectError}
             hostsError={hostsError}

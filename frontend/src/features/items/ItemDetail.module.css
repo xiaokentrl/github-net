@@ -284,3 +284,60 @@
     justify-content: center;
   }
 }
+
+/* 全二级菜单表（拍板 2026-11-03）：每个子菜单一行，列宽自适应（auto 布局）；
+   选中行主色浅底 + ▸ 标识，悬停垫悬停色，行可点选。 */
+.itemTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.itemTable th {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-3);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.itemTable td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--band);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.itemTable tbody tr {
+  cursor: pointer;
+}
+
+.itemTable tbody tr:hover {
+  background: var(--hov);
+}
+
+.rowSel,
+.itemTable tbody tr.rowSel:hover {
+  background: var(--primary-soft);
+}
+
+.itemName {
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.rowSel .itemName {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.rowMark {
+  margin-right: 5px;
+  color: var(--primary);
+}
+
+.cellMono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
