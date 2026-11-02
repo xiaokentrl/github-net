@@ -294,8 +294,9 @@
 }
 
 .itemTable th {
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
   color: var(--text-3);
   font-weight: 500;
   text-align: left;
@@ -352,16 +353,35 @@
   overflow-wrap: anywhere;
 }
 
-/* 列宽拖拽把手：贴在表头右缘的细条，按住横向拖动改列宽。 */
+/* 列宽拖拽把手：贴在表头右缘，本体 12px 命中区，中间一道 3px 竖线做视觉，
+   悬停和拖动中变主色——拖哪条线一眼可见。 */
 .colGrip {
   position: absolute;
-  right: -3px;
+  right: -6px;
   top: 0;
   bottom: 0;
-  width: 7px;
+  width: 12px;
   cursor: col-resize;
   user-select: none;
   touch-action: none;
+  z-index: 2;
+}
+
+.colGrip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 15%;
+  bottom: 15%;
+  width: 3px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.colGrip:hover::after,
+.colGrip:active::after {
+  background: var(--primary);
 }
 
 .itemTable th {
