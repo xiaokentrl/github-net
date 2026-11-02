@@ -171,8 +171,9 @@ func TestPoolReplacesOnNewRound(t *testing.T) {
 	}
 }
 
-// 这一轮覆盖到、但没查出候选的主机名，旧缓存同样清掉：检测过就是最新事实。
-func TestPoolClearsHostnamesWithoutCandidates(t *testing.T) {
+// 这一轮查出的候选全不可用的主机名，旧缓存原样保留（拍板 2026-11-03：
+// 检测只是采集，旧可用地址仍是最优已知，一轮空结果不构成丢掉它的理由）。
+func TestPoolKeepsStaleWhenRoundFindsNothing(t *testing.T) {
 	s := newTestStore(t)
 	first := sampleResult()
 	if err := s.SaveRound("r1", "github", "gitcdn", first); err != nil {
@@ -185,8 +186,27 @@ func TestPoolClearsHostnamesWithoutCandidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	pool, err := s.Pool("github.com")
-	if err != nil || len(pool) != 0 {
-		t.Fatalf("没查出候选的域名旧缓存该被清空，实际 %d 行（err=%v）", len(pool), err)
+	if err != nil || len(pool) != 3 {
+		t.Fatalf("空结果不该动旧缓存，实际 %d 行（err=%v）", len(pool), err)
+	}
+	// 三行原样保留：两条可用 + 一条超时，都是第一轮的原样。
+	for _, want := range []struct{ ip, status string }{
+		{"140.82.121.4", "available"},
+		{"2606:50c0:8000::153", "available"},
+		{"20.205.243.166", "timeout"},
+	} {
+		found := false
+		for _, p := range pool {
+			if p.IP == want.ip {
+				found = true
+				if p.Status != want.status {
+					t.Errorf("%s 的状态该是 %s，实际 %s", want.ip, want.status, p.Status)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("第一轮的 %s 该保留在池里", want.ip)
+		}
 	}
 }
 
@@ -209,20 +229,48 @@ func TestPoolKeepsUntouchedHostnames(t *testing.T) {
 	}
 }
 
-// 池里的状态是这一轮探测的结论：写进去什么就是什么。
+// 有可用候选的域名才整块替换：同域名新一轮查出可用 + 不可用混合时，池里是新一轮的全量
+// （可用的排前）；全程超时的探测不写池（没有可用就不覆盖旧缓存）。
 func TestPoolTracksLatestStatus(t *testing.T) {
 	s := newTestStore(t)
+	mixed := sampleResult()
+	// 第一条改成超时，其余保留可用：该域名本轮有可用 → 整块替换。
+	mixed.Candidates[0].Status = accelerator.StatusTimeout
+	if err := s.SaveRound("r1", "github", "gitcdn", mixed); err != nil {
+		t.Fatal(err)
+	}
+	pool, _ := s.Pool("github.com")
+	if len(pool) != 3 {
+		t.Fatalf("有可用就该整块替换成 3 行，实际 %d", len(pool))
+	}
+	// 顺序按 hostname+ip 排：140.82.121.4(超时) / 20.205.243.166(超时) / v6(可用)。
+	if pool[0].IP != "140.82.121.4" || pool[0].Status != "timeout" {
+		t.Errorf("第一条该是超时的 140.82.121.4，实际 %+v", pool[0])
+	}
+	if pool[2].IP != "2606:50c0:8000::153" || pool[2].Status != "available" {
+		t.Errorf("v6 可用照旧记录，实际 %+v", pool[2])
+	}
+
+	// 全程超时的一轮：不覆盖旧缓存，第一轮的行原样都在。
+	if err := s.SaveRound("r2", "github", "gitcdn", badRound()); err != nil {
+		t.Fatal(err)
+	}
+	pool, _ = s.Pool("github.com")
+	if len(pool) != 3 {
+		t.Fatalf("全程超时不该改变池，实际 %d 行", len(pool))
+	}
+	for _, p := range pool {
+		if p.UpdatedAt != "2026-10-31T08:00:05Z" {
+			t.Errorf("全程超时的一轮不该写池，实际 %+v", p)
+		}
+	}
+}
+
+// badRound 造一轮全部超时的结果。
+func badRound() *accelerator.Result {
 	bad := sampleResult()
 	for i := range bad.Candidates {
 		bad.Candidates[i].Status = accelerator.StatusTimeout
 	}
-	if err := s.SaveRound("r1", "github", "gitcdn", bad); err != nil {
-		t.Fatal(err)
-	}
-	pool, _ := s.Pool("github.com")
-	for _, p := range pool {
-		if p.Status != string(accelerator.StatusTimeout) {
-			t.Errorf("%s 这轮是超时，池里该记 timeout，实际 %s", p.IP, p.Status)
-		}
-	}
+	return bad
 }

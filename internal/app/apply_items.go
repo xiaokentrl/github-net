@@ -64,21 +64,33 @@ func (s *Service) applyBlocker(itemID string) string {
 	return "这个项目还没有检测结果，先检测再应用"
 }
 
-// usableMappingsFor 给一个项目挑「现在就能写」的映射：优先用内存里最近一轮的检测结果，
-// 内存没有（重启过）或那轮全不可用，就退回候选池里缓存的可用地址（拍板 2026-11-03）。
-// 选址规则和 bestMappings 同一条：每主机名延迟最低、并列 IPv4 优先。两边都没有给空。
+// usableMappingsFor 给一个项目挑「现在就能写」的映射（拍板 2026-11-03 重写）：
+// 每个主机名取它当前已知的最优可用——内存里最近一轮优先（最新鲜），
+// 内存没覆盖到的域名用候选池里跨源累积的缓存补齐。切源随便切，应用合并全部已知。
+// 选址规则和 bestMappings 同一条：延迟最低、并列 IPv4 优先。一个域名都没有给空。
 func (s *Service) usableMappingsFor(itemID string) []hosts.Mapping {
-	if view, ok := s.detectResults.view(itemID); ok {
-		if m := bestMappings(view); len(m) > 0 {
-			return m
+		best := make(map[string]bestPick)
+	consider := func(hostname, ip string, latencyMS int64, ipv6 bool) {
+		current, ok := best[hostname]
+		better := !ok || latencyMS < current.latency || (latencyMS == current.latency && current.ipv6 && !ipv6)
+		if better {
+			best[hostname] = bestPick{ip: ip, latency: latencyMS, ipv6: ipv6}
 		}
 	}
-	if s.candidateStore == nil {
-		return nil
+	// 内存里最近一轮：最新鲜的一份。
+	if view, ok := s.detectResults.view(itemID); ok {
+		for _, h := range view.Hosts {
+			for _, c := range h.Candidates {
+				if c.Status == "available" {
+					consider(c.Hostname, c.IP, c.LatencyMS, c.IPv6)
+				}
+			}
+		}
 	}
+	// 池补齐：只补内存没覆盖的域名（覆盖了的以内存为准，它更新鲜）。
 	_, _, item, ok := s.lookupItem(itemID)
-	if !ok || len(item.Hostnames) == 0 {
-		return nil
+	if !ok || len(item.Hostnames) == 0 || s.candidateStore == nil {
+		return mappingsOf(best)
 	}
 	want := make(map[string]bool, len(item.Hostnames))
 	for _, h := range item.Hostnames {
@@ -88,24 +100,30 @@ func (s *Service) usableMappingsFor(itemID string) []hosts.Mapping {
 	}
 	rows, err := s.candidateStore.Pool("")
 	if err != nil {
-		return nil
+		return mappingsOf(best)
 	}
-	type pick struct {
-		ip      string
-		latency int64
-		ipv6    bool
-	}
-	best := make(map[string]pick)
 	for _, r := range rows {
 		if r.Status != "available" || !want[r.Hostname] {
 			continue
 		}
-		current, ok := best[r.Hostname]
-		better := !ok || r.LatencyMS < current.latency || (r.LatencyMS == current.latency && current.ipv6 && !r.IPv6)
-		if better {
-			best[r.Hostname] = pick{ip: r.IP, latency: r.LatencyMS, ipv6: r.IPv6}
+		if _, covered := best[r.Hostname]; covered {
+			continue
 		}
+		consider(r.Hostname, r.IP, r.LatencyMS, r.IPv6)
 	}
+	return mappingsOf(best)
+}
+
+// bestPick 是一个主机名当前选中的最优可用地址。
+type bestPick = struct {
+	ip      string
+	latency int64
+	ipv6    bool
+}
+
+// mappingsOf 把「主机名 → 最优」收成按 IP 分组的写盘映射：延迟并列的 IPv4 优先
+// 在 consider 里已经比过，这里只管分组和稳定排序。
+func mappingsOf(best map[string]bestPick) []hosts.Mapping {
 	if len(best) == 0 {
 		return nil
 	}

@@ -100,16 +100,20 @@ func TestApplyThenRestoreItemRoundTrip(t *testing.T) {
 		t.Fatalf("备份应是写入前的原文: %q", backup)
 	}
 
-	// 同一项目换 IP 再应用：更新而不是留两行。
+	// 同一项目换 IP 再应用：api.github.com 更新到新 IP；这次没带的 codeload.github.com
+	// 保留原映射（拍板 2026-11-03：应用不释放，只写入/替换有数据的域名）。
 	if err := c.Apply("item-1", []hosts.Mapping{{IP: "203.0.113.99", Hostnames: []string{"api.github.com"}}}); err != nil {
 		t.Fatalf("再次 apply 不该失败: %v", err)
 	}
 	content = read(t, hostsPath)
-	if strings.Contains(content, "203.0.113.10") {
-		t.Fatalf("旧 IP 该被换掉: %q", content)
+	if strings.Contains(content, "203.0.113.10 api.github.com") {
+		t.Fatalf("api 的旧 IP 该被换掉: %q", content)
 	}
 	if !strings.Contains(content, "203.0.113.99") {
 		t.Fatalf("新 IP 该生效: %q", content)
+	}
+	if !strings.Contains(content, "203.0.113.10 codeload.github.com") {
+		t.Fatalf("没带数据的域名该保留原映射: %q", content)
 	}
 
 	// 单项还原：回到应用前状态；账本清空后元数据和备份一起删。

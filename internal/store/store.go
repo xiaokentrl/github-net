@@ -163,14 +163,21 @@ func (s *Store) SaveRound(taskRound, scopeID, strategyID string, r *accelerator.
 	if err != nil {
 		return fmt.Errorf("store: 拿不到轮行号: %w", err)
 	}
-	// 缓存语义（拍板 2026-10-31）：这一轮覆盖到的主机名，池里的旧地址先清掉再写新的——
-	// 池子回答的是「最近一轮这些域名查到了什么」，不是历史累积；检测过但没查到的域名旧地址也清，
-	// 免得界面上留一份「上上轮的老底」冒充现状。
-	if len(r.Hostnames) > 0 {
-		ph := strings.TrimSuffix(strings.Repeat("?,", len(r.Hostnames)), ",")
-		args := make([]any, 0, len(r.Hostnames))
-		for _, h := range r.Hostnames {
-			args = append(args, h.Hostname)
+	// 缓存语义（拍板 2026-11-03 重写）：检测只是采集，数据只增不减。
+	// 只有「这一轮查出了可用地址」的主机名才整块替换（旧的最优被新的最优顶掉）；
+	// 本轮没有可用候选的主机名，池里的旧可用地址原样保留——它仍是最优已知，
+	// 一轮空结果不构成把它丢掉的理由（切源后新源没覆盖的域名就靠这条活下来）。
+	covered := make(map[string]bool)
+	for _, c := range r.Candidates {
+		if c.Status == accelerator.StatusAvailable {
+			covered[c.Hostname] = true
+		}
+	}
+	if len(covered) > 0 {
+		ph := strings.TrimSuffix(strings.Repeat("?,", len(covered)), ",")
+		args := make([]any, 0, len(covered))
+		for hostname := range covered {
+			args = append(args, hostname)
 		}
 		if _, err := tx.Exec(`DELETE FROM candidate_ips WHERE hostname IN (`+ph+`)`, args...); err != nil {
 			return fmt.Errorf("store: 清旧缓存失败: %w", err)
@@ -186,7 +193,11 @@ func (s *Store) SaveRound(taskRound, scopeID, strategyID string, r *accelerator.
 		); err != nil {
 			return fmt.Errorf("store: 候选行写不进去: %w", err)
 		}
-		// 同一笔进候选池：同主机名同 IP 已存在就更新成这次的结果，不另起一行（去重）。
+		// 同主机名同 IP 已存在就更新成这次的结果，不另起一行（去重）。
+		// 只写 covered 的主机名：没覆盖的域名连更新都不做，旧缓存一字不动。
+		if !covered[c.Hostname] {
+			continue
+		}
 		if _, err := tx.Exec(
 			`INSERT INTO candidate_ips
 				(hostname, ip, ipv6, status, latency_ms, source_id, updated_at)

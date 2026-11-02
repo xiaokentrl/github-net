@@ -52,8 +52,10 @@ func TestApplyKeepsUserLinesAndBlockPosition(t *testing.T) {
 	if !strings.HasPrefix(content, head) || !strings.HasSuffix(content, tail) {
 		t.Fatalf("区段外的用户行被改了：%q", content)
 	}
-	if strings.Contains(content, "old.example") || !strings.Contains(content, "1.1.1.1 mid.example") {
-		t.Errorf("区段没被原地换掉：%q", content)
+	// 原有的 old.example 是 item-a 接手的映射：应用不释放（拍板 2026-11-03），原地保留，
+	// 新写的 mid.example 也进去——区段整体原地替换，前后用户行逐字节不动。
+	if !strings.Contains(content, "8.8.8.8 old.example") || !strings.Contains(content, "1.1.1.1 mid.example") {
+		t.Errorf("区段没被原地替换（旧映射保留 + 新映射写入）：%q", content)
 	}
 	if next.Original != before {
 		t.Errorf("元数据还在用，原始事务快照不许被覆盖：%q", next.Original)
@@ -140,7 +142,8 @@ func TestApplyDoesNotMutateInputs(t *testing.T) {
 
 func TestApplyRereleaseDropsOnlyOwnClaim(t *testing.T) {
 	// A 先写 a.example，B 再写同一个 IP 的同一个主机名＝合并认领；
-	// A 第二次应用不再带它＝只摘掉自己，记录留给 B。
+	// A 第二次应用不再带它＝认领关系原样保留（拍板 2026-11-03：应用不释放，
+	// 旧的 shared.example 是当时已知的最优映射，不因为这一轮没写它就摘掉）。
 	content, meta := mustApply(t, Recovery{}, userTop, "item-a", mapping("1.1.1.1", "shared.example"))
 	content, meta = mustApply(t, meta, content, "item-b", mapping("1.1.1.1", "shared.example", "b-only.example"))
 	if got := entryOf(meta, "shared.example").Owners; !reflect.DeepEqual(got, []string{"item-a", "item-b"}) {
@@ -151,8 +154,8 @@ func TestApplyRereleaseDropsOnlyOwnClaim(t *testing.T) {
 	if len(meta.Entries) != 3 {
 		t.Fatalf("条目数不对：%+v", meta.Entries)
 	}
-	if got := entryOf(meta, "shared.example"); got.IP != "1.1.1.1" || !reflect.DeepEqual(got.Owners, []string{"item-b"}) {
-		t.Errorf("共享记录该只摘掉 item-a，得到 %+v", got)
+	if got := entryOf(meta, "shared.example"); got.IP != "1.1.1.1" || !reflect.DeepEqual(got.Owners, []string{"item-a", "item-b"}) {
+		t.Errorf("共享记录该保留双方认领，得到 %+v", got)
 	}
 	if got := entryOf(meta, "b-only.example"); got.IP != "1.1.1.1" || !reflect.DeepEqual(got.Owners, []string{"item-b"}) {
 		t.Errorf("B 独用的映射被 A 的第二次应用改了：%+v", got)
@@ -408,24 +411,25 @@ func TestApplyTwiceThenRestoreGoesBackToOriginal(t *testing.T) {
 }
 
 func TestRestorePutsBackHostnameReleasedByLaterApply(t *testing.T) {
-	// 接手无主映射 → 之后一次应用不再写它（条目被撤）→ 还原时必须把它放回原处。
+	// 接手无主映射 → 之后一次应用不再写它（拍板 2026-11-03：条目保留，不撤）→
+	// 还原时退回无主时的原样（9.9.9.9、无认领者）。
 	// 这条门钉住「处置主机名集合＝我还认领的 ∪ 快照记过的」里那半边。
 	content, meta := mustApply(t, mustOwnerlessMeta(t, userTop+block("9.9.9.9 old.example")),
 		userTop+block("9.9.9.9 old.example"), "item-a", mapping("1.1.1.1", "old.example"))
 	content, meta = mustApply(t, meta, content, "item-a", mapping("3.3.3.3", "other.example"))
-	if ip := ipOf(t, content, "old.example"); ip != "" {
-		t.Fatalf("A 不再认领的无主映射该从区段里撤掉：%q", content)
+	if ip := ipOf(t, content, "old.example"); ip != "1.1.1.1" {
+		t.Fatalf("A 接手的映射不该被后一次应用撤掉：%q", content)
 	}
 
 	restored, content := mustRestore(t, meta, content, "item-a")
 	if ip := ipOf(t, content, "old.example"); ip != "9.9.9.9" {
-		t.Errorf("还原没把上次应用摘掉的原映射放回去：%q", content)
+		t.Errorf("还原没退回无主时的原映射：%q", content)
 	}
 	if ip := ipOf(t, content, "other.example"); ip != "" {
 		t.Errorf("A 本次写的映射还原后还在：%q", content)
 	}
 	if got := entryOf(restored, "old.example"); got.Hostname != "old.example" || len(got.Owners) != 0 {
-		t.Errorf("放回去的原映射不该带认领者：%+v", got)
+		t.Errorf("退回去的原映射不该带认领者：%+v", got)
 	}
 	// item-c 的快照跟这条无关，不能被顺手删掉。
 	if strings.Join(restored.ActiveItemIDs(), ",") != "item-c" {

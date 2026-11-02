@@ -71,20 +71,9 @@ func Apply(meta Recovery, content string, itemID string, mappings []Mapping) (Re
 		record(host)
 	}
 
-	// 释放：该项目原来认领、这次不再写的主机名。还有其他认领者就只摘自己。
-	for _, host := range sortedHosts(current) {
-		if _, keep := want[host]; keep {
-			continue
-		}
-		idx, ok := indexOfEntry(entries, host)
-		if !ok || !hasOwner(entries[idx].Owners, itemID) {
-			continue
-		}
-		entries[idx].Owners = withoutOwner(entries[idx].Owners, itemID)
-		if len(entries[idx].Owners) == 0 {
-			entries = removeEntry(entries, host)
-		}
-	}
+	// 不再释放（拍板 2026-11-03）：本轮没覆盖的主机名保留现有映射——
+	// 应用只写入/替换有数据的域名，绝不因为「这一轮没查到它」就把原来写好的条目删掉。
+	// 旧映射的认领关系原样保留，还原语义不受影响（快照里记着应用前的样子）。
 	// 写入：新映射落进条目集，认领者排序去重。
 	for _, host := range sortedIPs(want) {
 		if idx, ok := indexOfEntry(entries, host); ok {
