@@ -57,13 +57,10 @@ export function ServiceStrategySelector({
     )
   }, [scopeId])
 
-  const choose = (strategyId: string) => {
-    if (!snap) return
-    const request = requestRef.current + 1
-    requestRef.current = request
-    setKind('pending')
-    setText(t('settings.save.pending'))
-    selectStrategy(scopeId, strategyId, snap.revision, `strategy-${scopeId}-${Date.now()}`).then(
+  // 保存一次。失败若是版本冲突（树侧勾选、布局尺寸这些后台保存随时会把版本抬一格），
+  // 自动回读最新快照重试一次——用户只是想切个方法，不该被叫去「刷新后重做」。
+  const saveOnce = (strategyId: string, revision: number, request: number): Promise<void> =>
+    selectStrategy(scopeId, strategyId, revision, `strategy-${scopeId}-${Date.now()}`).then(
       (next) => {
         if (requestRef.current !== request) return
         setSnap(next)
@@ -74,23 +71,49 @@ export function ServiceStrategySelector({
         onSaved()
       },
       (err: unknown) => {
-        if (requestRef.current !== request) return
+        if (requestRef.current !== request) return Promise.reject(err)
         const failed = toAppError(err)
-        setKind('failed')
-        setText(t('settings.save.failed', { label, reason: failed.message }))
-        // 失败最可能是手上这份版本旧了，回读一次让选择框回到后端真实保存的状态；读不到就保留原话。
-        getStrategies(scopeId).then(
-          (next) => {
-            if (requestRef.current !== request) return
+        if (failed.code !== 'revision_conflict') {
+          return Promise.reject(err)
+        }
+        // 版本冲突：回读最新快照，带上新 revision 原样再存一次；只重试这一回，再冲突才报错。
+        return getStrategies(scopeId).then((fresh) => {
+          if (requestRef.current !== request) return undefined
+          setSnap(fresh)
+          return selectStrategy(scopeId, strategyId, fresh.revision, `strategy-${scopeId}-${Date.now()}`).then((next) => {
+            if (requestRef.current !== request) return undefined
             setSnap(next)
-            setLoad('ready')
-          },
-          () => {
-            /* 回读也失败：失败原因已经显示在状态条上，这里不再叠第二条 */
-          },
-        )
+            setKind('idle')
+            setText('')
+            onSaved()
+          })
+        })
       },
     )
+
+  const choose = (strategyId: string) => {
+    if (!snap) return
+    const request = requestRef.current + 1
+    requestRef.current = request
+    setKind('pending')
+    setText(t('settings.save.pending'))
+    saveOnce(strategyId, snap.revision, request).catch((err: unknown) => {
+      if (requestRef.current !== request) return
+      const failed = toAppError(err)
+      setKind('failed')
+      setText(t('settings.save.failed', { label, reason: failed.message }))
+      // 失败最可能是手上这份版本旧了，回读一次让选择框回到后端真实保存的状态；读不到就保留原话。
+      getStrategies(scopeId).then(
+        (next) => {
+          if (requestRef.current !== request) return
+          setSnap(next)
+          setLoad('ready')
+        },
+        () => {
+          /* 回读也失败：失败原因已经显示在状态条上，这里不再叠第二条 */
+        },
+      )
+    })
   }
 
   if (load === 'loading') return <p className={styles.note}>{t('strategy.loading')}</p>
