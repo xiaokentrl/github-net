@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
 import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
-import type { CatalogCategory, CatalogItem, DetectHostView, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { CatalogCategory, CatalogItem, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -42,21 +42,6 @@ export function detectableItems(items: CatalogItem[]): CatalogItem[] {
 
 // 后端标了「当前写入」的那几条，按域名摊成一行一条：域名取这一行候选自己的主机名，
 // 地址取候选自己的 IP。同一域名同一地址只记一次（IPv4／IPv6 可能各被标一条）。
-function appliedLinesOf(rows: DetectHostView[]): { hostname: string; ip: string }[] {
-  const seen = new Set<string>()
-  const lines: { hostname: string; ip: string }[] = []
-  for (const host of rows) {
-    for (const candidate of host.candidates ?? []) {
-      if (!candidate.applied || !candidate.ip) continue
-      const key = `${host.hostname} ${candidate.ip}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      lines.push({ hostname: host.hostname ?? '', ip: candidate.ip })
-    }
-  }
-  return lines
-}
-
 // 详情里每一行都来自后端 GetItems / GetDetectResult / 事件：没有的字段就说没有，不补演示数据。
 // 六格指标全都有来源（拍板 2026-11-02）：写入地址和本轮最优都取候选自己标的字段，
 // 耗时和可用数是候选现算，方法名与上次检测时间取结果字段。拿不到值就显示「—」，不摆恒为占位符的列。
@@ -107,7 +92,9 @@ export function ItemDetail({
   // 当前写入 IP 只有一个来源：后端在这轮候选里标了 applied 的那几条。界面不自己认。
   // 一条域名一行摊全（拍板 2026-11-02）：一个地址被几条域名共用就各写一行，
   // 不再收成「N 个域名各有各的写入」那种要人回头数的说法。
-  const appliedLines = appliedLinesOf(rows)
+  // 当前写入的取数源是 hosts.entries（后端这次读回来的真值）：内存轮的 applied 标记
+  // 重启后就没了，用它会出现「同一页面两个当前写入还互相矛盾」。只列已写入的，
+  // 未写入的域名在下面那行域名清单里已经有。
   const restorable = status === HostsStatus.HostsApplied || status === HostsStatus.HostsPartial
   const canApply = candidates.some((c) => c.status === 'available')
 
@@ -126,11 +113,17 @@ export function ItemDetail({
   // 解析失败的域名没有候选行，单独在表上方说一句，不混进表里冒充候选。
   const failedHosts = rows.filter((h) => !h.resolved)
 
-  // 指标六格的数据（拍板 2026-10-31）：全部来自本轮候选，前端现算。
+  // 当前写入（拍板 2026-11-03 改源）：hosts.entries 是后端这次读回来的真值，
+  // 只列已写入的；未写入的域名在下面那行域名清单里已经有，不重复列。
+  const writtenLines = entryList
+    .filter((entry) => entry.written && entry.ip)
+    .map((entry) => ({ hostname: entry.hostname, ip: entry.ip }))
+
+  // 指标五格（拍板 2026-11-03 精简）：当前写入（真值）/ 检测最优（含耗时）/
+  // 可用候选 / 上次检测。原「检测方法」格和选择器重复，删。
   // 最优可用的算法住在 detect/candidateChoice（队列明细的逐条用的是同一份），这里传整个项目的候选。
   const bestCandidate = pickBestCandidate(candidates)
   const availableCount = candidates.filter((c) => c.status === 'available').length
-  const strategyLabel = result?.strategyName || result?.strategyId || ''
 
   // 一格指标：检测中整块换微光条；值没来源时用 dim 那档字色，和原型的 b.dim 同一处理。
   // 值可以是节点——「当前写入 IP」那一格摊成逐条域名→地址，样式自己带等宽，不再整格套 mono。
@@ -181,11 +174,11 @@ export function ItemDetail({
         <div className={styles.metrics}>
           {metricCell(
             'detail.metric.appliedIp',
-            appliedLines.length === 0 ? (
+            writtenLines.length === 0 ? (
               '—'
             ) : (
               <span className={styles.entryList}>
-                {appliedLines.map((line) => (
+                {writtenLines.map((line) => (
                   <span key={`${line.hostname} ${line.ip}`} className={styles.entryLine}>
                     <span className={styles.entryHost}>{line.hostname}</span>
                     <span className={styles.entryArrow} aria-hidden="true">
@@ -197,13 +190,15 @@ export function ItemDetail({
               </span>
             ),
           )}
-          {metricCell('detail.metric.bestIp', bestCandidate?.ip ?? '—')}
           {metricCell(
-            'detail.metric.latency',
-            bestCandidate && bestCandidate.latencyMs > 0 ? t('detect.latency', { ms: bestCandidate.latencyMs }) : '—',
+            'detail.metric.bestIp',
+            bestCandidate
+              ? bestCandidate.latencyMs > 0
+                ? `${bestCandidate.ip} · ${bestCandidate.latencyMs}ms`
+                : bestCandidate.ip
+              : '—',
           )}
           {metricCell('detail.metric.available', candidates.length > 0 ? `${formatInteger(availableCount)}/${formatInteger(candidates.length)}` : '—')}
-          {metricCell('detail.metric.strategy', strategyLabel || '—')}
           {metricCell('detail.metric.lastCheck', result?.finishedAt ? formatRelativeTime(result.finishedAt) : '—')}
         </div>
 

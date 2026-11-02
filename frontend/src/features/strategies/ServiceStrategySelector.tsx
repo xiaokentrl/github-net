@@ -121,9 +121,10 @@ export function ServiceStrategySelector({
 
   return (
     <div className={styles.stack}>
-      <div className={styles.panel} title={t('strategy.hint')}>
+      <div className={styles.panel}>
         <Select
           label={label}
+          labelHidden
           value={current}
           placeholder={t('strategy.pickOne')}
           disabled={kind === 'pending'}

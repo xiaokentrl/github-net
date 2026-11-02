@@ -10,6 +10,7 @@ export type SelectGroup = { label: string; options: SelectOption[] }
 // 换的时候只改这个文件，调用方不动。
 export function Select({
   label,
+  labelHidden,
   value,
   options,
   groups,
@@ -19,6 +20,8 @@ export function Select({
   onChange,
 }: {
   label: string
+  // labelHidden 只留读屏可及（aria-label），不画可见标签——外层已有同类信息时用。
+  labelHidden?: boolean
   value: string
   options: SelectOption[]
   // 给了 groups 就按组分节显示（优先）；不给就是平铺列表。
@@ -34,8 +37,9 @@ export function Select({
   return (
     <div className={styles.fieldGroup}>
       <label className={styles.field}>
-        <span>{label}</span>
+        {!labelHidden && <span>{label}</span>}
         <select
+          aria-label={label}
           value={value}
           disabled={disabled}
           onChange={(event: ChangeEvent<HTMLSelectElement>) => onChange?.(event.target.value)}
