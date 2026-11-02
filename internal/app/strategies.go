@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/xiaokentrl/github-net/internal/accelerator/strategies"
@@ -224,6 +225,30 @@ func (s *Service) currentConfig() (config.Config, error) {
 		return config.Config{}, ToPublicError(err)
 	}
 	return cfg, nil
+}
+
+// sanitizeSavedStrategies 清掉「已不适用于本范围」的失效选择（拍板 2026-11-03 前后各一次的典型：
+// GitHub 下拉删掉了 dns-hosts，老配置里 GitHub 存的还是它，之后每次检测都撞「不适用于本范围」）。
+// 清掉的条目由出厂默认接手（GitHub → 全部公共源）；方法被整个下架（注册表里都没有）的不清，
+// 那种要在界面上如实提示重选，不静默换。
+func sanitizeSavedStrategies(s *Service) {
+	cfg, err := s.settings.Snapshot()
+	if err != nil {
+		return
+	}
+	next := cloneDefaultStrategies(cfg.Accelerator.DefaultStrategyByScope)
+	changed := false
+	for scopeID, strategyID := range next {
+		if s.strategyTable.check(strategyID, scopeID) == strategyWrongScope {
+			delete(next, scopeID)
+			changed = true
+		}
+	}
+	if !changed {
+		return
+	}
+	mutationID := fmt.Sprintf("sanitize-wrong-scope-%d", cfg.Revision)
+	_, _ = s.settings.Save(config.Patch{DefaultStrategyByScope: &next}, cfg.Revision, mutationID)
 }
 
 // cloneDefaultStrategies 复制「哪个范围用哪个方法」这张表，nil 输入给空表。

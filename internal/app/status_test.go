@@ -276,11 +276,11 @@ func TestStrategyChoicesUseTheRealRegistryAfterAssembly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	saved, err := s.SaveSettings(config.Patch{DefaultStrategyByScope: &map[string]string{"github": "dns-hosts"}}, cfg.Revision, "m-registry")
+	saved, err := s.SaveSettings(config.Patch{DefaultStrategyByScope: &map[string]string{"github": "gitcdn"}}, cfg.Revision, "m-registry")
 	if err != nil {
 		t.Fatalf("已注册的方法应存得进去：%v", err)
 	}
-	if saved.Accelerator.DefaultStrategyByScope["github"] != "dns-hosts" {
+	if saved.Accelerator.DefaultStrategyByScope["github"] != "gitcdn" {
 		t.Errorf("保存结果没带上选择：%+v", saved.Accelerator)
 	}
 	reopened := NewService("github-net", "test", nil, nil)
@@ -288,7 +288,7 @@ func TestStrategyChoicesUseTheRealRegistryAfterAssembly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Accelerator.DefaultStrategyByScope["github"] != "dns-hosts" {
+	if again.Accelerator.DefaultStrategyByScope["github"] != "gitcdn" {
 		t.Errorf("重开读不到已保存的方法：%+v", again.Accelerator)
 	}
 	if _, err := s.SaveSettings(config.Patch{DefaultStrategyByScope: &map[string]string{"github": "no-such-method"}}, saved.Revision, "m-unknown"); err == nil {

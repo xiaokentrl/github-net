@@ -171,6 +171,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	if err == nil {
 		s.settings, s.settingsErr = newSettingsStore(c)
 		if s.settings != nil {
+			sanitizeSavedStrategies(s)
 			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit), probeGate, rounds, s.appliedIPsFor, s.saveDetectRound, factoryDefaultStrategy)
 			s.detectReady = true
 		}
