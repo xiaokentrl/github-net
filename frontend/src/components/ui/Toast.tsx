@@ -167,18 +167,48 @@ export function Toast() {
   const rafPending = useRef(false)
   const pendingGeom = useRef<Geom | null>(null)
 
+  // 用户亲手拖过（面板或小胶囊）就完全交给用户；没拖过则自动给队列让位。
+  const userMoved = useRef(false)
+
+  // 队列面板当前的显示高度（缩放归一到 CSS 像素层）。找不到就退回默认贴底距离。
+  const queueBottomOffset = useCallback(() => {
+    const zoom = bodyZoom()
+    const el = document.querySelector(`section[aria-label="${t('queue.title')}"]`)
+    if (!el) return BOTTOM_DEFAULT
+    return Math.round(el.getBoundingClientRect().height / zoom) + 12
+  }, [])
+
   // 窗口变小或改了缩放档位，原来那个位置和大小可能已经出去了一半，这里夹回来。
-  useEffect(() => {
-    const reconcile = () => {
-      const next = clampGeom(geomRef.current, panelRef.current)
-      if (next.right !== geomRef.current.right || next.bottom !== geomRef.current.bottom || next.width !== geomRef.current.width || next.height !== geomRef.current.height) {
-        geomRef.current = next
-        setGeom(next)
-      }
+  // 没被用户拖过时还顺带给队列让位：小胶囊的贴底距离永远在队列面板上沿之上（拍板 2026-11-03），
+  // 队列收起（45px）还是拖大，它都不压在队列头部的功能按钮上。
+  const reconcile = useCallback(() => {
+    const next = clampGeom(geomRef.current, panelRef.current)
+    if (!userMoved.current) {
+      const zoom = bodyZoom()
+      const viewHeight = window.innerHeight / zoom
+      const realHeight = next.height ?? panelRef.current?.offsetHeight ?? HEIGHT_FALLBACK
+      const maxBottom = Math.max(EDGE_GAP, viewHeight - realHeight - EDGE_GAP)
+      next.bottom = Math.min(Math.max(EDGE_GAP, queueBottomOffset()), maxBottom)
     }
+    if (next.right !== geomRef.current.right || next.bottom !== geomRef.current.bottom || next.width !== geomRef.current.width || next.height !== geomRef.current.height) {
+      geomRef.current = next
+      setGeom(next)
+    }
+  }, [queueBottomOffset])
+
+  // 队列面板的高度一变（拖手柄、收起/展开）就让位重算：ResizeObserver 盯着它。
+  useEffect(() => {
+    const el = document.querySelector(`section[aria-label="${t('queue.title')}"]`)
+    reconcile()
+    if (!el) return
+    const observer = new ResizeObserver(() => reconcile())
+    observer.observe(el)
     window.addEventListener('resize', reconcile)
-    return () => window.removeEventListener('resize', reconcile)
-  }, [notices.length, collapsed])
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', reconcile)
+    }
+  }, [reconcile])
 
   useEffect(() => {
     if (copiedId === null) return
@@ -205,6 +235,7 @@ export function Toast() {
     if (event.button !== 0) return
     // 头部那两颗按钮也在这一条里：点在按钮上就不算拖动。
     if (!allowOnButton && (event.target as HTMLElement).closest('button')) return
+    userMoved.current = true
     event.preventDefault()
     const panel = panelRef.current
     // 还没拖出过高度时面板是内容撑的，这里量一次当下真实高度当作起点数字。
