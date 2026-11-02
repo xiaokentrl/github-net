@@ -4,6 +4,7 @@ import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-n
 import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
 import type { CatalogCategory, CatalogItem, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
+import { Dialog } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import uiStyles from '../../components/ui/ui.module.css'
@@ -88,6 +89,8 @@ export function ItemDetail({
   // 列宽：拖过一次就转固定布局（px），没拖过是 null（auto 自适应）。
   const tableRef = useRef<HTMLTableElement | null>(null)
   const [colWidths, setColWidths] = useState<number[] | null>(null)
+  // 还原本菜单的公共弹框（拍板 2026-11-03）：确认文案在框里，动作走 onRestoreCategory。
+  const [restoreMenuOpen, setRestoreMenuOpen] = useState(false)
   const colDrag = useRef<{ pointerId: number; index: number; startX: number; startWidths: number[] } | null>(null)
 
   const startColDrag = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
@@ -183,11 +186,7 @@ export function ItemDetail({
                 className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.restore}`}
                 disabled={detecting}
                 title={t('hosts.restoreCategoryHint', { count: restorableItems.length })}
-                onClick={() => {
-                  const names = restorableItems.map((it) => it.name).join('、')
-                  if (!window.confirm(t('hosts.restoreCategory.confirm', { count: restorableItems.length, names }))) return
-                  onRestoreCategory(restorableItems.map((it) => it.id))
-                }}
+                onClick={() => setRestoreMenuOpen(true)}
               >
                 {t('hosts.restoreCategory')}
               </button>
@@ -401,6 +400,37 @@ export function ItemDetail({
           </tbody>
         </table>
       </div>
+
+      {restoreMenuOpen ? (
+        <Dialog
+          title={t('hosts.restoreCategory')}
+          onClose={() => setRestoreMenuOpen(false)}
+          footer={
+            <>
+              <button type="button" className={uiStyles.btn} onClick={() => setRestoreMenuOpen(false)}>
+                {t('hosts.restoreCategory.cancel')}
+              </button>
+              <button
+                type="button"
+                className={`${uiStyles.btn} ${uiStyles.primary}`}
+                onClick={() => {
+                  setRestoreMenuOpen(false)
+                  onRestoreCategory(restorableItems.map((it) => it.id))
+                }}
+              >
+                {t('hosts.restoreCategory.confirmAction')}
+              </button>
+            </>
+          }
+        >
+          <p className={styles.flowDesc}>
+            {t('hosts.restoreCategory.body', {
+              count: restorableItems.length,
+              names: restorableItems.map((it) => it.name).join('、'),
+            })}
+          </p>
+        </Dialog>
+      ) : null}
     </div>
   )
 }
