@@ -1,3 +1,18 @@
+// Package app 是暴露给前端的唯一门面：Wails 只绑定 Service 一个类型，
+// 其他包前端都摸不到。文件地图（按职责找文件，不再靠猜）：
+//
+//   - app.go / dto.go / errors.go      门面构造、通用读命令、前端 DTO 形状、稳定错误码
+//   - detect.go                        检测执行器（一条检测任务怎么真跑起来）
+//   - detect_items.go / detect_results.go   检测入口（排队校验）与最近一轮结果存储
+//   - apply_items.go / executors.go    应用/还原入口与队列分发执行器（含收尾重标「当前生效」）
+//   - startup_automation.go            启动自动化流水线（勾选菜单→检测→应用→关窗）
+//   - queue.go / rounds.go             队列装配与每轮共享预算账本（队列本体在 internal/task）
+//   - pool.go                          候选池读命令（底账在 internal/store）
+//   - strategies.go                    方法选择区命令（列表/保存，注册表在 accelerator/strategies）
+//   - sources_cache.go                 公共源缓存清理命令（缓存本体在 sources/github）
+//   - update.go / buildinfo.go         更新检查与构建信息
+//   - theme.go                         主题控制器（托盘菜单用，刻意不绑给前端）
+//   - privilege.go                     特权服务客户端装配（写 Hosts 的一步在 cmd/github-net-helper）
 package app
 
 import (
