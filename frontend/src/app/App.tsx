@@ -764,6 +764,9 @@ export function App() {
 
   const startRestore = useCallback((itemId: string) => startRestoreItems([itemId]), [startRestoreItems])
 
+  // 还原整表：当前主菜单下全部已写入的二级菜单一次退回（确认弹框在详情页里做了）。
+  const startRestoreCategory = useCallback((itemIds: string[]) => startRestoreItems(itemIds), [startRestoreItems])
+
   const openHostsFile = useCallback(() => {
     setHostsError('')
     openHosts().catch((err: unknown) => reportRejection(setHostsError, err))
@@ -863,6 +866,7 @@ export function App() {
             onDetectAll={startDetectAll}
             onApply={startApply}
             onRestore={startRestore}
+            onRestoreCategory={startRestoreCategory}
             onStrategySaved={loadSettings}
           />
         }

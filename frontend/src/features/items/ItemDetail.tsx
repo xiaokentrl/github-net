@@ -61,6 +61,7 @@ export function ItemDetail({
   onDetectAll,
   onApply,
   onRestore,
+  onRestoreCategory,
   onStrategySaved,
 }: {
   item: CatalogItem | null
@@ -75,6 +76,7 @@ export function ItemDetail({
   onDetectAll: (items: CatalogItem[]) => void
   onApply: (itemId: string) => void
   onRestore: (itemId: string) => void
+  onRestoreCategory: (itemIds: string[]) => void
   onStrategySaved: () => void
 }) {
   const state = useTaskQueue()
@@ -133,8 +135,13 @@ export function ItemDetail({
   // 当前写入的取数源是 hosts.entries（后端这次读回来的真值）：内存轮的 applied 标记
   // 重启后就没了，用它会出现「同一页面两个当前写入还互相矛盾」。只列已写入的，
   // 未写入的域名在下面那行域名清单里已经有。
-  const restorable = status === HostsStatus.HostsApplied || status === HostsStatus.HostsPartial
   const canApply = candidates.some((c) => c.status === 'available')
+
+  // 可还原的二级菜单：各自的 Hosts 状态是已应用或部分生效（拍板 2026-11-03）。
+  const restorableItems = (category.items ?? []).filter((it) => {
+    const st = hostsOf.get(it.id)?.status ?? HostsStatus.HostsUnknown
+    return st === HostsStatus.HostsApplied || st === HostsStatus.HostsPartial
+  })
 
   // 候选表只装当前二级菜单自己的 IP（拍板 2026-10-31）：所有候选共用一张表、域名是一列。
   // 排序先分档再比延迟（拍板 2026-11-02）：可用的一律排在不可用／超时／没测的前面，
@@ -170,15 +177,19 @@ export function ItemDetail({
           />
           <div className={styles.headActions}>
             <StatusBadge status={status} reason={hosts?.message} />
-            {selfDetectable && restorable ? (
+            {restorableItems.length > 0 ? (
               <button
                 type="button"
                 className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.restore}`}
                 disabled={detecting}
-                title={t('hosts.restoreHint')}
-                onClick={() => onRestore(item.id)}
+                title={t('hosts.restoreCategoryHint', { count: restorableItems.length })}
+                onClick={() => {
+                  const names = restorableItems.map((it) => it.name).join('、')
+                  if (!window.confirm(t('hosts.restoreCategory.confirm', { count: restorableItems.length, names }))) return
+                  onRestoreCategory(restorableItems.map((it) => it.id))
+                }}
               >
-                {t('hosts.restore')}
+                {t('hosts.restoreCategory')}
               </button>
             ) : null}
           </div>
@@ -215,6 +226,7 @@ export function ItemDetail({
                   ) : null}
                 </th>
               ))}
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -254,6 +266,21 @@ export function ItemDetail({
                   </td>
                   <td>{cands.length > 0 ? `${formatInteger(availableCount)}/${formatInteger(cands.length)}` : '—'}</td>
                   <td>{res?.finishedAt ? formatRelativeTime(res.finishedAt) : '—'}</td>
+                  <td className={styles.rowAction}>
+                    {restorableItems.some((r) => r.id === it.id) ? (
+                      <button
+                        type="button"
+                        className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.restore}`}
+                        title={t('hosts.restore')}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onRestore(it.id)
+                        }}
+                      >
+                        {t('hosts.restoreRow')}
+                      </button>
+                    ) : null}
+                  </td>
                 </tr>
               )
             })}

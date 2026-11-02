@@ -392,3 +392,9 @@
 .rowMarkHidden {
   visibility: hidden;
 }
+
+/* 行尾还原按钮列：窄列居中放小按钮。 */
+.rowAction {
+  white-space: nowrap;
+  text-align: center;
+}
