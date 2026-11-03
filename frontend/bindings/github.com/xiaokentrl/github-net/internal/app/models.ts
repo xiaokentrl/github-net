@@ -110,9 +110,11 @@ export interface DetectResultView {
 /**
  * HostEntryState 是这个项目的一个主机名在 Hosts 上的当前事实。
  * 界面上「已替换」这三个字背后到底是哪几条、写成了什么地址，就靠这一条一条摊开。
- *   - Written=true：这条映射是本项目现在认领的，IP 就是写进去的地址；
- *   - Written=false：这个主机名当前不由本项目生效——从没写过，或者写的已被别的项目改写。
- *     这时 IP 给空串，不猜区段里那个地址归谁。
+ *   - Written=true：这条映射是本项目现在认领的，状态判定和能不能还原都只看它；
+ *   - Written=false：这个主机名当前不由本项目生效——从没写过、已被别的项目改写，
+ *     或者上一个项目还原后留下一条没有认领者的工具行。
+ *     这时 IP 照给区段里现在实际写着的地址（区段里没有才给空串）：
+ *     「当前写入 IP」讲的是这个域名现在指向哪，不能因为认领关系变了就说没写。
  */
 export interface HostEntryState {
     "hostname": string;

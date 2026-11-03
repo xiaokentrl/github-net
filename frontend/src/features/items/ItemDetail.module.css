@@ -208,6 +208,13 @@
   white-space: nowrap;
 }
 
+/* 跟在胶囊后面的这一轮的账：和胶囊同一行，不另起一行。 */
+.headMeta {
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* 一句说明（原型 .hint 第 300 行）。 */
 .hint {
   margin: 0;

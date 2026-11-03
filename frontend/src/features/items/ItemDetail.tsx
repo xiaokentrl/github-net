@@ -340,7 +340,11 @@ export function ItemDetail({
             {(category.items ?? []).map((it) => {
               const hs = hostsOf.get(it.id)
               const res = state.results[it.id]
-              const written = (hs?.entries ?? []).filter((entry) => entry.written && entry.ip)
+              // 「当前写入 IP」这一格问的是域名现在写着哪个地址：区段里有行就列，
+              // 不管这行还归不归本项目认领——还原后退回的旧映射、别的项目改写的，都照实说。
+              const lines = (hs?.entries ?? []).filter((entry) => entry.ip)
+              // 待还原条数另算，只数本项目现在认领的那几条：还原落定的回执要说退了几条，不是文件里有几行。
+              const claimed = (hs?.entries ?? []).filter((entry) => entry.written && entry.ip).length
               const cands = (res?.hosts ?? []).flatMap((host) => host.candidates ?? [])
               const best = pickBestCandidate(cands)
               const availableCount = cands.filter((c) => c.status === 'available').length
@@ -356,9 +360,9 @@ export function ItemDetail({
                     {it.name}
                   </td>
                   <td>
-                    {written.length > 0 ? (
+                    {lines.length > 0 ? (
                       <span className={styles.writeStack}>
-                        {written.map((entry) => (
+                        {lines.map((entry) => (
                           <span key={entry.hostname} className={styles.writeItem}>
                             {entry.hostname}→{entry.ip}
                           </span>
@@ -381,7 +385,7 @@ export function ItemDetail({
                         title={t('hosts.restore')}
                         onClick={(event) => {
                           event.stopPropagation()
-                          openRestoreBox(it.id, it.name, written.length)
+                          openRestoreBox(it.id, it.name, claimed)
                         }}
                       >
                         {t('hosts.restoreRow')}
@@ -416,6 +420,16 @@ export function ItemDetail({
         <div className={styles.cardHead}>
           <h3 className={styles.title}>{t('detail.candidates.title')}</h3>
           <span className={styles.countPill}>{t('detail.candidates.count', { count: flatCandidates.length })}</span>
+          {/* 这一轮的账（可用／探测／DNS）跟在「N 个候选」后面同一行：它说的是这张表的来路，
+              单独占一行摆在表上方会把标题行和表拉散。 */}
+          {result && rows.length > 0 ? (
+            <span className={styles.headMeta}>
+              {t('detect.meta', { available: result.available, probes: result.probesUsed, dns: result.dnsQueries })}
+              {result.truncated ? ` · ${t('detect.truncated')}` : ''}
+              {result.deadlineHit ? ` · ${t('detect.deadlineHit')}` : ''}
+              {result.cancelled ? ` · ${t('detect.cancelledBadge')}` : ''}
+            </span>
+          ) : null}
           <div className={detectStyles.candidateActions}>
             {/* 只留两颗（拍板 2026-10-31）：「检测」检测当前菜单下全部能测的项目
                 （原「检测全部」，和单项检测重复所以合并），「应用到 Hosts」只管当前项目。
@@ -446,15 +460,6 @@ export function ItemDetail({
             {detectReady && !selfDetectable ? <span className={styles.hint}>{t('detect.unavailable')}</span> : null}
           </div>
         </div>
-
-        {result && rows.length > 0 ? (
-          <p className={styles.hint}>
-            {t('detect.meta', { available: result.available, probes: result.probesUsed, dns: result.dnsQueries })}
-            {result.truncated ? ` · ${t('detect.truncated')}` : ''}
-            {result.deadlineHit ? ` · ${t('detect.deadlineHit')}` : ''}
-            {result.cancelled ? ` · ${t('detect.cancelledBadge')}` : ''}
-          </p>
-        ) : null}
 
         {failedHosts.length > 0 ? (
           <p className={styles.hint}>

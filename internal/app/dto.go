@@ -63,9 +63,11 @@ const (
 
 // HostEntryState 是这个项目的一个主机名在 Hosts 上的当前事实。
 // 界面上「已替换」这三个字背后到底是哪几条、写成了什么地址，就靠这一条一条摊开。
-//   - Written=true：这条映射是本项目现在认领的，IP 就是写进去的地址；
-//   - Written=false：这个主机名当前不由本项目生效——从没写过，或者写的已被别的项目改写。
-//     这时 IP 给空串，不猜区段里那个地址归谁。
+//   - Written=true：这条映射是本项目现在认领的，状态判定和能不能还原都只看它；
+//   - Written=false：这个主机名当前不由本项目生效——从没写过、已被别的项目改写，
+//     或者上一个项目还原后留下一条没有认领者的工具行。
+//     这时 IP 照给区段里现在实际写着的地址（区段里没有才给空串）：
+//     「当前写入 IP」讲的是这个域名现在指向哪，不能因为认领关系变了就说没写。
 type HostEntryState struct {
 	Hostname string `json:"hostname"`
 	IP       string `json:"ip,omitempty"`
@@ -167,6 +169,9 @@ func HostsStates(c *catalog.Catalog, snap hosts.Snapshot, applied AppliedState, 
 	byOwnership := status == ""
 	// 对不上但区段读得懂：区段里有这个项目的记录才报冲突。
 	byRecord := status == HostsConflict && snap.Block.Present && snap.Block.Usable()
+	// 区段里现在实际写着的地址（含没有认领者的工具痕迹）：逐条事实的 IP 用它补全，
+	// 免得还原之后文件里那行还在、界面那一格却空着。整份读一次，不在每个项目里重扫。
+	liveIPs := blockIPs(snap.Block)
 	for _, cat := range c.Categories {
 		for _, item := range cat.Items {
 			state := HostsState{
@@ -180,7 +185,7 @@ func HostsStates(c *catalog.Catalog, snap hosts.Snapshot, applied AppliedState, 
 			}
 			switch {
 			case byOwnership:
-				entries := itemEntries(applied.Written.Entries, item.ID, item.Hostnames)
+				entries := itemEntries(applied.Written.Entries, liveIPs, item.ID, item.Hostnames)
 				state.Entries = entries
 				covered, total := countWrittenEntries(entries)
 				switch {
@@ -212,9 +217,10 @@ func HostsStates(c *catalog.Catalog, snap hosts.Snapshot, applied AppliedState, 
 // itemEntries 把这个项目管下的每个主机名摊成一条当前事实，顺序按目录里的顺序、同名去重。
 // 认领关系从写入记录来，不从区段猜：同一个主机名的 IP 可能被别的项目改写过，
 // 那时区段里有记录，但已经不是这个项目的映射了——这条就报 written=false。
-func itemEntries(entries []hosts.Entry, itemID string, hostnames []string) []HostEntryState {
-	owned := make(map[string]string, len(entries))
-	for _, e := range entries {
+// false 不等于「没写」：IP 退回区段里现在那行的地址，行也没有才给空串。
+func itemEntries(claims []hosts.Entry, liveIPs map[string]string, itemID string, hostnames []string) []HostEntryState {
+	owned := make(map[string]string, len(claims))
+	for _, e := range claims {
 		for _, owner := range e.Owners {
 			if owner == itemID {
 				owned[hosts.NormalizeHostname(e.Hostname)] = e.IP
@@ -231,7 +237,28 @@ func itemEntries(entries []hosts.Entry, itemID string, hostnames []string) []Hos
 		}
 		seen[name] = true
 		ip, written := owned[name]
+		if !written {
+			ip = liveIPs[name]
+		}
 		out = append(out, HostEntryState{Hostname: name, IP: ip, Written: written})
+	}
+	return out
+}
+
+// blockIPs 把区段里现在实际写着的映射收成「主机名 → 地址」。同一个主机名出现多次取第一条，
+// 跟 Hosts 自己「按行序首条生效」的口径一致；区段判读不了就不给，不拿猜的地址填界面。
+func blockIPs(b hosts.Block) map[string]string {
+	if !b.Usable() {
+		return nil
+	}
+	out := make(map[string]string)
+	for _, rec := range b.Records {
+		for _, h := range rec.Hostnames {
+			name := hosts.NormalizeHostname(h)
+			if _, dup := out[name]; !dup {
+				out[name] = rec.IP
+			}
+		}
 	}
 	return out
 }

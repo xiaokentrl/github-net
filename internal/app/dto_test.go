@@ -593,3 +593,31 @@ func TestEmptyTokenWireTextAndCode(t *testing.T) {
 		t.Errorf("错误码常量与线上文本不一致: %+v", err)
 	}
 }
+
+func TestHostsStatesReportOwnerlessLiveMapping(t *testing.T) {
+	c := mustCatalog(t)
+	// 还原之后区段里最容易被漏掉的一种形状：这一行还是本工具写的，但已经没有项目认领它。
+	// 「当前写入 IP」要照实报这个地址——文件里写着谁在用，跟认领关系是两件事；
+	// 认领关系（written）仍然只说本项目的，状态照旧判 none，还原入口也就不会出现。
+	content := "127.0.0.1 localhost\n" + hosts.MarkerBegin() + "\n9.9.9.9 github.com\n" + hosts.MarkerEnd() + "\n"
+	snap := readHosts(t, content)
+	digest, err := hosts.Digest(snap.Block)
+	if err != nil {
+		t.Fatalf("构造区段摘要失败：%v", err)
+	}
+	written := hosts.Written{Digest: digest, Entries: []hosts.Entry{{Hostname: "github.com", IP: "9.9.9.9"}}, InUse: true}
+
+	states := HostsStates(c, snap, AppliedState{Known: true, Written: written}, 3)
+	main := stateFor(t, states, "gh-main")
+	want := []HostEntryState{
+		{Hostname: "github.com", IP: "9.9.9.9", Written: false},
+		{Hostname: "api.github.com", IP: "", Written: false},
+		{Hostname: "gist.github.com", IP: "", Written: false},
+	}
+	if !reflect.DeepEqual(main.Entries, want) {
+		t.Errorf("无主映射那行没补全当前地址：%+v，期望 %+v", main.Entries, want)
+	}
+	if main.Status != HostsNone {
+		t.Errorf("没有认领者却判成 %q，期望 none（没项目认领就不能显示成已应用）", main.Status)
+	}
+}

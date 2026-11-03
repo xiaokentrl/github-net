@@ -22,10 +22,14 @@ fixed|zh|修复分段按钮悬停覆盖选中态样式导致白字不可见
 fixed|en|Fix segmented-button hover overriding the selected state and hiding its label
 fixed|zh|修复应用/还原后详情页「当前写入 IP」不刷新
 fixed|en|Fix the "applied IP" metric not refreshing after apply or restore
+fixed|zh|修复还原后「当前写入 IP」漏掉应用前的旧地址：区段里现在写着哪个地址就显示哪个，跟这个项目还不认领它无关
+fixed|en|Fix the "applied IP" cell dropping the pre-apply address after a restore: it now shows whatever the managed block actually contains, claimed or not
 fixed|zh|配置文件迁移到 ~/.config/github-net/config.json，旧位置自动搬家
 fixed|en|Move the config file to ~/.config/github-net/config.json with automatic migration from the old location
 
 # updated
+updated|zh|更新详情页候选卡：「可用 N · 探测 N 次 · DNS N 次」并到「候选 IP · N 个候选」那一行后面，不再单独占一行
+updated|en|Move the "available / probes / DNS" summary onto the candidate card header row instead of a separate line
 updated|zh|更新界面文案与布局：删除占位提示与说明小字，指标格改为有数据来源的真指标，检测完成时间改相对时间
 updated|en|Trim UI copy: remove placeholder hints, show only data-backed metrics and relative check time
 updated|zh|更新默认值：菜单折叠、默认无勾选、队列高度小档、焦点跟随打开；分类排序调整
