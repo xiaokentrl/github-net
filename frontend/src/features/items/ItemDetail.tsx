@@ -1,8 +1,8 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
 import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
-import type { CatalogCategory, CatalogItem, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { CatalogCategory, CatalogItem, DetectResultView, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
 import { Dialog } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -10,7 +10,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import uiStyles from '../../components/ui/ui.module.css'
 import { pickBestCandidate } from '../detect/candidateChoice'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
-import { useTaskQueue } from '../tasks/taskStore'
+import { ensureLastResults, isTerminalTask, useTaskQueue } from '../tasks/taskStore'
 import styles from './ItemDetail.module.css'
 import detectStyles from './DetectResult.module.css'
 
@@ -86,11 +86,119 @@ export function ItemDetail({
     (task) => item !== null && task.itemId === item.id && task.kind === 'detect' && (task.status === 'running' || task.status === 'waiting'),
   )
 
+  // 刚进详情页或换分类：把后端还留着的上一轮结论补读进来。
+  // 刷新页面后 store 是空的，列表那三格（检测最优 IP／可用候选／上次检测）会全成「—」，
+  // 但后端记得——不补读就是界面自己装看不见。这一步只读，不排任务、不动队列。
+  const categoryItemKey = (category?.items ?? []).map((it) => it.id).join(',')
+  useEffect(() => {
+    ensureLastResults(categoryItemKey === '' ? [] : categoryItemKey.split(','))
+  }, [categoryItemKey])
+
   // 列宽：拖过一次就转固定布局（px），没拖过是 null（auto 自适应）。
   const tableRef = useRef<HTMLTableElement | null>(null)
   const [colWidths, setColWidths] = useState<number[] | null>(null)
   // 还原本菜单的公共弹框（拍板 2026-11-03）：确认文案在框里，动作走 onRestoreCategory。
   const [restoreMenuOpen, setRestoreMenuOpen] = useState(false)
+  // 行级「还原此项」公共弹框（拍板 2026-11-03，已简化）：点行内「还原」直接进检测那一屏，
+  // 框只剩两屏——detect 看数据、restoring 给回执；「立刻还原」要看得见这一项的检测数据才可点。
+  // writtenCount 是点开那一刻数出来的待还原条数——还原落定后 entries 会被刷新成空，
+  // 回执要是跟着现数就会写成「已还原 0 条」。
+  const [restoreBox, setRestoreBox] = useState<{ itemId: string; name: string; writtenCount: number } | null>(null)
+  // 这个框是几点几分打开的：用来分清「本框点重新检测跑出来的结论」和「后端留着的上一轮结论」。
+  const boxOpenedAt = useRef(0)
+  // 框要跟的是「这一项、这一类最近的一条任务」。任务数组只往后追加，所以取筛完的最后一条；
+  // 用 find 拿第一条会盯住上一次跑完的那条，框就卡在旧状态上。
+  const lastBoxTask = (kind: 'detect' | 'restore') =>
+    restoreBox ? state.tasks.filter((tk) => tk.itemId === restoreBox.itemId && tk.kind === kind).pop() : undefined
+  const boxDetectTask = lastBoxTask('detect')
+  const boxRestoreTask = lastBoxTask('restore')
+  const boxRunning = (task: typeof boxDetectTask) => task?.status === 'waiting' || task?.status === 'running'
+  const boxDetectRunning = boxRunning(boxDetectTask)
+  const boxRestoreRunning = boxRunning(boxRestoreTask)
+  const boxRestoreSettled = boxRestoreTask !== undefined && !boxRestoreRunning && isTerminalTask(boxRestoreTask.status)
+  const boxHosts = restoreBox ? hostsOf.get(restoreBox.itemId) : undefined
+  const boxEntries = (boxHosts?.entries ?? []).filter((entry) => entry.written)
+  const boxLive = restoreBox ? state.live[restoreBox.itemId] : undefined
+  // 框里就看 store 那一份：它有两路喂——进详情页时的补读（后端留着的上一轮），和检测事件。
+  // 检测跑动中这一项会被清空，正好不拿旧数据糊人；列表和框读同一份，两边不会各说一套。
+  const boxResult = restoreBox ? state.results[restoreBox.itemId] : undefined
+  // 速率与进度有两份来源，按「拿得到就优先细的」走：
+  //   候选级事件 state.live 给了 done/total → 能算「约 N 项/秒」；
+  //   单条检测这类链路只有任务级事件（phaseText + progress 百分比）→ 退回显示百分比和已用秒。
+  // 两份都不编造：拿不到数字就只说状态，不写 0/0 假装知道。
+  const boxElapsedSec = boxDetectTask?.startedAt ? (Date.now() - new Date(boxDetectTask.startedAt).getTime()) / 1000 : null
+  const boxRate = boxDetectRunning && boxLive && boxLive.done > 0 && boxElapsedSec !== null && boxElapsedSec > 0.4
+    ? boxLive.done / boxElapsedSec
+    : null
+  // 检测落定 = 有这条任务、不在跑、且已经是终态。
+  const boxDetectSettled = boxDetectTask !== undefined && !boxDetectRunning && isTerminalTask(boxDetectTask.status)
+  // 框里摊得开检测数据吗（有域名行）。摊得开才允许点「立刻还原」——跑检测时数据被清空，那颗自然跟着灰。
+  const boxHasData = (boxResult?.hosts?.length ?? 0) > 0
+  const boxConfirmReady = boxHasData
+  // 框停在哪一屏：这一项有还原任务就是回执屏，否则就是检测屏。
+  const boxStage: 'detect' | 'restoring' = boxRestoreTask ? 'restoring' : 'detect'
+
+  // 点行内「还原」＝只开框，不排任务：用户没点「立刻还原」之前，列表和队列一格都不该被这一步改动。
+  // 框里要看的检测数据在这屏加载时就补读进 store 了（见上面的 ensureLastResults），这里不再单独发请求。
+  const openRestoreBox = (itemId: string, name: string, writtenCount: number) => {
+    boxOpenedAt.current = Date.now()
+    setRestoreBox({ itemId, name, writtenCount })
+  }
+
+  // 检测那一段的一行字：本框跑的检测给「进行中／结论／后端原因」；
+  // 这一条检测任务是本框打开之后才跑完的吗？是，才可以说「检测完成／检测失败」——
+  // 刷新后队列快照里那条历史任务不能被他框的结果冒充本框刚跑的。
+  const boxTaskFresh = boxDetectTask?.finishedAt ? new Date(boxDetectTask.finishedAt).getTime() >= boxOpenedAt.current : false
+  // 「上一轮」那行：这份结论比这个框还老，就标清是上一轮的。
+  const lastRoundText = (view: DetectResultView) =>
+    view.finishedAt
+      ? t('detail.box.lastRound', {
+          available: view.available,
+          total: view.hosts?.length ?? 0,
+          time: formatRelativeTime(view.finishedAt),
+        })
+      : t('detail.box.detectDone', { available: view.available, total: view.hosts?.length ?? 0 })
+  let boxDetectText = ''
+  if (boxDetectRunning) {
+    const parts = [boxDetectTask?.phaseText || (boxDetectTask?.status === 'waiting' ? t('detail.box.waiting') : t('detail.box.detecting'))]
+    if (boxLive) {
+      parts.push(t('detail.box.progress', { done: boxLive.done, total: boxLive.total }))
+      if (boxRate !== null) parts.push(t('detail.box.rate', { rate: boxRate.toFixed(1) }))
+    } else if (typeof boxDetectTask?.progress === 'number') {
+      parts.push(`${boxDetectTask.progress}%`)
+      if (boxElapsedSec !== null) parts.push(t('detail.box.elapsed', { sec: boxElapsedSec.toFixed(1) }))
+    }
+    boxDetectText = parts.join(' · ')
+  } else if (boxDetectSettled && boxTaskFresh && boxDetectTask) {
+    if (boxDetectTask.status === 'cancelled') {
+      boxDetectText = t('detail.box.detectCancelled')
+    } else if (boxDetectTask.errorMsg) {
+      boxDetectText = t('detail.box.detectFailed', { reason: boxDetectTask.errorMsg })
+    } else if (boxHasData && boxResult) {
+      boxDetectText = t('detail.box.detectDone', {
+        available: boxResult.available,
+        total: boxResult.hosts?.length ?? 0,
+      })
+    } else {
+      boxDetectText = boxDetectTask.phaseText || t('detail.box.detectDonePlain')
+    }
+  } else if (boxHasData && boxResult) {
+    // 本框没跑检测（或跑的那条还没落定）：把补读回来的上一轮结论摊出来。
+    boxDetectText = lastRoundText(boxResult)
+  }
+
+  // 还原那一段的一行字：进行中、失败原因、已还原几条。落定后不自动关框，回执留在框里由用户自己关。
+  let boxRestoreText = ''
+  if (boxRestoreTask) {
+    if (boxRestoreRunning) {
+      boxRestoreText = t('detail.box.restoring')
+    } else if (boxRestoreTask.errorMsg) {
+      boxRestoreText = t('detail.box.restoreFailed', { reason: boxRestoreTask.errorMsg })
+    } else {
+      boxRestoreText = t('detail.box.restored', { count: restoreBox?.writtenCount ?? 0 })
+      if (boxRestoreTask.duration) boxRestoreText += `（${boxRestoreTask.duration}）`
+    }
+  }
   const colDrag = useRef<{ pointerId: number; index: number; startX: number; startWidths: number[] } | null>(null)
 
   const startColDrag = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
@@ -273,7 +381,7 @@ export function ItemDetail({
                         title={t('hosts.restore')}
                         onClick={(event) => {
                           event.stopPropagation()
-                          onRestore(it.id)
+                          openRestoreBox(it.id, it.name, written.length)
                         }}
                       >
                         {t('hosts.restoreRow')}
@@ -400,6 +508,91 @@ export function ItemDetail({
           </tbody>
         </table>
       </div>
+
+      {restoreBox ? (
+        <Dialog
+          title={t('detail.box.title', { name: restoreBox.name })}
+          onClose={() => setRestoreBox(null)}
+          footer={
+            boxStage === 'detect' ? (
+              <>
+                <button type="button" className={uiStyles.btn} disabled={boxDetectRunning} onClick={() => onDetect(restoreBox.itemId)}>
+                  {boxDetectRunning ? t('detail.box.detecting') : t('detail.box.redetect')}
+                </button>
+                <button
+                  type="button"
+                  className={`${uiStyles.btn} ${uiStyles.primary}`}
+                  disabled={!boxConfirmReady || boxEntries.length === 0 || boxRestoreRunning || boxRestoreSettled}
+                  onClick={() => onRestore(restoreBox.itemId)}
+                >
+                  {t('detail.box.restoreNow')}
+                </button>
+                <button type="button" className={uiStyles.btn} onClick={() => setRestoreBox(null)}>
+                  {t('detail.box.abandon')}
+                </button>
+              </>
+            ) : (
+              <button type="button" className={uiStyles.btn} onClick={() => setRestoreBox(null)}>
+                {t('detail.box.close')}
+              </button>
+            )
+          }
+        >
+          {/* 待还原清单两屏常驻：无论停在哪一屏，用户都看得见要退的是哪几条 */}
+          {boxEntries.length > 0 ? (
+            <>
+              <p className={styles.boxStage}>{t('detail.box.summary', { count: boxEntries.length })}</p>
+              <ul className={styles.boxLines}>
+                {boxEntries.map((entry) => (
+                  <li key={entry.hostname} className={styles.boxLine}>
+                    <span>{entry.hostname}</span>
+                    <span className={styles.cellMono}>{entry.ip}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className={styles.boxStage}>{t('detail.box.none')}</p>
+          )}
+
+          <div className={styles.boxDetect}>
+            <p className={styles.boxStage}>{boxDetectText || t('detail.box.noResult')}</p>
+            {boxResult?.hosts && boxResult.hosts.length > 0 ? (
+              <ul className={styles.boxLines}>
+                {boxResult.hosts.map((host) => {
+                  const best = pickBestCandidate(host.candidates ?? [])
+                  return (
+                    <li key={host.hostname} className={styles.boxLine}>
+                      <span>{host.hostname}</span>
+                      <span className={best ? styles.cellMono : styles.dim}>
+                        {best
+                          ? best.latencyMs > 0
+                            ? `${best.ip} · ${best.latencyMs}ms`
+                            : best.ip
+                          : host.resolved
+                            ? t('queue.detail.noUsableAddress')
+                            : t('queue.detail.resolveFailed')}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
+          </div>
+
+          {boxStage === 'detect' ? (
+            <p className={styles.boxHint}>
+              {boxConfirmReady
+                ? t('detail.box.confirmTip')
+                : boxDetectRunning
+                  ? t('detail.box.confirmWaiting')
+                  : t('detail.box.confirmNeedDetect')}
+            </p>
+          ) : null}
+
+          {boxRestoreTask ? <p className={styles.boxStage}>{boxRestoreText}</p> : null}
+        </Dialog>
+      ) : null}
 
       {restoreMenuOpen ? (
         <Dialog

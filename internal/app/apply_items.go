@@ -69,7 +69,7 @@ func (s *Service) applyBlocker(itemID string) string {
 // 内存没覆盖到的域名用候选池里跨源累积的缓存补齐。切源随便切，应用合并全部已知。
 // 选址规则和 bestMappings 同一条：延迟最低、并列 IPv4 优先。一个域名都没有给空。
 func (s *Service) usableMappingsFor(itemID string) []hosts.Mapping {
-		best := make(map[string]bestPick)
+	best := make(map[string]bestPick)
 	consider := func(hostname, ip string, latencyMS int64, ipv6 bool) {
 		current, ok := best[hostname]
 		better := !ok || latencyMS < current.latency || (latencyMS == current.latency && current.ipv6 && !ipv6)

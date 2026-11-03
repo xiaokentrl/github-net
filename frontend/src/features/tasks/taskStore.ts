@@ -176,6 +176,28 @@ export async function refreshAllResults(): Promise<void> {
   await Promise.all(Object.keys(state.results).map((id) => refreshResult(id).catch(() => undefined)))
 }
 
+// ensureLastResults 把后端还留着、但 store 里还没有的那几份结论补读进来：
+// 刷新页面后 store 是空的，详情页那三格（检测最优 IP／可用候选／上次检测）会全成「—」，
+// 可后端明明记得上一轮的结果——界面不读就是自己装看不见。
+// 只读、不排任务；只有真拿到域名行才放进 store，没测过的项留空形状反而会把后面「本会话跑过」的判断带偏。
+const lastResultPending = new Set<string>()
+export function ensureLastResults(itemIds: string[]): void {
+  for (const itemId of itemIds) {
+    if (!itemId || itemId in state.results || lastResultPending.has(itemId)) continue
+    lastResultPending.add(itemId)
+    getDetectResult(itemId)
+      .then((view) => {
+        if (view?.hosts && view.hosts.length > 0) publish({ results: { ...state.results, [itemId]: view } })
+      })
+      .catch(() => {
+        // 读不到不叠错误条：这三格显示「—」本来就是「还没有结论」的口径，不额外吓人。
+      })
+      .finally(() => {
+        lastResultPending.delete(itemId)
+      })
+  }
+}
+
 // isTerminalTask 判断任务是否已到终态；taskEvents 用它触发「任务落定」回调。
 export function isTerminalTask(status: Task['status']): boolean {
   return status === 'done' || status === 'failed' || status === 'cancelled' || status === 'skipped' || status === 'rolledback' || status === 'restored'
