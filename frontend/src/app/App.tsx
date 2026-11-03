@@ -21,7 +21,7 @@ import { SettingsDialog, type SettingsPaneID } from '../features/settings/Settin
 import { ItemDetail } from '../features/items/ItemDetail'
 import { TaskPanel } from '../features/tasks/TaskPanel'
 import { subscribeTaskEvents } from '../features/tasks/taskEvents'
-import { taskStateSnapshot, useTaskQueue } from '../features/tasks/taskStore'
+import { refreshResult, taskStateSnapshot, useTaskQueue } from '../features/tasks/taskStore'
 import { useRestoreAllTasks } from '../features/tasks/useRestoreAll'
 import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
@@ -209,6 +209,17 @@ export function App() {
     // 任务与候选进度：应用级只挂一份订阅，先订阅再拉快照（taskEvents.ts）。
     // 应用/还原类任务落定后重读目录，详情页的 Hosts 状态才会跟着变；检测类不用（结果存储自己追）。
     const unsubscribeTasks = subscribeTaskEvents((settled) => {
+      // 任务落定的统一同步层（拍板 2026-11-03 从底层修复）：
+      // 任何类型的任务落定都做一轮权威刷新——Hosts 状态（loadCatalog）+ 该项目的检测结果
+      // （refreshResult），再在 800ms 后补一轮，吸收后端写盘与元数据落盘的时序差。
+      // 以前各处散着「apply/restore 才刷目录」「detect 靠结果存储自己追」的碎片规则，
+      // 每条都可能漏；漏了就是用户报「表格没同步」。
+      loadCatalog()
+      void refreshResult(settled.itemId).catch(() => undefined)
+      window.setTimeout(() => {
+        loadCatalog()
+        void refreshResult(settled.itemId).catch(() => undefined)
+      }, 800)
       if (settled.kind === 'apply' || settled.kind === 'restore') loadCatalog()
       // 检测轮收尾回执（拍板 2026-11-03）：一项一项递就是刷屏，按轮聚合一条。
       // 该轮全部任务到终态的那一刻算收尾；有失败的用警告档，干净的用成功档。
