@@ -26,6 +26,16 @@ const CANDIDATE_KEY: Record<string, string> = {
   untested: 'detect.candidate.untested',
 }
 
+// 候选行的行底色按状态着色（拍板 2026-11-04）：可用绿、不可用红、超时琥珀、
+// 检测/应用进行中（排队/探测）主色浅底——检测和应用共用同一套，预检时行也带色。
+const CANDIDATE_ROW_TONE: Record<string, string> = {
+  available: detectStyles.rowAvailable,
+  unavailable: detectStyles.rowUnavailable,
+  timeout: detectStyles.rowTimeout,
+  probing: detectStyles.rowPending,
+  queued: detectStyles.rowPending,
+}
+
 // 八档分到原型那四种徽章色（原型 .tag 第 290–292 行只有三种，这里多出来的都归中性）。
 const CANDIDATE_TONE: Record<string, string> = {
   available: detectStyles.tagOk,
@@ -509,7 +519,10 @@ export function ItemDetail({
               </tr>
             ) : (
               flatCandidates.map(({ candidate, host }, index) => (
-                <tr key={candidate.id} className={candidate.applied ? detectStyles.currentRow : undefined}>
+                <tr
+                  key={candidate.id}
+                  className={`${CANDIDATE_ROW_TONE[candidate.status] ?? ''} ${candidate.applied ? detectStyles.currentRow : ''}`.trim() || undefined}
+                >
                   <td>{index + 1}</td>
                   <td className={detectStyles.ipCell}>
                     {candidate.ip}
