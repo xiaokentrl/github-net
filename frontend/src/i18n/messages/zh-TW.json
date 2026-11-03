@@ -297,7 +297,7 @@
   "detail.box.detectCancelled": "檢測已取消",
   "detail.box.noResult": "這一項還沒有檢測結果",
   "detail.box.restoring": "還原中…",
-  "detail.box.restored": "已還原 {count} 條",
+  "detail.box.restored": "已還原",
   "detail.box.restoreFailed": "還原失敗：{reason}",
   "detail.box.close": "關閉",
   "detail.box.redetect": "重新檢測",

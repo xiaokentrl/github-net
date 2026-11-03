@@ -195,8 +195,8 @@ export function ItemDetail({
     } else if (boxRestoreTask.errorMsg) {
       boxRestoreText = t('detail.box.restoreFailed', { reason: boxRestoreTask.errorMsg })
     } else {
-      boxRestoreText = t('detail.box.restored', { count: restoreBox?.writtenCount ?? 0 })
-      if (boxRestoreTask.duration) boxRestoreText += `（${boxRestoreTask.duration}）`
+      // 已还原就一句「已还原」（拍板 2026-11-03）：条数和耗时是内部细节，不摆给用户。
+      boxRestoreText = t('detail.box.restored')
     }
   }
   const colDrag = useRef<{ pointerId: number; index: number; startX: number; startWidths: number[] } | null>(null)
