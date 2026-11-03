@@ -446,3 +446,35 @@
   font-size: 11.5px;
   line-height: 1.45;
 }
+
+/* 行底色 = 状态（拍板 2026-11-04）：检测和应用都带色——
+   检测中金、应用中主色浅底、还原中琥珀；结果档：已应用绿、部分生效琥珀、冲突/读失败红。
+   选中行用左缘主色条标识，不覆盖状态底色。 */
+.rowDetecting {
+  background: var(--gold-soft-2);
+}
+
+.rowApplying {
+  background: var(--primary-soft);
+}
+
+.rowRestoring {
+  background: var(--amber-soft);
+}
+
+.rowApplied {
+  background: var(--green-soft);
+}
+
+.rowPartial {
+  background: var(--amber-soft);
+}
+
+.rowError {
+  background: var(--red-soft);
+}
+
+tr.rowSel td,
+tr.rowSel th {
+  box-shadow: inset 3px 0 0 var(--primary);
+}

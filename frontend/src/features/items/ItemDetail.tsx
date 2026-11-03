@@ -349,8 +349,27 @@ export function ItemDetail({
               const best = pickBestCandidate(cands)
               const availableCount = cands.filter((c) => c.status === 'available').length
               const selectedRow = it.id === item.id
+              // 行底色 = 状态（拍板 2026-11-04）：检测和应用都带色，
+              // 进行中优先于结果；选中另加左缘主色条，不抢底色。
+              const busyTask = state.tasks.find(
+                (tk) => tk.itemId === it.id && (tk.status === 'waiting' || tk.status === 'running' || tk.status === 'restoring'),
+              )
+              const rowTone = busyTask
+                ? busyTask.kind === 'detect'
+                  ? styles.rowDetecting
+                  : busyTask.kind === 'apply'
+                    ? styles.rowApplying
+                    : styles.rowRestoring
+                : status === HostsStatus.HostsApplied
+                  ? styles.rowApplied
+                  : status === HostsStatus.HostsPartial
+                    ? styles.rowPartial
+                    : status === HostsStatus.HostsConflict || status === HostsStatus.HostsReadFailed
+                      ? styles.rowError
+                      : ''
+              const rowClass = [rowTone, selectedRow ? styles.rowSel : ''].filter(Boolean).join(' ')
               return (
-                <tr key={it.id} className={selectedRow ? styles.rowSel : undefined} onClick={() => onSelectItem(it.id)}>
+                <tr key={it.id} className={rowClass || undefined} onClick={() => onSelectItem(it.id)}>
                   <td className={styles.itemName}>
                     {selectedRow ? (
                       <span className={styles.rowMark} aria-hidden="true">
