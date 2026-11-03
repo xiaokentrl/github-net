@@ -186,18 +186,32 @@
 
 /* 候选行底色 = 状态（拍板 2026-11-04）：检测和应用都带色——
    可用绿、不可用红、超时琥珀、排队/探测中主色浅底；已写入的行保持原有的当前写入样式。 */
-.rowAvailable {
+/* 候选行底色涂在 td 上（拍板 2026-11-04）：悬停灰底只涂 tr，管不到 td，
+   状态色在鼠标悬停时也保持可见。 */
+tr.rowAvailable td {
   background: var(--green-soft);
 }
 
-.rowUnavailable {
+tr.rowUnavailable td {
   background: var(--red-soft);
 }
 
-.rowTimeout {
+tr.rowTimeout td {
   background: var(--amber-soft);
 }
 
-.rowPending {
+tr.rowPending td {
+  background: var(--primary-soft);
+}
+
+tr.rowUnavailable:hover td {
+  background: var(--red-soft);
+}
+
+tr.rowTimeout:hover td {
+  background: var(--amber-soft);
+}
+
+tr.rowPending:hover td {
   background: var(--primary-soft);
 }
