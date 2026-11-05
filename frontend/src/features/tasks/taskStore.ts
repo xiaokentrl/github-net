@@ -15,7 +15,6 @@ export type LiveCounters = { done: number; total: number; active: number; probes
 type TaskState = {
   loaded: boolean
   loadError: boolean
-  paused: boolean
   sequence: number
   tasks: Task[]
   // rounds 是轮次（原型队列的根节点/包裹）：一次批量检测、一次应用、一次恢复各算一轮，
@@ -30,7 +29,6 @@ type TaskState = {
 let state: TaskState = {
   loaded: false,
   loadError: false,
-  paused: false,
   sequence: 0,
   tasks: [],
   rounds: [],
@@ -69,7 +67,6 @@ export function applyTaskSnapshot(snap: Snapshot) {
   publish({
     loaded: true,
     loadError: false,
-    paused: snap.paused,
     sequence: snap.sequence,
     tasks: snap.tasks ?? [],
     rounds: snap.rounds ?? [],
@@ -200,7 +197,7 @@ export function ensureLastResults(itemIds: string[]): void {
 
 // isTerminalTask 判断任务是否已到终态；taskEvents 用它触发「任务落定」回调。
 export function isTerminalTask(status: Task['status']): boolean {
-  return status === 'done' || status === 'failed' || status === 'cancelled' || status === 'skipped' || status === 'rolledback' || status === 'restored'
+  return status === 'done' || status === 'failed' || status === 'skipped' || status === 'rolledback' || status === 'restored'
 }
 
 function isFinalStatus(status: string): boolean {

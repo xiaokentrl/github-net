@@ -38,14 +38,6 @@ export function ApplyItems(itemIDs: string[] | null): $CancellablePromise<task$0
 }
 
 /**
- * CancelTask 取消一条排队中或执行中的任务，返回取消后的完整快照。
- * 空 ID 是调用方给错了东西，跟「队列里没有这条记录」分成两个错误码。
- */
-export function CancelTask(taskID: string): $CancellablePromise<task$0.Snapshot> {
-    return $Call.ByID(1106487909, taskID);
-}
-
-/**
  * CheckForUpdates 查 GitHub 最新稳定版并与当前版本比较。
  * 只比较和显示；下载、校验、安装属安全更新流程，这里一步都不做。
  */
@@ -59,14 +51,6 @@ export function CheckForUpdates(): $CancellablePromise<updater$0.Info> {
  */
 export function ClearFinishedTasks(): $CancellablePromise<task$0.Snapshot> {
     return $Call.ByID(1678060749);
-}
-
-/**
- * ClearQueue 移除全部记录；有任务正在执行时拒绝（queue_running），
- * 否则正在跑的那条会从界面上消失，只剩一个没人认领的后台改动。
- */
-export function ClearQueue(): $CancellablePromise<task$0.Snapshot> {
-    return $Call.ByID(1553274362);
 }
 
 /**
@@ -190,14 +174,6 @@ export function OpenHosts(): $CancellablePromise<void> {
 }
 
 /**
- * PauseQueue 暂停领取新的等待任务，已经在跑的那条不受影响，返回暂停后的完整快照。
- * 重复调用幂等：界面上按快照里的 paused 显示，而不是数自己点了几次。
- */
-export function PauseQueue(): $CancellablePromise<task$0.Snapshot> {
-    return $Call.ByID(3965941995);
-}
-
-/**
  * Ping 只为验证「后端错误能传回前端」这条路：空令牌一律拒绝，不做任何检测。
  */
 export function Ping(token: string): $CancellablePromise<string> {
@@ -220,21 +196,6 @@ export function RestoreAllHosts(): $CancellablePromise<number> {
  */
 export function RestoreItems(itemIDs: string[] | null): $CancellablePromise<task$0.Task[] | null> {
     return $Call.ByID(19010572, itemIDs);
-}
-
-/**
- * ResumeQueue 恢复领取，按原队列顺序继续，重复调用同样幂等。
- */
-export function ResumeQueue(): $CancellablePromise<task$0.Snapshot> {
-    return $Call.ByID(1906640720);
-}
-
-/**
- * RetryFailedTasks 逐项处理重试请求：接受的原任务在队尾新建一条重试任务，
- * 不接受的项给一句原因。一次请求里两项互不影响，所以整条命令没有失败面，只回数组。
- */
-export function RetryFailedTasks(taskIDs: string[] | null): $CancellablePromise<task$0.RetryResult[] | null> {
-    return $Call.ByID(3431491469, taskIDs);
 }
 
 /**

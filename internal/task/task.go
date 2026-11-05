@@ -1,4 +1,4 @@
-// Package task 是内存任务队列：任务生命周期、状态流转、取消、暂停、重试和清理。
+// Package task 是内存任务队列：任务生命周期、状态流转和清理。
 // 队列不落地——应用每次启动都是空队列，不读也不写队列历史文件。
 //
 // 这里只有「排队和记账」，不碰真实世界：真正做事的执行动作由注入的 Executor 完成，
@@ -24,7 +24,7 @@ func (k Kind) valid() bool {
 	return k == KindDetect || k == KindApply || k == KindRestore
 }
 
-// Status 是任务状态，九档和原型 TaskMeta 逐一对应，前端按这个字符串显示。
+// Status 是任务状态，八档和原型 TaskMeta 逐一对应，前端按这个字符串显示。
 type Status string
 
 const (
@@ -34,19 +34,17 @@ const (
 	StatusFailed     Status = "failed"     // 失败
 	StatusSkipped    Status = "skipped"    // 跳过：这次没必要做或条件不满足
 	StatusRolledback Status = "rolledback" // 已回滚：做失败了，且已退回改动前的状态
-	StatusCancelled  Status = "cancelled"  // 已取消
 	StatusRestoring  Status = "restoring"  // 恢复中：恢复类任务的执行中状态
 	StatusRestored   Status = "restored"   // 已恢复
 )
 
-// 终态是这六档：进了这一组就不会再回到等待或执行中。
+// 终态是这五档：进了这一组就不会再回到等待或执行中。
 // 「清理已结束」的按钮启用条件和后端的判定必须用同一个集合，不能两边各写一份近似规则。
 var terminalStatuses = map[Status]bool{
 	StatusDone:       true,
 	StatusSkipped:    true,
 	StatusFailed:     true,
 	StatusRolledback: true,
-	StatusCancelled:  true,
 	StatusRestored:   true,
 }
 
@@ -85,7 +83,6 @@ type Task struct {
 	PhaseText  string `json:"phaseText,omitempty"`
 	Progress   int    `json:"progress"`
 	ErrorMsg   string `json:"errorMsg,omitempty"`
-	RetryOf    string `json:"retryOf,omitempty"`
 	StartedAt  string `json:"startedAt,omitempty"`
 	FinishedAt string `json:"finishedAt,omitempty"`
 	Duration   string `json:"duration,omitempty"`
@@ -120,8 +117,8 @@ type Outcome struct {
 type Report func(phase string, text string, progress int)
 
 // Executor 负责把一条任务真正做完。本包不实现它：
-// 检测、写 Hosts、刷新 DNS 都在别处，队列只管排队、记账和取消。
-// 实现必须尊重 ctx：被取消时尽快返回，返回的结果会被已取消的状态覆盖掉。
+// 检测、写 Hosts、刷新 DNS 都在别处，队列只管排队和记账。
+// 实现必须尊重 ctx：应用退出时 ctx 会被取消，这时尽快返回。
 type Executor interface {
 	Execute(ctx context.Context, task Task, report Report) Outcome
 }
@@ -137,7 +134,7 @@ type Progress struct {
 // 一次恢复各算一轮，轮里的那些项目任务是它的明细行。
 //
 // 名字的唯一主人是后端（入口层按原型规则给：检测用分类名、应用用「应用队列 · N 项」、
-// 恢复用「恢复 · 项目名」、重试另开一轮「重试失败 · N 项」）。界面不再自己拼名字，
+// 恢复用「恢复 · 项目名」）。界面不再自己拼名字，
 // 否则同一条规则住在两处，改一处就会漂。
 // 轮的状态不在这里：它完全由轮里的任务推出来，后端再存一份就有第二个真相。
 type Round struct {

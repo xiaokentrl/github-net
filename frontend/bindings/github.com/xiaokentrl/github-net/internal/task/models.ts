@@ -27,21 +27,11 @@ export enum Kind {
 };
 
 /**
- * RetryResult 是批量重试的逐项结果：成功给新任务 ID，被拒给原因。
- * 一次请求里两项互不影响，不会一项不合格就把整批挡回去。
- */
-export interface RetryResult {
-    "sourceTaskId": string;
-    "taskId"?: string;
-    "reason"?: string;
-}
-
-/**
  * Round 是一轮动作的对外形状，对应原型队列里的根节点：一次批量检测、一次应用队列、
  * 一次恢复各算一轮，轮里的那些项目任务是它的明细行。
  * 
  * 名字的唯一主人是后端（入口层按原型规则给：检测用分类名、应用用「应用队列 · N 项」、
- * 恢复用「恢复 · 项目名」、重试另开一轮「重试失败 · N 项」）。界面不再自己拼名字，
+ * 恢复用「恢复 · 项目名」）。界面不再自己拼名字，
  * 否则同一条规则住在两处，改一处就会漂。
  * 轮的状态不在这里：它完全由轮里的任务推出来，后端再存一份就有第二个真相。
  */
@@ -60,7 +50,6 @@ export interface Round {
 /**
  * Snapshot 是队列的当前副本：任务按入队顺序排列，Sequence 是水位。
  * 前端先订阅事件再取快照，丢掉水位以内已经包含的事件；水位之后的事件才往界面上应用。
- * Paused 一并带出，因为没有别的地方能读到暂停状态。
  * 
  * Rounds 只列「此刻还有任务挂在上面」的轮，按开轮先后排；一个任务都没剩下的轮不出现在快照里，
  * 界面上也就不会出现一个点不开的空根节点。
@@ -69,11 +58,10 @@ export interface Snapshot {
     "tasks": Task[] | null;
     "rounds": Round[] | null;
     "sequence": number;
-    "paused": boolean;
 }
 
 /**
- * Status 是任务状态，九档和原型 TaskMeta 逐一对应，前端按这个字符串显示。
+ * Status 是任务状态，八档和原型 TaskMeta 逐一对应，前端按这个字符串显示。
  */
 export enum Status {
     /**
@@ -112,11 +100,6 @@ export enum Status {
     StatusRolledback = "rolledback",
 
     /**
-     * 已取消
-     */
-    StatusCancelled = "cancelled",
-
-    /**
      * 恢复中：恢复类任务的执行中状态
      */
     StatusRestoring = "restoring",
@@ -150,7 +133,6 @@ export interface Task {
     "phaseText"?: string;
     "progress": number;
     "errorMsg"?: string;
-    "retryOf"?: string;
     "startedAt"?: string;
     "finishedAt"?: string;
     "duration"?: string;

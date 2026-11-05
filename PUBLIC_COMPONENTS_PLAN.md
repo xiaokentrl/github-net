@@ -20,10 +20,10 @@
 | 组件 | 职责 | 主要页面 |
 |---|---|---|
 | `Button` | 统一普通、主要、危险、禁用和加载按钮 | 工具栏、详情、队列、设置 |
-| `Modal` | 显示确认内容，返回确认或取消结果 | Hosts 操作、恢复、取消任务 |
+| `Modal` | 显示确认内容，两颗按钮各写一个结果 | 还原、清理已选缓存、预算不够时确认要不要开这一批（取消任务已随 2026-11-06 队列收缩删掉） |
 | `Toast` | 右下角堆叠面板，把「出了什么事」递到用户眼前：错误、警告、提醒、成功四档；每条能关闭和复制内容，面板能整块清空、收起成胶囊、按住标题栏拖动（双击归位）。胶囊常驻右下角（2026-11-02）：零条提示时也在，点开给一行「暂无提示」。现状（2026-11-01 建）：规则全在 `components/ui/toastStore.ts`——错误永不自动消失、警告 20 秒、提醒 8 秒、成功 6 秒，收起期间倒计时冻结、展开接着数；同样文字并成一条不叠加，一屏最多 50 条、超了先挤会自动消失的。**它是补充，不是唯一反馈**：原位文案（`InlineStatus`、详情页那句红字）照旧留着，组件不认识检测/Hosts 这些业务 | 全局（挂在应用根上，整应用一份） |
 | `InlineStatus` | 在操作附近显示处理中、成功、错误和重试提示 | 设置、表单、详情操作。现状（2026-10-31）：入参只有 `kind` 和 `text`，它不认识配置也不知道这条状态属于哪张卡——「挂在哪」由调用方决定：同一屏有多张能改的卡时各自用 `saveStateFor(save, subject)` 取数，对不上就是 idle，所以「任务列表宽度」的已保存提示不会出现在「主菜单宽度」卡里 |
-| `OperationFeedback` | 持续显示任务步骤、进度、耗时和取消入口 | 检测、应用、恢复、更新 |
+| `OperationFeedback` | 持续显示任务步骤、进度和耗时 | 检测、应用、恢复、更新（取消入口 2026-11-06 已删） |
 | `ServiceStrategySelector` | 用“加速方法”等直白文字展示当前服务可用方式，并通过后端设置接口保存该服务以后默认使用的方法 | 当前服务详情；属于策略功能，不是通用 UI 控件 |
 | `StatusBadge` | 显示状态文字和颜色 | 分类树、详情、队列。现状（2026-10-28，Hosts 只读接入）：入参是 `status` 加可选 `reason`（后端在冲突/读不到时给的那句），`reason` 只挂在 `title` 上——读屏读不到 `title`，所以详情页会把同一句话整行显示，徽章本身不判断任何规则 |
 | `ProgressBar` | 展示可确定的任务进度 | 工具栏、更新页面 |
@@ -40,7 +40,7 @@
 
 组件只接收所需数据和事件回调。例如状态徽章接收状态值，负责显示；它不自行判断检测或应用规则。
 
-每次用户操作都要立即显示开始反馈，结束时显示成功、失败或取消结果。长任务持续显示步骤和进度；错误在操作附近保留，不能只用很快消失的 Toast。
+每次用户操作都要立即显示开始反馈，结束时显示成功或失败结果。长任务持续显示步骤和进度；错误在操作附近保留，不能只用很快消失的 Toast。
 
 短操作用即时状态变化回应，不显示闪烁的加载动画。进度和错误要有屏幕阅读器可读的状态说明，不能只靠颜色、图标或动画传达。
 
@@ -77,7 +77,7 @@
 
 | 文件 | 方法或内容 | 责任与边界 |
 |---|---|---|
-| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getStrategies`、`detectItems`、`selectStrategy`、`applyItems`、`restoreItems`、`openHosts`、`getSettings`、`saveSettings`、`cancelTask`、`getTasks`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearFinishedTasks`、`clearQueue`、`checkForUpdates` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则。现状（2026-10-27，正式页面迁移第一屏）：这一层已建，包了后端已接的 4 个命令（`getAppStatus`、`getItems`、`getSettings`、`saveSettings`），纵向样例面板连同它对绑定的直接 `import` 一起删掉了，工程里只剩这一处调用入口；本表其余 14 个命令在后端仍是契约，所以没有为它们写空壳封装。现状（2026-10-28，设置中心第二屏）：`saveSettings` 的入参从「只有档位」扩成 `SettingsPatch` 四个可缺省字段（`networkProfile`、`maxCandidateProbesPerRun`、`sidebarWidth`、`queueHeight`），没给的字段在后端 `Patch` 里是 `null`＝这次不改，所以改宽度不会清零网络设置；仍然只传 `expectedRevision` 和 `mutationID`，写入链路没变。现状（2026-10-28，Hosts 只读接入）：这一层四个命令的签名和调用方式都没动，只有 `getItems` 返回值里的 `hosts` 从占位 `unknown` 换成后端现读出来的真状态（`status`/`revision`/`readAt`/可选 `message`）。现状（2026-10-29，队列命令层）：这一层一个导入、一个函数都没动，只改了一句注释——「只登记后端已接好的 4 个命令，其余 14 个仍是契约」在后端涨到 11 条之后就成了错话，改成「后端 11 条、队列那 7 条的绑定已生成／这一层仍只登记界面用得上的 4 条／其余 7 条仍是契约」。本表 18 个名字里前端此刻真能调到的仍是 4 个：绑定 TS 由 `wails3 generate bindings -ts` 现生成（打包与推送钩子的构建步骤就会跑它），**这批生成物已在 2026-10-29 入库**——`service.ts` 多出这 7 条命令（导出函数 6→13、`+58` 行零删除，原有 4 条一个没丢），新增 `internal/task/models.ts`＋`index.ts`（`Kind`/`Status` 枚举与 `Task`/`Snapshot`/`RetryResult` 类型），生成的是 `.ts` 而不是 `.js`；生成后再跑 `npm run build`，产物哈希 `index-DfIw3w4R.js` 与生成前一致，前端真发出去的东西一个字节没变，因为这一层还没 import 它们。现状（2026-10-31，队列任务列表宽度）：`SettingsPatch` 多一个可缺省字段 `queueListWidth`，`saveSettings` 拼给后端的 `Patch` 里同步补一行 `queueListWidth: patch.queueListWidth ?? null`；没给＝这次不改，和其余字段同一套语义。绑定同轮重生成，`internal/config/models.ts` 只多出 `LayoutConfig.queueListWidth` 与 `Patch.queueListWidth` 两处（+7/−1）。本表那 18 个命令一个没加，`saveSettings` 的签名与写入链路也没动。现状（2026-11-01，启动自动化）：`SettingsPatch` 多三个可缺省字段 `autoDetectMenus`、`autoApplyOnStartup`、`autoCloseAfterApply`，同一轮新登记一条只读命令 `getAutomationStatus`。现状（2026-11-02，清理已选缓存）：新登记 `clearSourcesCache(itemIds)`，参数就是勾中的项目 ID，源清单与「今天下载过没有」都由后端算，界面只按回执的三个数字挑文案。本表「18 个命令」那一列是 2026-10-26 定基线时的规划清单，留在原地只作历史；现在能点数的是绑定层导出 28 个方法、这一层实际登记 25 个（其余 3 个界面暂不调用），权威口径见 TECHNICAL_PLAN.md 的「接口清单基准」和 FRONTEND_BACKEND_STRUCTURE_PLAN.md 的 `api/client.ts` 那一条 |
+| `frontend/src/api/client.ts` | `getAppStatus`、`getItems`、`getSettings`、`getAutomationStatus`、`saveSettings`、`getStrategies`、`selectStrategy`、`detectItems`、`getCandidatePool`、`getDetectResult`、`clearSourcesCache`、`getTasks`、`clearFinishedTasks`、`detectBudget`、`applyItems`、`restoreItems`、`restoreAllHosts`、`openHosts`、`checkForUpdates`、`downloadUpdate` | 对应技术规划中的 18 个命令接口；集中调用 Wails 绑定，参数和返回值使用明确类型；组件不能直接调用 Wails 运行时，也不能在此实现业务规则。现状（2026-10-27，正式页面迁移第一屏）：这一层已建，包了后端已接的 4 个命令（`getAppStatus`、`getItems`、`getSettings`、`saveSettings`），纵向样例面板连同它对绑定的直接 `import` 一起删掉了，工程里只剩这一处调用入口；本表其余 14 个命令在后端仍是契约，所以没有为它们写空壳封装。现状（2026-10-28，设置中心第二屏）：`saveSettings` 的入参从「只有档位」扩成 `SettingsPatch` 四个可缺省字段（`networkProfile`、`maxCandidateProbesPerRun`、`sidebarWidth`、`queueHeight`），没给的字段在后端 `Patch` 里是 `null`＝这次不改，所以改宽度不会清零网络设置；仍然只传 `expectedRevision` 和 `mutationID`，写入链路没变。现状（2026-10-28，Hosts 只读接入）：这一层四个命令的签名和调用方式都没动，只有 `getItems` 返回值里的 `hosts` 从占位 `unknown` 换成后端现读出来的真状态（`status`/`revision`/`readAt`/可选 `message`）。现状（2026-10-29，队列命令层）：这一层一个导入、一个函数都没动，只改了一句注释——「只登记后端已接好的 4 个命令，其余 14 个仍是契约」在后端涨到 11 条之后就成了错话，改成「后端 11 条、队列那 7 条的绑定已生成／这一层仍只登记界面用得上的 4 条／其余 7 条仍是契约」。本表 18 个名字里前端此刻真能调到的仍是 4 个：绑定 TS 由 `wails3 generate bindings -ts` 现生成（打包与推送钩子的构建步骤就会跑它），**这批生成物已在 2026-10-29 入库**——`service.ts` 多出这 7 条命令（导出函数 6→13、`+58` 行零删除，原有 4 条一个没丢），新增 `internal/task/models.ts`＋`index.ts`（`Kind`/`Status` 枚举与 `Task`/`Snapshot`/`RetryResult` 类型），生成的是 `.ts` 而不是 `.js`；生成后再跑 `npm run build`，产物哈希 `index-DfIw3w4R.js` 与生成前一致，前端真发出去的东西一个字节没变，因为这一层还没 import 它们。现状（2026-10-31，队列任务列表宽度）：`SettingsPatch` 多一个可缺省字段 `queueListWidth`，`saveSettings` 拼给后端的 `Patch` 里同步补一行 `queueListWidth: patch.queueListWidth ?? null`；没给＝这次不改，和其余字段同一套语义。绑定同轮重生成，`internal/config/models.ts` 只多出 `LayoutConfig.queueListWidth` 与 `Patch.queueListWidth` 两处（+7/−1）。本表那 18 个命令一个没加，`saveSettings` 的签名与写入链路也没动。现状（2026-11-01，启动自动化）：`SettingsPatch` 多三个可缺省字段 `autoDetectMenus`、`autoApplyOnStartup`、`autoCloseAfterApply`，同一轮新登记一条只读命令 `getAutomationStatus`。现状（2026-11-02，清理已选缓存）：新登记 `clearSourcesCache(itemIds)`，参数就是勾中的项目 ID，源清单与「今天下载过没有」都由后端算，界面只按回执的三个数字挑文案。本表「18 个命令」那一列是 2026-10-26 定基线时的规划清单，留在原地只作历史；现在能点数的是绑定层导出 23 个方法、这一层实际登记 20 个（其余 3 个界面暂不调用：`Ping`、`RuntimeInfo`、`SettingsStore`），权威口径见 TECHNICAL_PLAN.md 的「接口清单基准」和 FRONTEND_BACKEND_STRUCTURE_PLAN.md 的 `api/client.ts` 那一条。现状（2026-11-06，队列收缩）：`cancelTask`、`pauseQueue`、`resumeQueue`、`retryFailedTasks`、`clearQueue` 五个封装连同后端命令一起删掉，本表第二列同步换成上面那 20 个真登记的名字；绑定同轮重生成，`internal/app/service.ts` 少这 5 条命令，`internal/task/models.ts` 少 `Task.retryOf`、`Snapshot.paused`、状态枚举里的 `cancelled`。 |
 | `frontend/src/api/errors.ts` | `toAppError`、`getErrorMessage` | 把调用异常整理成稳定错误码和可展示文案；保留原错误供日志，不能改成成功或空数据。现状（2026-10-27）：已建，按后端线格式 `code: message[: 原因]` 拆码，认得全部 7 个稳定错误码，认不出的归 `unknown` 并保留原文；组件只拿到码和可展示文案。现状（2026-11-01，提示面板）：那份清单停在 7 个码，后端已经涨到 26 个——`hosts_failed`、`no_detect_result`、`no_strategy_selected`、`queue_running`、`update_*` 这 19 个摘不掉前缀，界面上直接印出「hosts_failed: 没能打开 Hosts 文件」这种机器话。本轮补齐 26 个，并加一条门 `internal/app/error_codes_parity_test.go`：逐行扫后端 `Code*` 常量和这份 TS 数组，两边必须完全相等，少一个或多一个都红（两个方向都实测过红） |
 | `frontend/src/api/events.ts` | `subscribeTaskProgress` | 订阅带单调递增 `sequence` 的 `TaskProgress` 事件（不是命令接口）并返回取消订阅函数；组件或 hook 销毁时必须调用。现状（2026-10-27）：文件已建，但里面是运行状态事件 `subscribeRuntimeStatus`（事件名 `app:runtime-status` 只在这一处出现，组件不再直接 `import` `@wailsio/runtime`）；`subscribeTaskProgress` 等任务队列接通后端再加，不提前放空壳 |
 | `frontend/src/utils/format.ts` | `formatLatency`、`formatBytes`、`formatDuration`、`formatTimestamp` | 统一数值和时间格式，单位明确，日期数字走 `Intl`；不显示没有下载实测依据的“下载速度” |
@@ -92,7 +92,7 @@
 | `frontend/src/features/settings/profileOptions.ts` | `PROFILE_IDS`、`PROFILE_SPECS`、`profileLabel`、`profileSpec`、`profileNote`、`profileLimitText` | 三档的每域名候选数与并发上限（2/8/16、2/8/8）在界面上的唯一来源；工具栏下拉的选项与解释、设置页卡片文案和「一轮全量需要多少次」的预算预览都从这里取数，不再各处手写数字（2026-10-28 第二屏改成这份单一来源） |
 | `frontend/src/features/tasks/taskEvents.ts` | 任务事件到 task store 的映射 | `api/events.ts` 负责底层订阅和取消；任务事件映射留在任务功能内，不额外建立通用 `useTaskEvents` hook |
 | `frontend/src/stores/settingsStore.ts` | 持久配置快照、draft、保存状态和更新 action | 所有需跨重启保留的设置（包括独立的 `detectFocusFollow`、`applyFocusFollow`）通过后端 `GetSettings`、`SaveSettings` 保存；前端不得以 `localStorage` 建立副本。现状（2026-10-28，设置中心第二屏）：文件还没建，也不打算为空表放空壳——配置快照目前只有 `app/App.tsx` 一个持有者（`useState`），保存状态与冲突处理抽进了 `hooks/useSettingsSave.ts`；等出现第二个需要跨功能共享同一份配置快照的调用方（任务队列、检测区）再落成 store，届时这一份快照仍只有一个来源 |
-| `frontend/src/features/tasks/taskStore.ts` | `replaceTaskSnapshot`、`upsertTask`、`removeTask`、`markTaskCancelled`、`removeFinishedTasks`、`tasksForItem` | 任务状态唯一来源；终态集合为成功、跳过、失败、回滚、取消、已恢复。快照和事件按 sequence 合并；“查看日志”只筛选当前内存队列中该项目的记录，不承诺跨清理或重启保留 |
+| `frontend/src/features/tasks/taskStore.ts` | 实际导出：`useTaskQueue`、`taskStateSnapshot`、`applyTaskSnapshot`、`markTaskLoadError`、`applyTaskEvent`、`applyDetectEvent`、`refreshResult`、`refreshAllResults`、`ensureLastResults`、`isTerminalTask` | 任务状态唯一来源；终态集合为成功、跳过、失败、回滚、已恢复五档（2026-11-06 队列收缩去掉「已取消」）。快照和事件按 sequence 合并；队列明细只筛当前内存里的记录，不承诺跨清理或重启保留。表头原来那六个名字是 2026-10-26 规划时的草拟 API，从没这么落过 |
 | `internal/detector/probe.go` | `ProbeTCP`、`ProbeHTTPS` | 单候选探测接收 `context` 截止时间；HTTPS 保留 SNI/主机名和证书校验。多个候选由策略层提交给共享有界 worker pool，不在每个策略中另造并发框架。**已落（2026-10-29，只被检测编排调用、无生产入口）**：两步共用一份 2 秒期限，九档失败分类，只握手不发请求。**并发闸现已落（2026-10-29，`internal/accelerator`）**：每轮按档位的并发数开工作协程，硬上限 8 在后端校验，候选队列顺序稳定，所以「谁没排上」有唯一答案 |
 | `frontend/src/features/*/*Selectors.ts` | 功能内纯查询方法 | 仅放同一功能里被多个组件复用的筛选、排序和派生状态，不建跨功能万能 selector |
 | `frontend/src/styles/tokens.css` | 颜色、间距、尺寸、圆角、层级和焦点令牌 | 唯一全站视觉令牌来源；组件引用变量，不复制样式常量 |
@@ -132,7 +132,7 @@
 | `app` | 校验前端请求、调用业务服务、转换对外错误 | 不放 DNS、Hosts 或系统操作实现 |
 | `catalog` | 提供服务、项目、域名和稳定 ID | 产品数据只有一个来源 |
 | `config` | 读取、校验、迁移和保存用户配置 | 配置写入失败要返回错误 |
-| `task` | 管理任务 ID、状态、进度、取消和清理 | 不包含 DNS 或文件操作细节 |
+| `task` | 管理任务 ID、状态、进度和清理 | 不包含 DNS 或文件操作细节 |
 | `event` | 把任务进度和状态变化发给前端 | 事件字段稳定、数据最少、进度有限频 |
 | `accelerator` | 自动收集、选择和路由独立加速方法 | 策略同包自注册；新增一种方法不修改中心清单或其他功能代码。现状（2026-10-29）：根包落了检测执行编排（`budget.go` 一轮预算、`detect.go` 串取候选与探测），注册表已进应用装配层；新增一种方法仍只加一个 `strategies/*.go` 文件，不用改本包任何中心清单。下面那两行规划的 `model.go`/`service.go` 还没建，也不会在只有编排这一条流程时先建一层空壳——方法选择由设置服务存、由调用方把选中的方法递进编排。整包仍零生产调用点 |
 | `detector` | 域名解析、连通性探测和候选排序 | 不写 Hosts，不吞掉失败原因。现状（2026-10-29）：连通性探测已落（`probe.go`，被检测编排调用、仍无生产入口）；解析仍在策略包内、公共排序未建 |
@@ -174,7 +174,7 @@
 | 文件 | 规划方法 | 复用范围 |
 |---|---|---|
 | `internal/app/app.go` | `GetAppStatus`、`GetItems`、`GetSettings`、`SaveSettings`（已接）；`GetStrategies`、`DetectItems`、`SelectStrategy`、`ApplyItems`、`RestoreItems`、`OpenHosts`、`CheckForUpdates`（仍是契约） | 与技术规划里 18 个命令逐项对应；检查请求并转给业务服务。现状（2026-10-29）：这一层没有叫 `bindings.go` 的文件，命令按主题分文件放在同一个包里，不为一个空壳新建文件。现状（2026-11-01）：这一行左列标的「仍是契约」整批作废——`GetStrategies`、`DetectItems`、`SelectStrategy`、`ApplyItems`、`RestoreItems`、`OpenHosts`、`CheckForUpdates` 早在 2026-10-29／10-30 就逐项接完并进了界面，队列那 7 条同轮接上；本轮又加一条只读的 `GetAutomationStatus`。现状（2026-11-02，清理已选缓存）：再加一条 `ClearSourcesCache(itemIDs)`，落在同包的 `sources_cache.go`——它只做「勾中项目 → 所属范围 → 这个范围用哪几份源」的换算和整批校验，删文件这一步交给 `internal/sources/github` 那层，命令层自己不碰磁盘。「18 个命令」是 2026-10-26 的规划基线，现在以绑定层导出 28 个方法为准（权威清单见 TECHNICAL_PLAN.md 的「接口清单基准」） |
-| `internal/app/queue.go` | `GetTasks`、`PauseQueue`、`ResumeQueue`、`CancelTask`、`RetryFailedTasks`、`ClearFinishedTasks`、`ClearQueue` | 队列的调用面（**2026-10-29 已接**）：只转发给 `internal/task` 那把锁并翻译错误码，自己不计账。返回形状按失败面分三档——`GetTasks`/`PauseQueue`/`ResumeQueue`/`ClearFinishedTasks` 只回快照 `{tasks, sequence, paused}` 不带错误，`CancelTask`/`ClearQueue` 回 `(快照, 错误)`，`RetryFailedTasks` 回逐项结果数组。空 ID 报 `invalid_task_id`、队列里没有报 `task_not_found`、已终态要取消报 `task_finished`、有任务在跑要清空报 `queue_running`；另外两个哨兵只有 `Enqueue` 会抛，排任务的入口还没接，本轮不提前建翻译。停队列走包级 `ShutdownTaskQueue` 而不是 `Service` 的方法——Wails 会把每个导出方法都绑成前端能调的命令，`internal/app/queue_test.go` 那道反射门就是拦这个的。排任务的入口还没实现，所以队列现在填不上；构造时注入的执行器只把任务判成「还没接上执行动作」的失败，接上真执行器那一步换掉它——**检测那一只真执行器同日已写好（`internal/app/detect.go`，见下一行），但没换装**：换装和 `DetectItems` 是同一轮的动作 |
+| `internal/app/queue.go` | `GetTasks`、`ClearFinishedTasks`（2026-10-29 曾接 7 条，**2026-11-06 收缩到只剩这 2 条**）| 队列的调用面（**2026-10-29 已接**）：只转发给 `internal/task` 那把锁并翻译错误码，自己不计账。两条都只回快照 `{tasks, rounds, sequence}` 不带错误（读内存里的一把锁，没有失败面）。错误码只剩两枚：`invalid_task_id`（排队请求缺必要信息）与 `queue_running`（队列已停、不再收任务）；`task_not_found`、`task_finished` 随取消/重试一起删掉，前端 `api/errors.ts` 的登记表同轮同步。停队列走包级 `ShutdownTaskQueue` 而不是 `Service` 的方法——Wails 会把每个导出方法都绑成前端能调的命令，`internal/app/queue_test.go` 那道反射门就是拦这个的。上面「排任务的入口还没实现、执行器只判失败」是 2026-10-29 当时的状态，现已过期：检测、应用、恢复三只执行器都接上了（`internal/app/executors.go` 那张分发台），`pendingExecutor` 只留作装配时缺依赖的兜底——某个 Kind 没接上就当场判失败并给一句人话，不让驱动协程撞 nil。 |
 | `internal/app/detect.go` | `detectExecutor.Execute`、`newDetectExecutor`、`uniqueHostnames`、`progressBridge` | 检测任务落到队列执行器这一层的形状（**2026-10-29 已落，零调用点**）：把队列记录（项目、范围、可选方法）翻译成一轮检测的输入，再把一轮的进度折算回队列那一行。判定链只往明确拒绝收——目录没这个项目、设置读不到、方法没选、方法已从注册表消失、方法适用范围不含本项目所在范围，各给一句不含域名和地址的人话；项目没配域名判**跳过**不是失败；跑完没查出可用地址判**完成**（那是结论）；这一轮被取消判**失败**（队列在取消那一刻已定稿，这里只给单独调用这一层的人一个不撒谎的结论）。方法按「任务带的 > 范围默认」取，两边都没有就拒，绝不从注册表随便挑一个。域名在本层用 `hosts.NormalizeHostname` 规范化去重后才递给 `BudgetFor`，为的是预算数得对。进度比例只按已定格候选条数算（解析阶段 `Total` 为 0 就给 0），不猜速度、不给剩余时间。本轮查出的候选结果不在这里存放。**没接的部分**：`newTaskQueue` 注入的仍是 `pendingExecutor`，`DetectItems` 未实现，所以队列里进不来检测任务；30 秒服务级总期限也没压在这一轮上（执行器把上层给的 context 原样传下去）。测试 `internal/app/detect_test.go` 顶层 11 条全走假接缝，一条真实外网查询都没发；12 条改坏锚点逐条见红（第 1 条「本层去重失效」第一次存活——编排自己也会去重，本层去重唯一的可见后果是 `BudgetFor` 收到的数字，而 `Needed`/`Short` 在本层没有可读出口，于是补一条直接盯 `uniqueHostnames` 的用例，不编造间接门） |
 | `internal/app/errors.go` | `ToPublicError` | 把内部错误转换成稳定、可展示的错误码和消息；保留底层原因用于日志 |
 | `internal/catalog/catalog.go` | `Services`、`ItemsForService`、`FindItem`、`ValidateIDs` | 服务、项目、域名和 ID 的唯一来源 |
@@ -182,7 +182,7 @@
 | `internal/config/defaults.go` | `DefaultConfig` | 唯一默认值来源；新安装默认省流、自动检测关闭 |
 | `internal/config/validate.go` | `Validate` | 校验配置范围、服务 ID 和已注册的方法 ID |
 | `internal/config/migrate.go` | `Migrate` | 把旧配置逐版本迁移到当前结构 |
-| `internal/task/manager.go` | `Start`、`Get`、`List`、`Pause`、`Resume`、`Cancel`、`RetryFailed`、`ClearFinished`、`ClearAll` | 暂停只阻止领取新等待任务，不中断执行中任务；重试创建关联原任务的新 ID；`ClearFinished` 只移除终态，可与其他任务并行；`ClearAll` 清除包括排队任务在内的全部记录，但有执行中任务时拒绝。现状（2026-10-29）：这套要求落在 `internal/task/queue.go`＋`task.go`，没有叫 `manager.go` 的文件；对得上的名字是 `Pause`/`Resume`/`Cancel`/`RetryFailed`/`ClearFinished`/`ClearQueue`，`Start`/`Get`/`List` 三个由 `Enqueue` 与 `Snapshot` 承担——快照一次给全部记录，没有单条查询入口，界面上「查看日志」就是在这份快照里按项目筛 |
+| `internal/task/manager.go` | `Start`、`Get`、`List`、~~`Pause`、`Resume`、`Cancel`、`RetryFailed`、`ClearAll`~~、`ClearFinished` | ~~暂停只阻止领取新等待任务，不中断执行中任务；重试创建关联原任务的新 ID；~~**2026-11-06 队列收缩**：暂停、继续、取消、重试、清空全部删除，`ClearFinished` 是唯一保留的清理动作；`ClearFinished` 只移除终态，可与其他任务并行；`ClearAll` 清除包括排队任务在内的全部记录，但有执行中任务时拒绝。现状（2026-10-29）：这套要求落在 `internal/task/queue.go`＋`task.go`，没有叫 `manager.go` 的文件；对得上的名字是 `Pause`/`Resume`/`Cancel`/`RetryFailed`/`ClearFinished`/`ClearQueue`，`Start`/`Get`/`List` 三个由 `Enqueue` 与 `Snapshot` 承担——快照一次给全部记录，没有单条查询入口，界面上「查看日志」就是在这份快照里按项目筛 |
 | `internal/task/transition.go` | `CanTransition`、`Transition` | 集中检查合法状态变化，不重复散落条件判断。现状（2026-10-29）：文件未建。合法状态变化现在由 `queue.go` 里那三处判断承担——`IsTerminal`（终态不回退）、`IsActive`（在途占位）、`runStatus`（按任务类型定执行中显示哪一档），全库只有这一份定义，没散落第二处；等出现第四处要判状态转换时再抽这个文件 |
 | `internal/event/publisher.go` | `Publish`、`PublishTaskProgress` | 统一事件结构和限频；任务状态仍由 task 管理。现状（2026-10-29）：没有 `publisher.go`，任务事件这一路是 `internal/event/task.go` 的 `TaskEmitter.PublishProgress`，事件名 `task:progress` 只写在那一个常量里；限频没做，也不该做——队列事件是状态转换和终态，一条都不能丢 |
 | `internal/detector/resolver.go` | `Resolve` | 可取消、有超时的系统 DNS 解析；首期不自动向第三方解析器发送查询。现状（2026-10-29）：文件未建，这几条要求现在由 `internal/accelerator/strategies/hosts_dns_lookup.go` 满足（`Resolver` 接缝接 `net.DefaultResolver`、2 秒预算、失败分类不记录查询域名）；等第二个加速方法出现再决定要不要抽成公共模块 |
@@ -348,11 +348,11 @@ internal/
 - 同一组件只保留一份实现，页面通过接口传入数据和事件。
 - 组件可单独验证加载、空数据、禁用和失败状态。
 - 每个可操作控件都能显示处理中和最终结果；慢任务不能无限转圈或只依赖 Toast。
-- 超时、后端断连、取消和重复提交都有可见且一致的反馈。
-- 任务取消或页面关闭后，不留下仍在运行的事件监听。
+- 超时、后端断连和重复提交都有可见且一致的反馈。
+- 任务落定或页面关闭后，不留下仍在运行的事件监听。
 - Hosts 组件使用临时文件测试，不修改开发机真实 Hosts。
 - 检测和应用焦点跟随分别持久化且默认关闭；自动展开不移动键盘焦点，任务结束时保留用户在运行期间手动调整的分类状态。
-- “清理已结束”只移除成功、跳过、失败、回滚、取消和已恢复任务，排队中/执行中任务保留；“清空队列”会移除排队任务，但存在执行中任务时拒绝。清理终态可与其他任务并行。
+- “清空已完成”只移除成功、跳过、失败、回滚和已恢复五档终态，排队中与执行中任务保留，且清理可与其他任务并行。~~“清空队列”移除全部记录（含排队任务），有执行中任务时拒绝~~：**2026-11-06 随 `ClearQueue` 一起删掉**，队列上只剩这一颗。
 - Hosts 单项还原恢复该项目应用前的工具映射；多个项目共用映射时，其他所有者仍在使用的记录必须保留。区段外用户内容不变，冲突时不覆盖。
 - Hosts 全部还原逐项处理并返回成功/失败清单；元数据或区段冲突时保留现场。恢复成功后隐藏该项目的还原入口，再次成功应用后重新建立还原点。
 - 前端显示的真实状态来自后端；模拟数据只在明确的演示环境中使用。
@@ -371,5 +371,5 @@ internal/
 - 每种加速方式有独立实现和测试；公共 DNS、任务、配置和 Hosts 操作逻辑只保留一份。
 - 删除或替换组件前，搜索所有调用点并更新测试。
 - 泛型只用于有重复价值的类型安全算法；标准库已有操作时不重复实现，不出现无调用方的公共工具。
-- 公共方法位于职责明确的业务包；错误可追踪、操作可取消，系统权限接口不扩大为任意执行能力。
+- 公共方法位于职责明确的业务包；错误可追踪、操作有超时与退出收口，系统权限接口不扩大为任意执行能力。
 - Wails 调用只有一个入口，任务事件订阅均有对应清理；服务加速方法的持久数据只由后端配置服务保存。

@@ -63,6 +63,19 @@ func (s *detectResultStore) markApplied(itemID string, applied map[string][]stri
 	}
 }
 
+// clearApplied 把全部项目候选上的「当前生效」标记清掉。
+// 全部还原是一笔不进队列的命令，没有执行器来重标（markApplied 只在逐项应用/还原里调）。
+// 它成功之后系统 Hosts 上已经没有本工具写的映射，标记留着就是界面在说假话。
+func (s *detectResultStore) clearApplied() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, rec := range s.byItem {
+		for i := range rec.result.Candidates {
+			rec.result.Candidates[i].Applied = false
+		}
+	}
+}
+
 // view 把某项目最近一轮结果整理成给前端的 DTO。没有记录时 ok 为 false，
 // 调用方返回「还没有检测结果」的空形状，这不是错误。
 func (s *detectResultStore) view(itemID string) (DetectResultView, bool) {

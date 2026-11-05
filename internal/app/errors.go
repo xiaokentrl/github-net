@@ -27,9 +27,8 @@ const (
 	CodeStrategyUnavailable = "strategy_unavailable"
 
 	// 队列这一组的码：前端按码分支，不解析中文。
+	// invalid_task_id：排队请求缺必要信息；queue_running：队列已经不再收任务。
 	CodeInvalidTaskID = "invalid_task_id"
-	CodeTaskNotFound  = "task_not_found"
-	CodeTaskFinished  = "task_finished"
 	CodeQueueRunning  = "queue_running"
 
 	// 检测入口这一组的码：前端按码分支，不解析中文。
@@ -106,17 +105,6 @@ func ToPublicError(err error) *Error {
 	}
 	if errors.Is(err, config.ErrInvalid) {
 		return NewError(CodeInvalidSettings, settingDetail(err), err)
-	}
-	if errors.Is(err, task.ErrTaskNotFound) {
-		// 队列层那句原话带任务 ID，界面只给一句不重复 ID 的话：ID 是调用方自己传进来的，
-		// 再回显一遍没有信息量，还会让「哪一步没对上」这件事更难看清。
-		return NewError(CodeTaskNotFound, "队列里已经没有这条任务记录，可能已经被清理了", err)
-	}
-	if errors.Is(err, task.ErrTaskFinished) {
-		return NewError(CodeTaskFinished, "这条任务已经到了终态，不能再取消", err)
-	}
-	if errors.Is(err, task.ErrQueueRunning) {
-		return NewError(CodeQueueRunning, "有任务正在执行，这时候清空队列会让它从界面上消失", err)
 	}
 	if errors.Is(err, task.ErrQueueStopped) {
 		// 应用正在退出，队列不再收新任务；这不是用户能重试的状态，如实说。

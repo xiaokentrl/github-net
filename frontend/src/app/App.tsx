@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot, SourcesCacheResult } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
-import { applyItems, clearSourcesCache, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
+import { applyItems, clearSourcesCache, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, getTasks, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
 import { subscribeAutomationStatus, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
 import { automationText } from '../components/layout/StatusBar'
 import { getErrorMessage } from '../api/errors'
@@ -23,7 +23,7 @@ import { SettingsDialog, type SettingsPaneID } from '../features/settings/Settin
 import { ItemDetail } from '../features/items/ItemDetail'
 import { TaskPanel } from '../features/tasks/TaskPanel'
 import { subscribeTaskEvents } from '../features/tasks/taskEvents'
-import { refreshResult, taskStateSnapshot, useTaskQueue } from '../features/tasks/taskStore'
+import { isTerminalTask, refreshResult, taskStateSnapshot, useTaskQueue } from '../features/tasks/taskStore'
 import { useRestoreAllTasks } from '../features/tasks/useRestoreAll'
 import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
@@ -222,7 +222,6 @@ export function App() {
         loadCatalog()
         void refreshResult(settled.itemId).catch(() => undefined)
       }, 800)
-      if (settled.kind === 'apply' || settled.kind === 'restore') loadCatalog()
       // 检测轮收尾回执（拍板 2026-11-03）：一项一项递就是刷屏，按轮聚合一条。
       // 该轮全部任务到终态的那一刻算收尾；有失败的用警告档，干净的用成功档。
       if (settled.kind === 'detect' && settled.status === 'done' && settled.roundId) {
@@ -319,6 +318,23 @@ export function App() {
   // 队列面板在收起态就自动回到展开高度。把手由 TaskPanel 塞进来。
   const queueExpandRef = useRef<(() => void) | null>(null)
   const liveOf = useMemo(() => liveByItem(queue.tasks), [queue.tasks])
+  // 状态栏的「上次检测」看全应用最近一轮，不是当前选中项那一轮。
+  // 两处都取最晚的那个：新一轮开跑时该项目的旧结果会被清掉，但队列里已完成的任务记录还在；
+  // 用户清空队列后反过来，结果还在。只盯一处会在这两种时候倒回「未检测」，那是假话。
+  const lastDetectAt = useMemo(() => {
+    let latest: string | null = null
+    let latestMS = Number.NEGATIVE_INFINITY
+    const consider = (at?: string) => {
+      if (!at) return
+      const ms = new Date(at).getTime()
+      if (!Number.isFinite(ms) || ms <= latestMS) return
+      latestMS = ms
+      latest = at
+    }
+    for (const view of Object.values(queue.results)) consider(view.finishedAt)
+    for (const task of queue.tasks) if (task.kind === 'detect') consider(task.finishedAt)
+    return latest
+  }, [queue.results, queue.tasks])
 
   // 默认无选中；勾选持久化（拍板 2026-11-03）：目录和设置都就绪后恢复上次的勾选
   // （配置里的 ID 目录里没有的就过滤掉），之后的每次变化防抖写回配置，跨重装有效。
@@ -781,12 +797,41 @@ export function App() {
     document.querySelector(`[data-item-id="${runningItemId}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [runningItemId, followEnabled, expanded])
 
-  // 一条还原链路，详情页的「还原此项」和树上的 ↺（单项或整类）都走这里；
-  // 落定后由上面的任务订阅重读目录，树上的状态字、色点和 ↺ 是否还在都会跟着变。
+  // 一条还原链路，详情页的「还原此项」和树上的 ↺（单项或整类）都走这里。
+  // 命令只代表「排进队列」，返回的任务还在 waiting：除了终态事件之外，这里直接问后端这批任务
+  // 落定没有，落定就无条件重读目录。不把表格刷新全押在一条 Wails 事件上——事件没送到、
+  // 或者中途被别处并发请求挤掉，列表就会一直停在还原前的样子。
   const startRestoreItems = useCallback((itemIds: string[]) => {
     setHostsError('')
-    restoreItems(itemIds).catch((err: unknown) => reportRejection(setHostsError, err))
-  }, [])
+    restoreItems(itemIds)
+      .then((queued) => {
+        const ids = new Set((queued ?? []).map((t) => t.id))
+        if (ids.size === 0) {
+          loadCatalog()
+          return
+        }
+        let tries = 0
+        const poll = () => {
+          getTasks()
+            .then((snap) => {
+              const mine = (snap.tasks ?? []).filter((t) => ids.has(t.id))
+              const settled = mine.length > 0 && mine.every((t) => isTerminalTask(t.status))
+              if (settled || tries++ >= 40) {
+                loadCatalog()
+                // 再补一轮，吸收后端写盘与恢复元数据落盘的时序差。
+                window.setTimeout(loadCatalog, 800)
+                const failed = mine.find((t) => String(t.status) === 'failed' || String(t.status) === 'rolledback')
+                if (failed?.errorMsg) setHostsError(failed.errorMsg)
+                return
+              }
+              window.setTimeout(poll, 250)
+            })
+            .catch(() => loadCatalog())
+        }
+        window.setTimeout(poll, 200)
+      })
+      .catch((err: unknown) => reportRejection(setHostsError, err))
+  }, [loadCatalog])
 
   const startRestore = useCallback((itemId: string) => startRestoreItems([itemId]), [startRestoreItems])
 
@@ -908,7 +953,6 @@ export function App() {
               setSelectedId(itemId)
               focusManualRef.current = true
             }}
-            onHostsChanged={loadCatalog}
             hostsOf={hostsOf}
             hostnamesOf={hostnamesOf}
           />
@@ -927,6 +971,7 @@ export function App() {
             dropped={dropped}
             automation={automation}
             menuNamesById={menuNamesById}
+            lastDetectAt={lastDetectAt}
           />
         }
       />

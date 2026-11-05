@@ -17,26 +17,27 @@
   background: currentColor;
 }
 
-.neutral {
-  border-color: var(--border-strong);
-  background: var(--band);
-  color: var(--text-2);
+/* 四档颜色，和所有表格行、树行、候选行同一批令牌。 */
+.working {
+  border-color: var(--primary-soft);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
-.good {
+.written {
   border-color: var(--green-soft);
   background: var(--green-soft);
   color: var(--green);
 }
 
-.warn {
-  border-color: var(--amber-soft);
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-
-.bad {
+.failed {
   border-color: var(--red-soft);
   background: var(--red-soft);
   color: var(--red);
+}
+
+.unwritten {
+  border-color: var(--border-strong);
+  background: var(--band);
+  color: var(--text-2);
 }

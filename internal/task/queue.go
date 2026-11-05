@@ -25,7 +25,6 @@ type Queue struct {
 	order    []string
 	sequence int64
 	idSeq    int
-	paused   bool
 	// 轮次登记表：ID 只由 BeginRound 生成，是全工程唯一的轮 ID 来源。
 	// 预算账本（internal/app 的 roundBudgets）用的也是这个 ID，两边不再各发一套号。
 	rounds   map[string]*Round
@@ -81,7 +80,6 @@ func NewQueueLaned(exec Executor, pub Publisher, detectLane int) *Queue {
 
 // Snapshot 是队列的当前副本：任务按入队顺序排列，Sequence 是水位。
 // 前端先订阅事件再取快照，丢掉水位以内已经包含的事件；水位之后的事件才往界面上应用。
-// Paused 一并带出，因为没有别的地方能读到暂停状态。
 //
 // Rounds 只列「此刻还有任务挂在上面」的轮，按开轮先后排；一个任务都没剩下的轮不出现在快照里，
 // 界面上也就不会出现一个点不开的空根节点。
@@ -89,15 +87,6 @@ type Snapshot struct {
 	Tasks    []Task  `json:"tasks"`
 	Rounds   []Round `json:"rounds"`
 	Sequence int64   `json:"sequence"`
-	Paused   bool    `json:"paused"`
-}
-
-// RetryResult 是批量重试的逐项结果：成功给新任务 ID，被拒给原因。
-// 一次请求里两项互不影响，不会一项不合格就把整批挡回去。
-type RetryResult struct {
-	SourceTaskID string `json:"sourceTaskId"`
-	TaskID       string `json:"taskId,omitempty"`
-	Reason       string `json:"reason,omitempty"`
 }
 
 // Enqueue 把一条任务排到队尾并返回它的快照。
@@ -198,58 +187,7 @@ func kindLabel(k Kind) string {
 	}
 }
 
-// Pause 停止领取新的等待任务；已经在跑的那条不受影响，会跑完。
-// 重复暂停幂等，返回当前是否处于暂停。
-func (q *Queue) Pause() bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.paused = true
-	return q.paused
-}
-
-// Resume 恢复领取，按原队列顺序继续；重复继续幂等。
-func (q *Queue) Resume() bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.paused = false
-	q.pumpLocked()
-	return q.paused
-}
-
-// Paused 报告当前是否暂停。
-func (q *Queue) Paused() bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	return q.paused
-}
-
-// Cancel 取消一条排队中或执行中的任务，返回取消后的快照。
-// 等待中的任务就地变成「已取消」；执行中的任务会收到取消信号，
-// 状态以取消这一刻为准——执行器之后返回什么都不会再把它改回完成或失败。
-// 终态任务不能被取消，返回 ErrTaskFinished；队列里没有这条记录返回 ErrTaskNotFound。
-func (q *Queue) Cancel(taskID string) (Task, error) {
-	id := strings.TrimSpace(taskID)
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	e, ok := q.entries[id]
-	if !ok {
-		return Task{}, fmt.Errorf("%w: %s", ErrTaskNotFound, id)
-	}
-	if IsTerminal(e.task.Status) {
-		return e.task, fmt.Errorf("%w: %s", ErrTaskFinished, id)
-	}
-	e.task.Status = StatusCancelled
-	e.finish(q.now())
-	q.publishLocked(e)
-	if cancel, ok := q.detectRunning[id]; ok {
-		cancel()
-	} else if q.applyRunning == id && q.applyCancel != nil {
-		q.applyCancel()
-	}
-	return e.task, nil
-}
-
-// ClearFinished 移除全部终态记录（完成、跳过、失败、已回滚、已取消、已恢复），
+// ClearFinished 移除全部终态记录（完成、跳过、失败、已回滚、已恢复），
 // 保留等待中与执行中的任务，返回移除条数。没有终态记录时幂等成功。
 // 它不碰 Hosts、不碰候选结果、不碰设置。
 func (q *Queue) ClearFinished() int {
@@ -272,95 +210,6 @@ func (q *Queue) ClearFinished() int {
 	return removed
 }
 
-// ClearQueue 移除全部任务记录，包括还没执行的等待任务，返回移除条数。
-// 有任务正在执行时拒绝并返回 ErrQueueRunning：正在跑的那条不能从队列里消失。
-// 队列只在内存中，没有持久化删除，也就没有「删除失败」。
-func (q *Queue) ClearQueue() (int, error) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if q.applyRunning != "" || len(q.detectRunning) > 0 {
-		busy := q.applyRunning
-		if busy == "" {
-			for id := range q.detectRunning {
-				busy = id
-				break
-			}
-		}
-		return 0, fmt.Errorf("%w: %s", ErrQueueRunning, busy)
-	}
-	removed := len(q.order)
-	q.order = nil
-	q.entries = make(map[string]*entry)
-	// 任务全没了，轮也不留。轮号继续往后发，不清零、不复用。
-	q.rounds = make(map[string]*Round)
-	q.roundIDs = nil
-	// 这里没有逐条状态变化可以发事件，但等待方要被告知「你要等的那批任务已经不在了」。
-	q.broadcastLocked()
-	return removed, nil
-}
-
-// RetryFailed 为每条被接受的原任务在队尾新建一条重试任务。
-// 只接受失败或已回滚的应用任务；原记录保持终态不动，新任务用 RetryOf 指回原任务，
-// 这样界面上「第 1 次失败、第 2 次成功」两条都在，不覆盖历史。
-// 逐项给结果，不接受的项返回原因。
-//
-// 这一批被接受的重试一起进一个新轮次，轮名按原型规则是「重试失败 · N 项」，
-// N 是真正排进去的条数——被拒的项不占数，否则界面会看到一个对不上的数量。
-func (q *Queue) RetryFailed(taskIDs []string) []RetryResult {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	results := make([]RetryResult, 0, len(taskIDs))
-	accepted := make([]int, 0, len(taskIDs))
-	sources := make([]Task, 0, len(taskIDs))
-	// 一次请求里同项目只收第一条：新任务要等整批校验完才排进去，
-	// 所以「已有在途」这一条得先拿本次已接受的项比一遍，否则同一条被点两次会排进去两次。
-	pending := make(map[string]bool, len(taskIDs))
-	for _, raw := range taskIDs {
-		id := strings.TrimSpace(raw)
-		result := RetryResult{SourceTaskID: id}
-		e, ok := q.entries[id]
-		key := ""
-		if ok {
-			key = string(e.task.Kind) + "|" + e.task.ItemID
-		}
-		switch {
-		case q.stopped:
-			result.Reason = "任务队列已停止，这次重试没有排队"
-		case !ok:
-			result.Reason = "队列里已经没有这条任务记录"
-		case e.task.Kind != KindApply:
-			result.Reason = "只有应用任务支持重试，检测任务请直接重新检测"
-		case e.task.Status != StatusFailed && e.task.Status != StatusRolledback:
-			result.Reason = "这条任务不是失败或已回滚状态"
-		case pending[key] || q.findActiveLocked(e.task.Kind, e.task.ItemID) != nil:
-			result.Reason = "这个项目已经有在途任务，先等它结束"
-		default:
-			pending[key] = true
-			accepted = append(accepted, len(results))
-			sources = append(sources, e.task)
-		}
-		results = append(results, result)
-	}
-	if len(sources) == 0 {
-		return results
-	}
-	roundID := q.beginRoundLocked(KindApply, "", fmt.Sprintf("重试失败 · %d 项", len(sources)))
-	for i, source := range sources {
-		nt := q.appendLocked(Task{
-			Kind:       source.Kind,
-			ItemID:     source.ItemID,
-			Name:       source.Name,
-			ScopeID:    source.ScopeID,
-			StrategyID: source.StrategyID,
-			RoundID:    roundID,
-			Status:     StatusWaiting,
-			RetryOf:    source.ID,
-		})
-		results[accepted[i]].TaskID = nt.task.ID
-	}
-	return results
-}
-
 // Snapshot 返回队列副本和当前水位；任务顺序就是执行顺序，轮次顺序是开轮先后。
 func (q *Queue) Snapshot() Snapshot {
 	q.mu.Lock()
@@ -369,7 +218,6 @@ func (q *Queue) Snapshot() Snapshot {
 		Tasks:    make([]Task, 0, len(q.order)),
 		Rounds:   make([]Round, 0, len(q.rounds)),
 		Sequence: q.sequence,
-		Paused:   q.paused,
 	}
 	live := q.liveRoundIDsLocked()
 	for _, id := range q.order {
@@ -439,7 +287,7 @@ func (q *Queue) Sequence() int64 {
 }
 
 // Shutdown 停止领取新任务、取消正在执行的那条，并等到驱动协程退出。
-// 队列退出后不再接受入队，也不再把等待任务标成已取消：队列本来就要随进程一起消失。
+// 队列退出后不再接受入队；队列本来就要随进程一起消失，等待中的任务不做状态改写。
 func (q *Queue) Shutdown() {
 	q.mu.Lock()
 	q.stopped = true
@@ -549,7 +397,7 @@ func (q *Queue) findActiveLocked(k Kind, itemID string) *entry {
 // pumpLocked 假定调用方已持锁：有待跑任务且没有驱动协程时启动一个。
 // 入队和领取都在同一把锁里判断，不会出现「入队以为有人在跑、驱动刚好退出」的漏唤醒。
 func (q *Queue) pumpLocked() {
-	if q.driving || q.stopped || q.paused {
+	if q.driving || q.stopped {
 		return
 	}
 	for _, id := range q.order {
@@ -563,7 +411,7 @@ func (q *Queue) pumpLocked() {
 }
 
 // drive 是唯一的领取者：循环把能领的任务领出来、交给自己的协程去跑，
-// 然后继续领（所以多条检测任务真正并行）。没有可领的了（跑完、暂停、被停、车道满）
+// 然后继续领（所以多条检测任务真正并行）。没有可领的了（跑完、队列已停、车道满）
 // 就交出驱动身份退出；某条任务跑完时 settle 会重新 pump。
 func (q *Queue) drive() {
 	defer q.wg.Done()
@@ -583,11 +431,11 @@ func (q *Queue) drive() {
 
 // claim 领取「自己的车道还有空位」的第一条等待任务并标成执行中。
 // 应用/恢复车道满（有一条在跑）时不挡后面的检测任务——扫到能领的为止。
-// 暂停、队列已停或全部车道都满时返回 false，同时交出 driving 身份。
+// 队列已停或全部车道都满时返回 false，同时交出 driving 身份。
 func (q *Queue) claim() (Task, context.Context, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.paused || q.stopped {
+	if q.stopped {
 		q.driving = false
 		return Task{}, nil, false
 	}
@@ -641,7 +489,7 @@ func (q *Queue) reporter(id string) Report {
 }
 
 // settle 收尾一条任务：登记执行器给出的结论并落终态，返回是否继续领下一条。
-// 已经被取消的任务保持取消，不再按执行器的结果改写。
+// 只改还在途的记录，已经落定的不会被执行器晚到的结果改写。
 func (q *Queue) settle(id string, out Outcome) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -681,7 +529,7 @@ func (q *Queue) publishLocked(e *entry) {
 	q.broadcastLocked()
 }
 
-// finish 记录结束时间和耗时。没开始过的任务（等待中被取消）耗时留空，
+// finish 记录结束时间和耗时。没开始过的任务耗时留空，
 // 前端显示成「—」，不会看到一个假数字。
 func (e *entry) finish(now time.Time) {
 	e.task.FinishedAt = now.UTC().Format(time.RFC3339)

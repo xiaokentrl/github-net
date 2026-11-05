@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import type { DetectResultView, HostEntryState, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
-import { cancelTask, clearFinishedTasks, clearQueue, getTasks, pauseQueue, retryFailedTasks, resumeQueue } from '../../api/client'
+import { clearFinishedTasks, getTasks } from '../../api/client'
 import { getErrorMessage } from '../../api/errors'
 import { pickBestCandidate } from '../detect/candidateChoice'
 import { useBarResize } from '../../components/layout/useBarResize'
@@ -9,17 +9,25 @@ import { t } from '../../i18n'
 import { clampQueueHeight, QUEUE_HEIGHT_DEFAULT, QUEUE_HEIGHT_MIN } from './queueHeight'
 import { clampQueueListWidth, QUEUE_LIST_DEFAULT_WIDTH } from './queueListWidth'
 import { applyTaskSnapshot, markTaskLoadError, useTaskQueue } from './taskStore'
-import { useRestoreAllTasks } from './useRestoreAll'
+import { projectState, type Tone } from './statusTone'
 import styles from './TaskPanel.module.css'
 
-// 任务状态到文案键的映射。九档状态来自后端 TaskMeta，界面按状态字符串显示，不自己推断。
+// 档位 → 队列明细行底色类。八档齐全由 Record<Tone, string> 在编译时保证；
+// 「什么状态算什么档」统一在 statusTone.ts，这里只管挂哪个类。
+const TASK_ROW_CLASS: Record<Tone, string> = {
+  working: styles.qWorking,
+  failed: styles.qFailed,
+  written: styles.qWritten,
+  unwritten: styles.qUnwritten,
+}
+
+// 任务状态到文案键的映射。八档状态来自后端 TaskMeta，界面按状态字符串显示，不自己推断。
 const STATUS_KEY: Record<string, string> = {
   waiting: 'queue.status.waiting',
   running: 'queue.status.running',
-  paused: 'queue.status.paused',
+  queued: 'queue.status.waiting',
   done: 'queue.status.done',
   failed: 'queue.status.failed',
-  cancelled: 'queue.status.cancelled',
   skipped: 'queue.status.skipped',
   rolledback: 'queue.status.rolledback',
   restoring: 'queue.status.restoring',
@@ -27,7 +35,7 @@ const STATUS_KEY: Record<string, string> = {
 }
 
 // 轮次没有自己的状态字段：由轮下的任务推出来，圆点和文案用同一份。
-const NODE_TERMINAL = new Set(['done', 'failed', 'skipped', 'cancelled', 'rolledback', 'restored'])
+const NODE_TERMINAL = new Set(['done', 'failed', 'skipped', 'rolledback', 'restored'])
 function statusKeyOf(status: string): string {
   return STATUS_KEY[status] ?? 'queue.status.unknown'
 }
@@ -39,7 +47,7 @@ function qdFocusIndex(kids: Task[]): number {
 
 // 明细第二列「当前阶段 / 结果」的文字。以前落定的行只剩一个色点和一个「—」，
 // 用户看不出这一项到底做成了什么，所以逐档给一句实话：
-// 写了几条、还差几条、还是没写；检测给「几可用」；排队和取消也照实说。
+// 写了几条、还差几条、还是没写；检测给「几可用」；排队也照实说。
 // 数字来源是后端这次读回来的逐条 Hosts 事实（HostsState.entries），界面不自己数区段。
 function stageResultOf(task: Task, entries: HostEntryState[], detect: { hosts: number; available: number } | null): string {
   if (task.status === 'running' || task.status === 'restoring') return task.phaseText || t('queue.detail.running')
@@ -47,7 +55,6 @@ function stageResultOf(task: Task, entries: HostEntryState[], detect: { hosts: n
     return task.errorMsg || t(statusKeyOf(task.status))
   }
   if (task.status === 'waiting') return t('queue.status.waiting')
-  if (task.status === 'cancelled') return t('queue.status.cancelled')
   const written = entries.filter((e) => e.written).length
   if (task.status === 'done') {
     if (task.kind === 'detect') {
@@ -128,7 +135,6 @@ function entryLinesOf(
 // listWidth + onListWidthChange：两栏之间那条分隔条可拖，宽度落在配置里（原型同一条规则）。
 // activeItemId + onPickItem 承担双向联动：点明细行 → 主详情显示该子菜单的候选 IP；
 // 主详情/左树选中子菜单 → 明细行高亮并翻到所在页。
-// onHostsChanged：面板里的「全部还原」改的是系统 Hosts，改完要让主界面重读一遍目录状态。
 // hostsOf：后端每次 GetItems 现读的 Hosts 事实（含逐条主机名写到哪个地址）。
 // 明细那一列要说「写了几条、哪几条」，这份数字只能从这儿来，界面不自己数区段。
 // hostnamesOf：目录里每个项目的域名清单，只在整段判不出归属（后端逐条给空数组）时用来逐条列域名。
@@ -140,7 +146,6 @@ export function TaskPanel({
   onListWidthChange,
   activeItemId,
   onPickItem,
-  onHostsChanged,
   hostsOf,
   hostnamesOf,
 }: {
@@ -152,7 +157,6 @@ export function TaskPanel({
   onListWidthChange: (width: number) => void
   activeItemId: string
   onPickItem: (itemId: string) => void
-  onHostsChanged: () => void
   hostsOf: Map<string, HostsState>
   hostnamesOf: Map<string, string[]>
 }) {
@@ -166,45 +170,13 @@ export function TaskPanel({
     console.error('[queue]', getErrorMessage(err))
   }, [])
 
-  const onPause = useCallback(() => {
-    pauseQueue().then(applyTaskSnapshot).catch(handleError)
-  }, [handleError])
-
-  const onResume = useCallback(() => {
-    resumeQueue().then(applyTaskSnapshot).catch(handleError)
-  }, [handleError])
-
   const onClearFinished = useCallback(() => {
     clearFinishedTasks().then(applyTaskSnapshot).catch(handleError)
-  }, [handleError])
-
-  const onClearAll = useCallback(() => {
-    clearQueue().then(applyTaskSnapshot).catch(handleError)
   }, [handleError])
 
   const onRetryLoad = useCallback(() => {
     getTasks().then(applyTaskSnapshot).catch(markTaskLoadError)
   }, [])
-
-  const onRetryFailed = useCallback(() => {
-    const failed = state.tasks.filter((task) => task.kind === 'apply' && (task.status === 'failed' || task.status === 'rolledback'))
-    if (failed.length === 0) return
-    retryFailedTasks(failed.map((task) => task.id))
-      .then(() => getTasks().then(applyTaskSnapshot))
-      .catch(handleError)
-  }, [state.tasks, handleError])
-
-  // 取消全部等待中的任务（原型「取消等待」的形状）；执行中的不受影响。
-  const onCancelWaiting = useCallback(() => {
-    const waiting = state.tasks.filter((task) => task.status === 'waiting')
-    Promise.all(waiting.map((task) => cancelTask(task.id).catch(() => undefined)))
-      .then(() => getTasks().then(applyTaskSnapshot))
-      .catch(handleError)
-  }, [state.tasks, handleError])
-
-  // 全部还原：要求队列空闲（原型语义）；成功后清空队列记录并刷新 Hosts 状态。
-  // 工具栏那颗「恢复」和这里共用同一条实现（useRestoreAll），规则只写一遍。
-  const { restoreAll: onRestoreAll, confirmDialog: restoreAllConfirm } = useRestoreAllTasks(handleError, onHostsChanged)
 
   // ===== 双栏状态 =====
   // 轮次状态由它的任务推出来：有在跑的=执行中，全排队=排队中，有失败=失败，其余=完成。
@@ -373,38 +345,10 @@ export function TaskPanel({
       >
         <header className={styles.head}>
           <h2 className={styles.title}>{t('queue.title')}</h2>
-          <span className={styles.summary}>
-            {t('queue.summary', { active: activeCount, total: state.tasks.length })}
-            {state.paused ? ` · ${t('queue.pausedBadge')}` : ''}
-          </span>
+          <span className={styles.summary}>{t('queue.summary', { active: activeCount, total: state.tasks.length })}</span>
           <span className={styles.spacer} />
-          {state.paused ? (
-            <button type="button" onClick={onResume}>
-              {t('queue.resume')}
-            </button>
-          ) : (
-            <button type="button" onClick={onPause} disabled={!state.loaded || state.loadError}>
-              {t('queue.pause')}
-            </button>
-          )}
-          <button type="button" onClick={onCancelWaiting} disabled={!state.loaded || state.loadError || !state.tasks.some((task) => task.status === 'waiting')}>
-            {t('queue.cancelWaiting')}
-          </button>
-          <button
-            type="button"
-            onClick={onRetryFailed}
-            disabled={!state.loaded || state.loadError || !state.tasks.some((task) => task.kind === 'apply' && (task.status === 'failed' || task.status === 'rolledback'))}
-          >
-            {t('queue.retryFailed')}
-          </button>
           <button type="button" onClick={onClearFinished} disabled={!state.loaded || state.loadError}>
             {t('queue.clearFinished')}
-          </button>
-          <button type="button" onClick={onClearAll} disabled={!state.loaded || state.loadError || activeCount > 0}>
-            {t('queue.clearAll')}
-          </button>
-          <button type="button" onClick={onRestoreAll} disabled={!state.loaded || state.loadError || activeCount > 0}>
-            {t('queue.restoreAll')}
           </button>
           {/* 收起/展开：原型队列头最后那颗 toggle-btn。只改界面，不写配置。 */}
           <button
@@ -495,7 +439,7 @@ export function TaskPanel({
                         <Fragment key={task.id}>
                           <tr
                             data-task-id={task.id}
-                            className={`${task.id === kids[focus]?.id ? styles.focus : ''} ${task.itemId && task.itemId === activeItemId ? styles.sel : ''}`}
+                            className={`${TASK_ROW_CLASS[projectState(hostsOf.get(task.itemId ?? ''), state.tasks, task.itemId ?? '', result).tone]} ${task.id === kids[focus]?.id ? styles.focus : ''} ${task.itemId && task.itemId === activeItemId ? styles.sel : ''}`.trim() || undefined}
                             onClick={() => pickItem(task.itemId)}
                           >
                             <td>
@@ -553,8 +497,6 @@ export function TaskPanel({
           </div>
         )}
       </section>
-      {/* 全部还原确认框：点队列头那颗只开框，确认才发命令。 */}
-      {restoreAllConfirm}
     </>
   )
 }

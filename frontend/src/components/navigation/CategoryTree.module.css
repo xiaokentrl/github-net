@@ -150,6 +150,14 @@
   color: var(--primary);
 }
 
+/* 项目行/分类行底色跟着统一四档走，状态一变颜色立刻变。 */
+.item.working { background: var(--primary-soft); color: var(--primary); }
+.item.written { background: var(--green-soft); }
+.item.unwritten { background: transparent; }
+.item.failed { background: var(--red-soft); color: var(--red); }
+.cat.hasWorking { background: var(--primary-soft); color: var(--primary); }
+.cat.hasFailed { background: var(--red-soft); color: var(--red); }
+
 .cat.hasApplying::after {
   content: '';
   position: absolute;
@@ -214,7 +222,7 @@
   color: var(--bg);
 }
 
-/* 信息区定宽 58px：分类行放数量徽章（右对齐），项目行放状态点 + 状态字（左对齐）。 */
+/* 信息区：分类行定宽 58px 放数量徽章（右对齐）；项目行只放色点，收窄到 16px。 */
 .infoArea {
   display: flex;
   flex: none;
@@ -229,6 +237,7 @@
 
 .infoStatus {
   justify-content: flex-start;
+  width: 16px;
 }
 
 .count {
@@ -289,33 +298,6 @@
   50% {
     box-shadow: 0 0 0 4px rgba(37, 99, 235, 0);
   }
-}
-
-.stext {
-  flex: none;
-  width: 44px;
-  overflow: hidden;
-  color: var(--text-3);
-  font-size: 11px;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stextError {
-  color: var(--red);
-}
-
-.stextPending {
-  color: var(--primary);
-}
-
-.stextStale {
-  color: var(--amber);
-}
-
-.stextDetected {
-  color: var(--primary);
 }
 
 /* 行尾 20px 空槽：没有可还原项时它是空的，但有项目的行字才不会被挤来挤去。 */

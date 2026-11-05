@@ -134,22 +134,6 @@ func TestDetectDoesNotBlockApplyLane(t *testing.T) {
 	waitSettled(t, q, 2)
 }
 
-func TestClearQueueRefusesWhileDetectRunning(t *testing.T) {
-	exec := newBlocking()
-	q := NewQueueLaned(exec, nil, 2)
-	q.Enqueue(NewRequest{Kind: KindDetect, ItemID: "a", Name: "a"})
-	waitSignal(t, exec.started, 1, "检测启动")
-
-	if _, err := q.ClearQueue(); err == nil {
-		t.Fatal("有检测在跑时清空队列该被拒")
-	}
-	close(exec.release)
-	waitSettled(t, q, 1)
-	if _, err := q.ClearQueue(); err != nil {
-		t.Fatalf("跑完后清空该成功: %v", err)
-	}
-}
-
 func waitSettled(t *testing.T, q *Queue, n int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

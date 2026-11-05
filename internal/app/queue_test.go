@@ -87,170 +87,16 @@ func TestGetTasksOnEmptyQueue(t *testing.T) {
 	svc := NewService("github-net", "test", nil, nil)
 
 	snap := svc.GetTasks()
-	if len(snap.Tasks) != 0 || snap.Sequence != 0 || snap.Paused {
-		t.Fatalf("新服务应是空队列、水位 0、未暂停，实际 %+v", snap)
+	if len(snap.Tasks) != 0 || snap.Sequence != 0 {
+		t.Fatalf("新服务应是空队列、水位 0，实际 %+v", snap)
 	}
 	// 空队列必须是空数组而不是 null：前端直接 map，不该先判空。
 	raw, err := json.Marshal(snap)
 	if err != nil {
 		t.Fatalf("快照无法序列化: %v", err)
 	}
-	if want := `{"tasks":[],"rounds":[],"sequence":0,"paused":false}`; string(raw) != want {
+	if want := `{"tasks":[],"rounds":[],"sequence":0}`; string(raw) != want {
 		t.Errorf("空队列的 JSON 形状不对：want %s got %s", want, raw)
-	}
-}
-
-func TestPauseAndResumeQueueAreIdempotent(t *testing.T) {
-	svc := NewService("github-net", "test", nil, nil)
-
-	if snap := svc.PauseQueue(); !snap.Paused {
-		t.Errorf("暂停后快照应标 paused，实际 %+v", snap)
-	}
-	if snap := svc.PauseQueue(); !snap.Paused {
-		t.Errorf("重复暂停应仍然 paused，实际 %+v", snap)
-	}
-	if snap := svc.ResumeQueue(); snap.Paused {
-		t.Errorf("继续后快照不该标 paused，实际 %+v", snap)
-	}
-	if snap := svc.ResumeQueue(); snap.Paused {
-		t.Errorf("重复继续应仍然未暂停，实际 %+v", snap)
-	}
-	if snap := svc.GetTasks(); snap.Paused {
-		t.Errorf("GetTasks 读到的暂停状态没跟上，实际 %+v", snap)
-	}
-}
-
-func TestCancelTaskRejectsThreeWays(t *testing.T) {
-	svc := NewService("github-net", "test", nil, nil)
-
-	snap, err := svc.CancelTask("   ")
-	if codeOf(t, err) != CodeInvalidTaskID {
-		t.Errorf("空 ID 的码不对: %v", err)
-	}
-	if snap.Tasks != nil || snap.Sequence != 0 {
-		t.Errorf("被拒时不该返回快照内容，实际 %+v", snap)
-	}
-
-	if _, err := svc.CancelTask("t42"); codeOf(t, err) != CodeTaskNotFound {
-		t.Errorf("队列里没有的 ID 码不对: %v", err)
-	}
-
-	svc.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: "ok"})
-	waitFor(t, "这条检测任务落到终态", func() bool {
-		item, ok := findTask(svc.GetTasks(), "t1")
-		return ok && task.IsTerminal(item.Status)
-	})
-	if _, err := svc.CancelTask("t1"); codeOf(t, err) != CodeTaskFinished {
-		t.Errorf("终态任务不该能取消: %v", err)
-	}
-}
-
-func TestCancelWaitingTaskKeepsRunningOne(t *testing.T) {
-	exec := newGatedExecutor()
-	svc := queueService(exec)
-
-	if _, err := svc.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: "hold"}); err != nil {
-		t.Fatalf("排队失败: %v", err)
-	}
-	<-exec.started
-	waitFor(t, "第一条任务进入执行中", func() bool {
-		item, ok := findTask(svc.GetTasks(), "t1")
-		return ok && item.Status == task.StatusRunning
-	})
-
-	second, err := svc.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: "later"})
-	if err != nil {
-		t.Fatalf("排队失败: %v", err)
-	}
-	snap, err := svc.CancelTask(second.ID)
-	if err != nil {
-		t.Fatalf("取消等待中的任务返回错误: %v", err)
-	}
-	dead, _ := findTask(snap, second.ID)
-	if dead.Status != task.StatusCancelled {
-		t.Errorf("等待中的任务没落到已取消，实际 %s", dead.Status)
-	}
-	// 没开始过的任务没有耗时：界面显示「—」，不给一个假数字。
-	if dead.Duration != "" || dead.StartedAt != "" {
-		t.Errorf("被取消的等待任务不该有开始时间或耗时，实际 %+v", dead)
-	}
-	running, _ := findTask(snap, "t1")
-	if running.Status != task.StatusRunning {
-		t.Errorf("取消一条任务不该影响正在执行的那条，实际 %s", running.Status)
-	}
-
-	close(exec.hold)
-	waitFor(t, "执行中的任务收口", func() bool {
-		item, ok := findTask(svc.GetTasks(), "t1")
-		return ok && task.IsTerminal(item.Status)
-	})
-}
-
-func TestRetryFailedTasksPerItem(t *testing.T) {
-	exec := &gatedExecutor{
-		hold:    make(chan struct{}),
-		started: make(chan struct{}, 1),
-		outcomes: map[string]task.Outcome{
-			"apply-bad": {Status: task.StatusFailed, Message: "候选地址没能应用"},
-		},
-	}
-	svc := queueService(exec)
-
-	results := svc.RetryFailedTasks(nil)
-	if len(results) != 0 {
-		t.Fatalf("空请求应给空结果，实际 %+v", results)
-	}
-	// 空结果也要序列化成 []：前端直接遍历，不该先判 null。
-	raw, err := json.Marshal(results)
-	if err != nil {
-		t.Fatalf("结果无法序列化: %v", err)
-	}
-	if string(raw) != "[]" {
-		t.Errorf("空请求的 JSON 应是 [] 而不是 null，实际 %s", raw)
-	}
-
-	// 先造出一条失败的应用任务，再暂停队列：暂停后新建的重试任务会停在等待，
-	// 断言才不会被后台协程抢先。
-	bad, _ := svc.tasks.Enqueue(task.NewRequest{Kind: task.KindApply, ItemID: "apply-bad"})
-	waitFor(t, "应用任务落到失败", func() bool {
-		item, ok := findTask(svc.GetTasks(), bad.ID)
-		return ok && item.Status == task.StatusFailed
-	})
-	detect, _ := svc.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: "detect-waiting"})
-	svc.tasks.Pause()
-
-	results = svc.RetryFailedTasks([]string{bad.ID, detect.ID, "t99", bad.ID})
-	if len(results) != 4 {
-		t.Fatalf("逐项结果应有 4 条，实际 %+v", results)
-	}
-	if results[0].SourceTaskID != bad.ID || results[0].Reason != "" || results[0].TaskID == "" {
-		t.Errorf("失败的应用任务应被接受并给新任务 ID，实际 %+v", results[0])
-	}
-	if results[1].TaskID != "" || results[1].Reason != "只有应用任务支持重试，检测任务请直接重新检测" {
-		t.Errorf("检测任务该按类型拒掉，实际 %+v", results[1])
-	}
-	if results[2].TaskID != "" || results[2].Reason != "队列里已经没有这条任务记录" {
-		t.Errorf("队列里没有的 ID 该给原因，实际 %+v", results[2])
-	}
-	if results[3].TaskID != "" || results[3].Reason != "这个项目已经有在途任务，先等它结束" {
-		t.Errorf("同项目已有在途任务时该拒掉第二次重试，实际 %+v", results[3])
-	}
-
-	snap := svc.GetTasks()
-	retry, ok := findTask(snap, results[0].TaskID)
-	if !ok {
-		t.Fatalf("重试任务没进快照，快照 %+v", snap.Tasks)
-	}
-	if retry.RetryOf != bad.ID || retry.Status != task.StatusWaiting || retry.ItemID != "apply-bad" {
-		t.Errorf("重试任务该指回原任务并排在队尾，实际 %+v", retry)
-	}
-	original, _ := findTask(snap, bad.ID)
-	if original.Status != task.StatusFailed {
-		t.Errorf("原任务的终态不该被重试改写，实际 %s", original.Status)
-	}
-	// 等待中的那条重试记录本身不是失败态，再点一次会被状态门挡住。
-	if again := svc.RetryFailedTasks([]string{retry.ID}); again[0].Reason != "这条任务不是失败或已回滚状态" {
-		t.Errorf("非失败终态该按状态拒掉，实际 %+v", again[0])
 	}
 }
 
@@ -263,65 +109,28 @@ func TestClearFinishedTasksKeepsActiveOnes(t *testing.T) {
 		item, ok := findTask(svc.GetTasks(), done.ID)
 		return ok && item.Status == task.StatusDone
 	})
-	svc.tasks.Pause()
 	waiting, _ := svc.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: "hold"})
+	<-exec.started
 
 	snap := svc.ClearFinishedTasks()
 	if _, ok := findTask(snap, done.ID); ok {
 		t.Errorf("已结束的任务该被清掉，快照 %+v", snap.Tasks)
 	}
 	if _, ok := findTask(snap, waiting.ID); !ok {
-		t.Errorf("等待中的任务不该被清掉，快照 %+v", snap.Tasks)
-	}
-
-	svc.tasks.Resume()
-	<-exec.started
-	waitFor(t, "剩下的任务进入执行中", func() bool {
-		item, ok := findTask(svc.GetTasks(), waiting.ID)
-		return ok && item.Status == task.StatusRunning
-	})
-	if _, err := svc.CancelTask(waiting.ID); err != nil {
-		t.Fatalf("取消执行中的任务返回错误: %v", err)
-	}
-	if snap := svc.ClearFinishedTasks(); len(snap.Tasks) != 0 {
-		t.Errorf("已取消属于终态，该被清掉，快照 %+v", snap.Tasks)
-	}
-}
-
-func TestClearQueueRejectsWhileRunning(t *testing.T) {
-	exec := newGatedExecutor()
-	svc := queueService(exec)
-
-	svc.tasks.Enqueue(task.NewRequest{Kind: task.KindDetect, ItemID: "hold"})
-	<-exec.started
-	waitFor(t, "任务进入执行中", func() bool {
-		item, ok := findTask(svc.GetTasks(), "t1")
-		return ok && item.Status == task.StatusRunning
-	})
-
-	snap, err := svc.ClearQueue()
-	if codeOf(t, err) != CodeQueueRunning {
-		t.Errorf("执行中清空队列的码不对: %v", err)
-	}
-	if snap.Tasks != nil {
-		t.Errorf("被拒时不该返回快照内容，实际 %+v", snap.Tasks)
+		t.Errorf("还在跑的任务不该被清掉，快照 %+v", snap.Tasks)
 	}
 
 	close(exec.hold)
-	waitFor(t, "任务收口", func() bool {
-		item, ok := findTask(svc.GetTasks(), "t1")
+	waitFor(t, "剩下的任务收口", func() bool {
+		item, ok := findTask(svc.GetTasks(), waiting.ID)
 		return ok && task.IsTerminal(item.Status)
 	})
-	snap, err = svc.ClearQueue()
-	if err != nil {
-		t.Fatalf("没有任务在跑时清空队列失败: %v", err)
+	if snap := svc.ClearFinishedTasks(); len(snap.Tasks) != 0 {
+		t.Errorf("收口之后该被清掉，快照 %+v", snap.Tasks)
 	}
-	if len(snap.Tasks) != 0 {
-		t.Errorf("清空后快照应是空队列，实际 %+v", snap.Tasks)
-	}
-	// 水位不回退：前端拿它判断事件是否已经包含在快照里，清队列不该把它归零。
-	if snap.Sequence == 0 {
-		t.Errorf("清空队列不该把事件水位归零，实际 %+v", snap)
+	// 水位不回退：前端拿它判断事件是否已经包含在快照里，清理不该把它归零。
+	if seq := svc.GetTasks().Sequence; seq == 0 {
+		t.Errorf("清理已结束不该把事件水位归零，实际 %d", seq)
 	}
 }
 
@@ -427,9 +236,10 @@ func TestShutdownTaskQueueStopsDriver(t *testing.T) {
 	}
 }
 
-// TestSevenQueueCommandsAreBound 是形状门：这 7 条必须都在 Service 上、签名对得上，
-// 而「停掉队列」必须不是 Service 的方法——Wails 会把每个导出方法都绑成前端能调的命令。
-func TestSevenQueueCommandsAreBound(t *testing.T) {
+// TestTwoQueueCommandsAreBound 是形状门：队列命令只剩这两条，签名必须对得上，
+// 而「停掉队列」「暂停」「取消」「重试」「清空整队」必须不是 Service 的方法——
+// Wails 会把每个导出方法都绑成前端能调的命令，界面不要的东西就不该有这条路。
+func TestTwoQueueCommandsAreBound(t *testing.T) {
 	svcType := reflect.TypeOf(&Service{})
 	want := []struct {
 		name   string
@@ -438,12 +248,7 @@ func TestSevenQueueCommandsAreBound(t *testing.T) {
 		reason string
 	}{
 		{"GetTasks", nil, []reflect.Type{reflect.TypeOf(task.Snapshot{})}, "前端取快照"},
-		{"PauseQueue", nil, []reflect.Type{reflect.TypeOf(task.Snapshot{})}, "暂停按钮"},
-		{"ResumeQueue", nil, []reflect.Type{reflect.TypeOf(task.Snapshot{})}, "继续按钮"},
-		{"CancelTask", []reflect.Type{reflect.TypeOf("")}, []reflect.Type{reflect.TypeOf(task.Snapshot{}), reflect.TypeOf((*error)(nil)).Elem()}, "单条取消"},
-		{"RetryFailedTasks", []reflect.Type{reflect.TypeOf([]string{})}, []reflect.Type{reflect.TypeOf([]task.RetryResult{})}, "批量重试"},
 		{"ClearFinishedTasks", nil, []reflect.Type{reflect.TypeOf(task.Snapshot{})}, "清理已结束"},
-		{"ClearQueue", nil, []reflect.Type{reflect.TypeOf(task.Snapshot{}), reflect.TypeOf((*error)(nil)).Elem()}, "清空队列"},
 	}
 	for _, item := range want {
 		method, ok := svcType.MethodByName(item.name)
@@ -470,7 +275,10 @@ func TestSevenQueueCommandsAreBound(t *testing.T) {
 		}
 	}
 
-	for _, forbidden := range []string{"Shutdown", "ShutdownTaskQueue", "Enqueue", "PruneCaches"} {
+	for _, forbidden := range []string{
+		"Shutdown", "ShutdownTaskQueue", "Enqueue", "PruneCaches",
+		"PauseQueue", "ResumeQueue", "CancelTask", "RetryFailedTasks", "ClearQueue",
+	} {
 		if _, ok := svcType.MethodByName(forbidden); ok {
 			t.Errorf("Service 上不该有 %s 这个方法：前端能调到它就越过边界", forbidden)
 		}

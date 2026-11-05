@@ -350,3 +350,59 @@ func TestRestoreAllHostsDirectCommand(t *testing.T) {
 		t.Fatalf("服务不可用该带 helper_unavailable 码，实际 %v", err)
 	}
 }
+
+// hasAppliedMark 看这个项目最近一轮里还有没有「当前生效」标记。
+func hasAppliedMark(s *Service, itemID string) bool {
+	view, ok := s.detectResults.view(itemID)
+	if !ok {
+		return false
+	}
+	for _, h := range view.Hosts {
+		for _, c := range h.Candidates {
+			if c.Applied {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// 全部还原是一笔不进队列的命令，没有执行器来重标「当前生效」。
+// 成功后必须把内存里所有项目的标记清掉：界面还原后会重拉结果，
+// 标记留着就等于把已经还原掉的 IP 继续说成「当前写入」。
+func TestRestoreAllHostsClearsAppliedMarks(t *testing.T) {
+	// 服务回 0 项也算「这笔命令成功、系统里已经没有本工具写的映射」，一样要清。
+	for _, restored := range []int{2, 0} {
+		svc := newApplyService(t, &fakePriv{restoreAll: restored})
+		putAvailableResult(svc, "api")
+		putAvailableResult(svc, "bare")
+		// 先摆出应用成功后的现场：两个项目各有候选带着「当前生效」。
+		svc.detectResults.markApplied("api", map[string][]string{"api.github.com": {"203.0.113.11"}})
+		svc.detectResults.markApplied("bare", map[string][]string{"api.github.com": {"203.0.113.10"}})
+		if !hasAppliedMark(svc, "api") || !hasAppliedMark(svc, "bare") {
+			t.Fatalf("前提不成立：服务回 %d 项时，应用过之后该有「当前生效」标记", restored)
+		}
+
+		n, err := svc.RestoreAllHosts()
+		if err != nil || n != restored {
+			t.Fatalf("全量还原该回 (%d, nil)，实际 (%d, %v)", restored, n, err)
+		}
+		if hasAppliedMark(svc, "api") || hasAppliedMark(svc, "bare") {
+			t.Fatalf("服务回 %d 项：还原成功后所有项目的「当前生效」标记都该清掉", restored)
+		}
+	}
+}
+
+// 还原没成就是没成，现场一个字都不动：失败时不许把标记清掉，界面该继续显示还原前的样子。
+func TestRestoreAllHostsFailureKeepsAppliedMarks(t *testing.T) {
+	svc := newApplyService(t, &fakePriv{err: privilege.ErrHelperUnavailable})
+	putAvailableResult(svc, "api")
+	svc.detectResults.markApplied("api", map[string][]string{"api.github.com": {"203.0.113.11"}})
+
+	if _, err := svc.RestoreAllHosts(); codeOf(t, err) != CodeHelperUnavailable {
+		t.Fatal("服务不可用该带 helper_unavailable 码")
+	}
+	if !hasAppliedMark(svc, "api") {
+		t.Fatal("还原失败时不该动现场：「当前生效」标记要留着")
+	}
+}

@@ -19,8 +19,6 @@ export const APP_ERROR_CODES = [
   'strategy_unavailable',
   // 队列
   'invalid_task_id',
-  'task_not_found',
-  'task_finished',
   'queue_running',
   // 检测与应用/还原
   'invalid_item_id',

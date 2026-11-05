@@ -2,7 +2,7 @@ import type { AppStatus } from '../../../bindings/github.com/xiaokentrl/github-n
 import type { AutomationStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Config } from '../../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import { profileLabel } from '../../features/settings/profileOptions'
-import { formatInteger } from '../../i18n/formatters'
+import { formatDateTime, formatInteger, formatRelativeTime } from '../../i18n/formatters'
 import { t } from '../../i18n'
 import styles from './AppShell.module.css'
 
@@ -86,6 +86,7 @@ export function StatusBar({
   dropped,
   automation,
   menuNamesById,
+  lastDetectAt,
 }: {
   status: AppStatus | null
   settings: Config | null
@@ -94,6 +95,7 @@ export function StatusBar({
   dropped: number
   automation: AutomationStatus | null
   menuNamesById: Record<string, string>
+  lastDetectAt: string | null
 }) {
   return (
     <>
@@ -109,8 +111,13 @@ export function StatusBar({
           </span>
         </>
       )}
-      {/* 检测任务还没接入，所以「上次检测」只能是未检测，不能显示时间。 */}
-      <span className={styles.item}>{t('statusbar.lastDetect', { value: t('statusbar.lastDetect.none') })}</span>
+      {/* 「上次检测」是全应用最近一轮的测完时间：可见文字用短的相对时间，悬停给完整的绝对时间。
+          状态栏格子本来带省略号，长了自己截断，不会把这一行撑高。 */}
+      <span className={styles.item} title={lastDetectAt ? formatDateTime(lastDetectAt) : undefined}>
+        {t('statusbar.lastDetect', {
+          value: lastDetectAt ? formatRelativeTime(lastDetectAt) : t('statusbar.lastDetect.none'),
+        })}
+      </span>
       <span className={styles.item}>{t('statusbar.sequence', { sequence, dropped })}</span>
       {/* 启动后那条自动链跑到哪一步。只有真跑过才占这一格，没跑过时这里不出现。 */}
       {automation && <span className={styles.item}>{automationText(automation, menuNamesById)}</span>}

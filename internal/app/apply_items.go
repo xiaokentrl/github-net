@@ -171,6 +171,12 @@ func (s *Service) RestoreAllHosts() (int, error) {
 	if err != nil {
 		return 0, privilegePublicError(err)
 	}
+	// 全部还原不进队列，没有执行器来重标「当前生效」。命令成功就说明系统 Hosts 上
+	// 已经没有本工具写的映射，这里把内存里所有项目的标记清掉；界面随后重拉结果才不会
+	// 继续把已经还原掉的 IP 显示成「当前写入」。失败时上面已经返回，现场一个字不动。
+	if s.detectResults != nil {
+		s.detectResults.clearApplied()
+	}
 	return n, nil
 }
 

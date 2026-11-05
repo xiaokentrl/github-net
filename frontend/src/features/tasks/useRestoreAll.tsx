@@ -1,14 +1,14 @@
 import { useCallback, useState } from 'react'
-import { clearQueue, getTasks, restoreAllHosts } from '../../api/client'
+import { getTasks, restoreAllHosts } from '../../api/client'
 import { Dialog } from '../../components/ui/Dialog'
 import { pushNotice } from '../../components/ui/toastStore'
 import uiStyles from '../../components/ui/ui.module.css'
 import { t } from '../../i18n'
 import { applyTaskSnapshot, refreshAllResults, useTaskQueue } from './taskStore'
 
-// 「恢复」只有这一份实现：工具栏那颗和队列面板那颗都走这里，免得同一条规则写两遍。
-// 规则照原型（第 3740–3768 行）：队列里还有没落定的任务就先不动；用户确认后才让后端一笔原子还原；
-// 真还原过就把队列记录清掉，最后重拉快照。失败交给调用方挂在各自的错误位置。
+// 「恢复」只有这一份实现：工具栏那颗走这里，队列面板不放还原按钮。
+// 规则：队列里还有没落定的任务就先不动；用户确认后才让后端一笔原子还原；还原完重拉一遍快照。
+// 队列记录不在这里清——恢复不进队列，历史轮次留着让用户自己按「清空已完成」收。
 // onRestored 是「Hosts 变了，去重读一遍」的出口：还原不进队列，也就没有任务落定事件，
 // 不在这里喊一声，树上的「已替换/部分生效」会一直停在还原前的样子。
 //
@@ -31,11 +31,9 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
     setAskOpen(false)
     restoreAllHosts()
       .then((count) => {
-        if (count === 0) return undefined
         // 全部还原不进队列、也没有任务落定事件：除了树里那行状态退回「未替换」，
         // 界面上本来没有别的回执，这里补一条。成功档是回执，读完自己走。
-        pushNotice('success', t('hosts.restoreAll.done', { count }))
-        return clearQueue().catch(() => undefined)
+        if (count > 0) pushNotice('success', t('hosts.restoreAll.done', { count }))
       })
       .then(() => getTasks().then(applyTaskSnapshot))
       // 「当前写入 IP」的权威在后端检测结果里，还原后整批重拉一遍。

@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"strings"
 
 	"github.com/xiaokentrl/github-net/internal/event"
 	"github.com/xiaokentrl/github-net/internal/task"
@@ -45,52 +44,11 @@ func (s *Service) GetTasks() task.Snapshot {
 	return s.tasks.Snapshot()
 }
 
-// PauseQueue 暂停领取新的等待任务，已经在跑的那条不受影响，返回暂停后的完整快照。
-// 重复调用幂等：界面上按快照里的 paused 显示，而不是数自己点了几次。
-func (s *Service) PauseQueue() task.Snapshot {
-	s.tasks.Pause()
-	return s.tasks.Snapshot()
-}
-
-// ResumeQueue 恢复领取，按原队列顺序继续，重复调用同样幂等。
-func (s *Service) ResumeQueue() task.Snapshot {
-	s.tasks.Resume()
-	return s.tasks.Snapshot()
-}
-
-// CancelTask 取消一条排队中或执行中的任务，返回取消后的完整快照。
-// 空 ID 是调用方给错了东西，跟「队列里没有这条记录」分成两个错误码。
-func (s *Service) CancelTask(taskID string) (task.Snapshot, error) {
-	id := strings.TrimSpace(taskID)
-	if id == "" {
-		return task.Snapshot{}, NewError(CodeInvalidTaskID, "任务 ID 是空的，没有要取消哪一条", nil)
-	}
-	if _, err := s.tasks.Cancel(id); err != nil {
-		return task.Snapshot{}, ToPublicError(err)
-	}
-	return s.tasks.Snapshot(), nil
-}
-
-// RetryFailedTasks 逐项处理重试请求：接受的原任务在队尾新建一条重试任务，
-// 不接受的项给一句原因。一次请求里两项互不影响，所以整条命令没有失败面，只回数组。
-func (s *Service) RetryFailedTasks(taskIDs []string) []task.RetryResult {
-	return s.tasks.RetryFailed(taskIDs)
-}
-
 // ClearFinishedTasks 移除全部终态记录，保留等待中与执行中的任务，返回清理后的快照。
 // 没有终态记录时什么都不删，也算成功。
 func (s *Service) ClearFinishedTasks() task.Snapshot {
 	s.tasks.ClearFinished()
 	return s.tasks.Snapshot()
-}
-
-// ClearQueue 移除全部记录；有任务正在执行时拒绝（queue_running），
-// 否则正在跑的那条会从界面上消失，只剩一个没人认领的后台改动。
-func (s *Service) ClearQueue() (task.Snapshot, error) {
-	if _, err := s.tasks.ClearQueue(); err != nil {
-		return task.Snapshot{}, ToPublicError(err)
-	}
-	return s.tasks.Snapshot(), nil
 }
 
 // ShutdownTaskQueue 在应用退出时停掉这条队列：不再领取新任务，取消正在执行的那条，

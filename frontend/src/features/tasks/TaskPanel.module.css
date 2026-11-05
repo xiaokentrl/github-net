@@ -347,8 +347,9 @@
   opacity: 1;
 }
 
+/* 回滚也算失败，统一用红色，不再单独留一档琥珀。 */
 .dot-rolledback {
-  background: var(--amber);
+  background: var(--red);
   opacity: 1;
 }
 
@@ -404,13 +405,21 @@
   border-bottom: none;
 }
 
-.qtable2 tr.focus td {
-  background: var(--primary-soft);
+/* 焦点/选中改用左缘色条，不再抢背景：背景专给状态色用，
+   失败行不会因为「正好是当前项目」被画成绿色。 */
+.qtable2 tr.focus td:first-child {
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
-.qtable2 tr.sel td {
-  background: var(--green-soft);
+.qtable2 tr.sel td:first-child {
+  box-shadow: inset 3px 0 0 var(--green);
 }
+
+/* 队列明细行底色统一到全应用四档。涂在 td 上，悬停也不被盖掉。 */
+tr.qWorking td, tr.qWorking:hover td { background: var(--primary-soft); }
+tr.qFailed td, tr.qFailed:hover td { background: var(--red-soft); }
+tr.qWritten td, tr.qWritten:hover td { background: var(--green-soft); }
+tr.qUnwritten td, tr.qUnwritten:hover td { background: var(--band); }
 
 .qtable2 tbody tr {
   cursor: pointer;

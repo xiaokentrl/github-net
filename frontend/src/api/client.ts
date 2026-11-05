@@ -1,13 +1,11 @@
 // 组件不直接调用 Wails 绑定，只走这一层；这里也不写业务规则。
-// 后端 28 条命令，这层登记界面用得上的 25 条（另有 Ping、RuntimeInfo、SettingsStore 三条没用到）。
+// 后端 23 条命令，这层登记界面用得上的 20 条（另有 Ping、RuntimeInfo、SettingsStore 三条没用到）。
 // 登记不等于界面都在用：加速方法这 2 条从本轮起由详情页的选择区调用。
 import {
   ApplyItems,
-  CancelTask,
   ClearFinishedTasks,
   ClearSourcesCache,
   DetectBudget,
-  ClearQueue,
   DetectItems,
   GetAppStatus,
   GetAutomationStatus,
@@ -20,11 +18,8 @@ import {
   CheckForUpdates,
   DownloadUpdate,
   OpenHosts,
-  PauseQueue,
   RestoreAllHosts,
-  RetryFailedTasks,
   RestoreItems,
-  ResumeQueue,
   SaveSettings,
   SelectStrategy,
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/service'
@@ -32,7 +27,7 @@ import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/inte
 import type { AppStatus, DetectBudgetPreview, DetectResultView, ItemsSnapshot, PoolEntryView, SourcesCacheResult, StrategySnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
-import type { RetryResult, Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
+import type { Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { Info as UpdateInfo } from '../../bindings/github.com/xiaokentrl/github-net/internal/updater/models'
 import type { UpdateDownloadResult } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 
@@ -148,29 +143,8 @@ export function getTasks(): Promise<Snapshot> {
   return GetTasks()
 }
 
-export function pauseQueue(): Promise<Snapshot> {
-  return PauseQueue()
-}
-
-export function resumeQueue(): Promise<Snapshot> {
-  return ResumeQueue()
-}
-
-export function cancelTask(taskId: string): Promise<Snapshot> {
-  return CancelTask(taskId)
-}
-
 export function clearFinishedTasks(): Promise<Snapshot> {
   return ClearFinishedTasks()
-}
-
-export function clearQueue(): Promise<Snapshot> {
-  return ClearQueue()
-}
-
-// 重试失败/已回滚的应用任务：后端建 retryOf 指回原任务的新任务，原记录保持终态。
-export function retryFailedTasks(taskIds: string[]): Promise<RetryResult[] | null> {
-  return RetryFailedTasks(taskIds)
 }
 
 // 批量检测前的预算预估：Needed 盖不全时界面先请用户确认再发起。

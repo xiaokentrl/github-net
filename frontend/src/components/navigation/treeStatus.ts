@@ -1,24 +1,25 @@
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import type { DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { Kind, Status } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
-import { pickBestCandidate } from '../../features/detect/candidateChoice'
+import { PROGRESS_LABEL, TONE_LABEL, noUsableResult, type Tone } from '../../features/tasks/statusTone'
+import type { DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 
-// 树上那一行的状态字与色点：把「后端读出来的 Hosts 状态」和「队列里正在跑的那几条」折算成一句话。
-// 原型每个项目自己维护一套 8 档生命周期（ItemMeta，第 1299–1308 行），那是演示状态机；
-// 这里不照抄那套机器，只照抄它显示出来的那几种说法，每个词都必须由后端真实数据推出来。
+// 树不再自己发明档位：用和表格、徽章、队列同一套四档、同一批词、同一批颜色。
+// 这里只做一件事——把队列折算成「每个项目现在在做什么 / 有没有没做成」。
+export type LiveKind = 'detecting' | 'applying' | 'restoring' | 'failed'
 
-export type LiveKind = 'detecting' | 'applying' | 'restoring'
-
-export type Tone = 'unset' | 'applied' | 'stale' | 'error' | 'pending' | 'detected'
-
-export type TreeStatus = { key: string; tone: Tone }
+export type TreeStatus = { key: string; tone: Tone; reason?: string }
 
 const ACTIVE = new Set<string>([Status.StatusWaiting, Status.StatusRunning, Status.StatusRestoring])
+const FAILED = new Set<string>([Status.StatusFailed, Status.StatusRolledback])
 
-// 队列折算成「哪一项正在被做什么」。只看还没跑完的任务：
-// 终态记录要等用户点「清理已结束」才离开队列，让它们长期占着树上那一行的颜色就成了假象。
+// 在途优先于失败：同一个项目重新检测时，先显示正在检测。
 export function liveByItem(tasks: { itemId: string; kind: Kind; status: Status }[]): Map<string, LiveKind> {
   const out = new Map<string, LiveKind>()
+  for (const task of tasks) {
+    if (!task.itemId || !FAILED.has(task.status)) continue
+    out.set(task.itemId, 'failed')
+  }
   for (const task of tasks) {
     if (!task.itemId || !ACTIVE.has(task.status)) continue
     if (task.kind === Kind.KindDetect) out.set(task.itemId, 'detecting')
@@ -28,56 +29,21 @@ export function liveByItem(tasks: { itemId: string; kind: Kind; status: Status }
   return out
 }
 
-function usableCandidates(result: DetectResultView | undefined) {
-  return (result?.hosts ?? []).flatMap((host) => (host.candidates ?? []).filter((c) => c.status === 'available'))
-}
-
-// 一句话状态。顺序是「正在做的事 > 后端报的坏消息 > 查出来还没用的好消息 > Hosts 现状」：
-// 界面同一时刻只能显示一个词，先说用户此刻最该知道的那件。
-export function itemStatus(status: HostsStatus, live: LiveKind | undefined, result: DetectResultView | undefined): TreeStatus {
-  if (live === 'detecting') return { key: 'tree.status.detecting', tone: 'pending' }
-  if (live === 'applying') return { key: 'tree.status.applying', tone: 'pending' }
-  if (live === 'restoring') return { key: 'tree.status.restoring', tone: 'pending' }
-
-  if (status === HostsStatus.HostsConflict) return { key: 'badge.conflict', tone: 'error' }
-  if (status === HostsStatus.HostsReadFailed) return { key: 'badge.readFailed', tone: 'error' }
-
-  // 「待更新」要有实义（拍板 2026-11-03）：按主机名判断——有域名没被当前写入覆盖，
-  // 或写入的不是它当下的最优可用（新检测找到更快的 IP），才叫待更新。
-  // 旧条件「存在不是当前生效的候选」在一个域名有多个可用地址时永远成立，菜单就常驻待更新。
-  const usable = usableCandidates(result)
-  if (usable.length > 0 && (status === HostsStatus.HostsApplied || status === HostsStatus.HostsPartial)) {
-    const byHost = new Map<string, typeof usable>()
-    for (const c of usable) {
-      const list = byHost.get(c.hostname) ?? []
-      list.push(c)
-      byHost.set(c.hostname, list)
-    }
-    let allCovered = true
-    let allBest = true
-    for (const list of byHost.values()) {
-      const best = pickBestCandidate(list)
-      const appliedC = list.find((c) => c.applied)
-      if (!appliedC) allCovered = false
-      if (appliedC && best && appliedC.ip !== best.ip) allBest = false
-    }
-    return allCovered && allBest
-      ? { key: 'badge.applied', tone: 'applied' }
-      : { key: 'tree.status.stale', tone: 'stale' }
+// 四档判定，和 statusTone.projectState 同规则：在跑的 > 坏消息 > 逐条写入事实。
+// 「已写Hosts」只看后端现读的 entries[].written，不看检测结果，
+// 页面刷新、检测完成、异步回读都不会让树自己跳色。
+export function itemStatus(hosts: HostsState | undefined, live: LiveKind | undefined, result?: DetectResultView): TreeStatus {
+  if (live === 'detecting') return { key: PROGRESS_LABEL.detecting, tone: 'working' }
+  if (live === 'applying') return { key: PROGRESS_LABEL.applying, tone: 'working' }
+  if (live === 'restoring') return { key: PROGRESS_LABEL.restoring, tone: 'working' }
+  if (live === 'failed') return { key: TONE_LABEL.failed, tone: 'failed' }
+  if (hosts?.status === HostsStatus.HostsConflict || hosts?.status === HostsStatus.HostsReadFailed) {
+    return { key: TONE_LABEL.failed, tone: 'failed', reason: hosts.message }
   }
-  if (usable.length > 0 && (status === HostsStatus.HostsNone || status === HostsStatus.HostsUnknown || status === HostsStatus.$zero)) {
-    return { key: 'tree.status.detected', tone: 'detected' }
-  }
-
-  switch (status) {
-    case HostsStatus.HostsApplied:
-      return { key: 'badge.applied', tone: 'applied' }
-    case HostsStatus.HostsPartial:
-      // 部分生效本身就是「还不齐」，用琥珀色点，和待更新同一档颜色。
-      return { key: 'badge.partial', tone: 'stale' }
-    case HostsStatus.HostsNone:
-      return { key: 'badge.none', tone: 'unset' }
-    default:
-      return { key: 'badge.unknown', tone: 'unset' }
-  }
+  // 这一轮测完一个可用候选都没有：色点和行底色走失败档（红），和表格同一口径。
+  if (noUsableResult(result)) return { key: TONE_LABEL.failed, tone: 'failed' }
+  const written = (hosts?.entries ?? []).some((entry) => entry.written && entry.ip)
+  return written
+    ? { key: TONE_LABEL.written, tone: 'written' }
+    : { key: TONE_LABEL.unwritten, tone: 'unwritten' }
 }

@@ -80,7 +80,7 @@ func (e *dispatchExecutor) apply(t task.Task, report task.Report) task.Outcome {
 }
 
 // markApplied 用 appliedIPs 接缝现读 Hosts，重标该项目候选的「当前生效」；
-// 接缝没接（纯测试场景）就跳过。还原成功走 markApplied(id, nil) 清光标记。
+// 接缝没接（纯测试场景）就跳过。全部还原不走队列，它的标记由 RestoreAllHosts 统一清掉。
 func (e *dispatchExecutor) markApplied(itemID string, hostnames []string) {
 	if e.appliedIPs == nil {
 		return

@@ -350,6 +350,20 @@
   font-size: 12px;
 }
 
+/* 这一轮一个可用候选都没有：可用数那一格用红色，和整行的失败档同一个红。 */
+.noAvailable {
+  color: var(--red);
+  font-weight: 600;
+}
+
+/* 有可用 IP：显示最优 IP 和可用数的那两格铺浅绿底，用四档里「已写入」同一个绿。
+   选择器带 .itemTable tbody tr，压过后面那四条整行底色，鼠标悬停时也不被盖掉。 */
+.itemTable tbody tr td.hasAvailable,
+.itemTable tbody tr:hover td.hasAvailable { background: var(--green-soft); }
+
+/* 还原弹框里那一段检测数据：这一轮有可用 IP 就铺同一块浅绿底。 */
+.boxLines.boxLinesOk { background: var(--green-soft); }
+
 /* 当前写入列：每个域名→地址一条独立行，行内自动换行兜长内容。 */
 .writeStack {
   display: block;
@@ -447,32 +461,15 @@
   line-height: 1.45;
 }
 
-/* 行底色 = 状态（拍板 2026-11-04）：检测和应用都带色——
-   检测中金、应用中主色浅底、还原中琥珀；结果档：已应用绿、部分生效琥珀、冲突/读失败红。
-   选中行用左缘主色条标识，不覆盖状态底色。 */
-.rowDetecting {
-  background: var(--gold-soft-2);
-}
+/* 全应用统一的四档行底色：处理中蓝、失败红、已写Hosts绿、未写Hosts灰。
+   底色涂在 td 上：悬停灰底只涂 tr，管不到 td，状态色在鼠标悬停时也不会被盖掉。 */
+tr.rowWorking td, tr.rowWorking:hover td { background: var(--primary-soft); }
+tr.rowFailed td, tr.rowFailed:hover td { background: var(--red-soft); }
+tr.rowWritten td, tr.rowWritten:hover td { background: var(--green-soft); }
+tr.rowUnwritten td, tr.rowUnwritten:hover td { background: var(--band); }
 
-.rowApplying {
-  background: var(--primary-soft);
-}
-
-.rowRestoring {
-  background: var(--amber-soft);
-}
-
-.rowApplied {
-  background: var(--green-soft);
-}
-
-.rowPartial {
-  background: var(--amber-soft);
-}
-
-.rowError {
-  background: var(--red-soft);
-}
+/* 这一列只列本工具当前写入的条目，统一用绿色底，和整行底色同一套颜色。 */
+.writeItemWritten { background: var(--green-soft); }
 
 tr.rowSel td,
 tr.rowSel th {

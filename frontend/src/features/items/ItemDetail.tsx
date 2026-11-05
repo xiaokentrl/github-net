@@ -11,6 +11,7 @@ import uiStyles from '../../components/ui/ui.module.css'
 import { pickBestCandidate } from '../detect/candidateChoice'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
 import { ensureLastResults, isTerminalTask, useTaskQueue } from '../tasks/taskStore'
+import { projectState, toneForCandidate, toneForItem, type Tone } from '../tasks/statusTone'
 import styles from './ItemDetail.module.css'
 import detectStyles from './DetectResult.module.css'
 
@@ -26,23 +27,27 @@ const CANDIDATE_KEY: Record<string, string> = {
   untested: 'detect.candidate.untested',
 }
 
-// 候选行的行底色按状态着色（拍板 2026-11-04）：可用绿、不可用红、超时琥珀、
-// 检测/应用进行中（排队/探测）主色浅底——检测和应用共用同一套，预检时行也带色。
-const CANDIDATE_ROW_TONE: Record<string, string> = {
-  available: detectStyles.rowAvailable,
-  unavailable: detectStyles.rowUnavailable,
-  timeout: detectStyles.rowTimeout,
-  probing: detectStyles.rowPending,
-  queued: detectStyles.rowPending,
+// 四档 → 本表的行底色类。Record<Tone, string> 保证四档都有落点。
+const TONE_ROW_CLASS: Record<Tone, string> = {
+  working: styles.rowWorking,
+  failed: styles.rowFailed,
+  written: styles.rowWritten,
+  unwritten: styles.rowUnwritten,
 }
 
-// 八档分到原型那四种徽章色（原型 .tag 第 290–292 行只有三种，这里多出来的都归中性）。
-const CANDIDATE_TONE: Record<string, string> = {
-  available: detectStyles.tagOk,
-  unavailable: detectStyles.tagFail,
-  timeout: detectStyles.tagWarn,
-  probing: detectStyles.tagBusy,
-  queued: detectStyles.tagBusy,
+// 候选表也用同一套四档颜色，明细文案仍说「可用/超时/没测上」。
+const CANDIDATE_ROW_CLASS: Record<Tone, string> = {
+  working: detectStyles.rowWorking,
+  failed: detectStyles.rowFailed,
+  written: detectStyles.rowWritten,
+  unwritten: detectStyles.rowUnwritten,
+}
+
+const CANDIDATE_TAG_CLASS: Record<Tone, string> = {
+  working: detectStyles.tagBusy,
+  failed: detectStyles.tagFail,
+  written: detectStyles.tagOk,
+  unwritten: '',
 }
 
 // 全二级菜单表的表头，顺序和渲染一一对应；拖拽分隔线只在前四列的表头上。
@@ -180,9 +185,7 @@ export function ItemDetail({
     }
     boxDetectText = parts.join(' · ')
   } else if (boxDetectSettled && boxTaskFresh && boxDetectTask) {
-    if (boxDetectTask.status === 'cancelled') {
-      boxDetectText = t('detail.box.detectCancelled')
-    } else if (boxDetectTask.errorMsg) {
+    if (boxDetectTask.errorMsg) {
       boxDetectText = t('detail.box.detectFailed', { reason: boxDetectTask.errorMsg })
     } else if (boxHasData && boxResult) {
       boxDetectText = t('detail.box.detectDone', {
@@ -240,7 +243,6 @@ export function ItemDetail({
   }
   if (!item || !category) return <EmptyState message={t('detail.empty')} />
 
-  const status = hosts?.status ?? HostsStatus.HostsUnknown
   const hostnames = item.hostnames ?? []
   // 批量按钮的口径是「这一分类里能测的那几项」，不是分类里的全部条目：文案、提示和真正发出去的批次必须同一个数。
   const batch = detectableItems(category.items ?? [])
@@ -297,7 +299,7 @@ export function ItemDetail({
             onDetectSelected={(strategyId) => onDetect(item.id, strategyId)}
           />
           <div className={styles.headActions}>
-            <StatusBadge status={status} reason={hosts?.message} />
+            <StatusBadge state={projectState(hosts, state.tasks, item.id, result)} />
             {restorableItems.length > 0 ? (
               <button
                 type="button"
@@ -343,40 +345,26 @@ export function ItemDetail({
                   ) : null}
                 </th>
               ))}
-              <th />
+              <th>{t('detail.table.action')}</th>
             </tr>
           </thead>
           <tbody>
             {(category.items ?? []).map((it) => {
               const hs = hostsOf.get(it.id)
               const res = state.results[it.id]
-              // 「当前写入 IP」这一格问的是域名现在写着哪个地址：区段里有行就列，
-              // 不管这行还归不归本项目认领——还原后退回的旧映射、别的项目改写的，都照实说。
-              const lines = (hs?.entries ?? []).filter((entry) => entry.ip)
+              // 「【Hosts】当前写入 IP」只列本工具现在还认领的写入：还原后认领被释放，
+              // 区段里退回的「应用前旧映射」已经不是本工具写入的，这一格要跟着退成「—」。
+              // 和还原弹框的待还原清单（claimed）同一个口径，不会一个空了另一个还挂着地址。
+              const lines = (hs?.entries ?? []).filter((entry) => entry.written && entry.ip)
               // 待还原条数另算，只数本项目现在认领的那几条：还原落定的回执要说退了几条，不是文件里有几行。
               const claimed = (hs?.entries ?? []).filter((entry) => entry.written && entry.ip).length
               const cands = (res?.hosts ?? []).flatMap((host) => host.candidates ?? [])
               const best = pickBestCandidate(cands)
               const availableCount = cands.filter((c) => c.status === 'available').length
               const selectedRow = it.id === item.id
-              // 行底色 = 状态（拍板 2026-11-04）：检测和应用都带色，
-              // 进行中优先于结果；选中另加左缘主色条，不抢底色。
-              const busyTask = state.tasks.find(
-                (tk) => tk.itemId === it.id && (tk.status === 'waiting' || tk.status === 'running' || tk.status === 'restoring'),
-              )
-              const rowTone = busyTask
-                ? busyTask.kind === 'detect'
-                  ? styles.rowDetecting
-                  : busyTask.kind === 'apply'
-                    ? styles.rowApplying
-                    : styles.rowRestoring
-                : status === HostsStatus.HostsApplied
-                  ? styles.rowApplied
-                  : status === HostsStatus.HostsPartial
-                    ? styles.rowPartial
-                    : status === HostsStatus.HostsConflict || status === HostsStatus.HostsReadFailed
-                      ? styles.rowError
-                      : ''
+              // 行底色跟统一四档走：状态源每次渲染重算，一变整行颜色立刻跟着变。
+              // 这一轮零可用的项目由 projectState 判进失败档，整行跟着红。
+              const rowTone = TONE_ROW_CLASS[toneForItem(hs, state.tasks, it.id, res)]
               const rowClass = [rowTone, selectedRow ? styles.rowSel : ''].filter(Boolean).join(' ')
               return (
                 <tr key={it.id} className={rowClass || undefined} onClick={() => onSelectItem(it.id)}>
@@ -392,19 +380,22 @@ export function ItemDetail({
                     {lines.length > 0 ? (
                       <span className={styles.writeStack}>
                         {lines.map((entry) => (
-                          <span key={entry.hostname} className={styles.writeItem}>
+                          <span
+                            key={entry.hostname}
+                            className={`${styles.writeItem} ${styles.writeItemWritten}`}
+                          >
                             {entry.hostname}→{entry.ip}
                           </span>
                         ))}
                       </span>
-                    ) : (
-                      '—'
-                    )}
+                    ) : '—'}
                   </td>
-                  <td className={styles.cellMono}>
+                  <td className={`${styles.cellMono} ${best ? styles.hasAvailable : ''}`.trim()}>
                     {best ? (best.latencyMs > 0 ? `${best.ip} · ${best.latencyMs}ms` : best.ip) : '—'}
                   </td>
-                  <td>{cands.length > 0 ? `${formatInteger(availableCount)}/${formatInteger(cands.length)}` : '—'}</td>
+                  <td className={cands.length > 0 ? (availableCount > 0 ? styles.hasAvailable : styles.noAvailable) : undefined}>
+                    {cands.length > 0 ? `${formatInteger(availableCount)}/${formatInteger(cands.length)}` : '—'}
+                  </td>
                   <td>{res?.finishedAt ? formatRelativeTime(res.finishedAt) : '—'}</td>
                   <td className={styles.rowAction}>
                     {restorableItems.some((r) => r.id === it.id) ? (
@@ -521,7 +512,7 @@ export function ItemDetail({
               flatCandidates.map(({ candidate, host }, index) => (
                 <tr
                   key={candidate.id}
-                  className={`${CANDIDATE_ROW_TONE[candidate.status] ?? ''} ${candidate.applied ? detectStyles.currentRow : ''}`.trim() || undefined}
+                  className={`${CANDIDATE_ROW_CLASS[toneForCandidate(candidate.status)]} ${candidate.applied ? detectStyles.currentRow : ''}`.trim() || undefined}
                 >
                   <td>{index + 1}</td>
                   <td className={detectStyles.ipCell}>
@@ -531,7 +522,7 @@ export function ItemDetail({
                   </td>
                   <td className={detectStyles.hostCell}>{host.hostname}</td>
                   <td>
-                    <span className={`${detectStyles.tag} ${CANDIDATE_TONE[candidate.status] ?? ''}`}>
+                    <span className={`${detectStyles.tag} ${CANDIDATE_TAG_CLASS[toneForCandidate(candidate.status)]}`}>
                       {t(CANDIDATE_KEY[candidate.status] ?? 'detect.candidate.unknown')}
                     </span>
                     {candidate.reason ? <span className={detectStyles.reason}>{candidate.reason}</span> : null}
@@ -595,7 +586,7 @@ export function ItemDetail({
           <div className={styles.boxDetect}>
             <p className={styles.boxStage}>{boxDetectText || t('detail.box.noResult')}</p>
             {boxResult?.hosts && boxResult.hosts.length > 0 ? (
-              <ul className={styles.boxLines}>
+              <ul className={`${styles.boxLines} ${(boxResult.available ?? 0) > 0 ? styles.boxLinesOk : ''}`.trim()}>
                 {boxResult.hosts.map((host) => {
                   const best = pickBestCandidate(host.candidates ?? [])
                   return (
