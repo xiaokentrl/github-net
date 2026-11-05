@@ -633,7 +633,7 @@ export function ItemDetail({
 
       {restoreMenuOpen ? (
         <Dialog
-          title={t('hosts.restoreCategory')}
+          title={t('hosts.restoreCategory.title', { name: category.name, count: restorableItems.length })}
           onClose={() => setRestoreMenuOpen(false)}
           footer={
             <>
@@ -648,7 +648,7 @@ export function ItemDetail({
                   onRestoreCategory(restorableItems.map((it) => it.id))
                 }}
               >
-                {t('hosts.restoreCategory.confirmAction')}
+                {t('hosts.restoreCategory.confirmAction', { count: restorableItems.length })}
               </button>
             </>
           }

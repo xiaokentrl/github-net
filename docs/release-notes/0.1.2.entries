@@ -28,6 +28,8 @@ fixed|zh|修复还原后「当前写入 IP」漏掉应用前的旧地址：区�
 fixed|en|Fix the "applied IP" cell dropping the pre-apply address after a restore: it now shows whatever the managed block actually contains, claimed or not
 fixed|zh|配置文件迁移到 ~/.config/github-net/config.json，旧位置自动搬家
 fixed|en|Move the config file to ~/.config/github-net/config.json with automatic migration from the old location
+fixed|zh|修复「还原本菜单」确认框文案：标题改成点明还原哪个菜单、共几项，两颗按钮改写结果（「还原这 N 项」「先不还原」），不再只写「确认还原／取消」
+fixed|en|Fix the "restore this menu" confirmation dialog: the title now names the menu and item count, and both buttons state their outcome ("Restore these N items" / "Don't restore yet") instead of a generic confirm/cancel
 
 # updated
 updated|zh|更新检测排队：上一轮测出可用、且是 3 天以内测过的地址排到本轮新候选前面，一轮名额不够时先测到的是它们；上轮明确测不通的排到最后补位
