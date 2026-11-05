@@ -278,6 +278,10 @@ export function ItemDetail({
       const latencyOf = (candidate: Candidate) => (candidate.latencyMs > 0 ? candidate.latencyMs : Number.MAX_SAFE_INTEGER)
       return usableRank(a.candidate) - usableRank(b.candidate) || latencyOf(a.candidate) - latencyOf(b.candidate) || a.order - b.order
     })
+  // 候选表不列已经测出「连不通」的那几条（拍板 2026-11-06 晚：不显示不能加速的候选 IP，
+  // 一个项目全都不能加速时这张表就是空的）。还没结论的那几档照列——
+  // 排队／在测／没排上测／被取消都不是「不能加速」，把它们抹掉等于替它们说连不通。
+  const listedCandidates = flatCandidates.filter((row) => addressUsable(row.candidate.status))
   // 解析失败的域名没有候选行，单独在表上方说一句，不混进表里冒充候选。
   const failedHosts = rows.filter((h) => !h.resolved)
 
@@ -461,7 +465,7 @@ export function ItemDetail({
       <div className={styles.card}>
         <div className={styles.cardHead}>
           <h3 className={styles.title}>{t('detail.candidates.title')}</h3>
-          <span className={styles.countPill}>{t('detail.candidates.count', { count: flatCandidates.length })}</span>
+          <span className={styles.countPill}>{t('detail.candidates.count', { count: listedCandidates.length })}</span>
           {/* 这一轮的账（可用／探测／DNS）跟在「N 个候选」后面同一行：它说的是这张表的来路，
               单独占一行摆在表上方会把标题行和表拉散。 */}
           {result && rows.length > 0 ? (
@@ -526,12 +530,14 @@ export function ItemDetail({
             </tr>
           </thead>
           <tbody>
-            {flatCandidates.length === 0 ? (
+            {listedCandidates.length === 0 ? (
               <tr className={detectStyles.emptyRow}>
-                <td colSpan={5}>{t('detect.empty')}</td>
+                {/* 测过但全都不通 ≠ 还没检测：这一格不能拿「还没有检测结果」糊过去，
+                    否则用户会以为再来一轮检测就有货，其实是这一批地址都不行。 */}
+                <td colSpan={5}>{t(flatCandidates.length > 0 ? 'detect.empty.unusable' : 'detect.empty')}</td>
               </tr>
             ) : (
-              flatCandidates.map(({ candidate, host }, index) => (
+              listedCandidates.map(({ candidate, host }, index) => (
                 <tr
                   key={candidate.id}
                   className={`${CANDIDATE_ROW_CLASS[toneForCandidate(candidate.status)]} ${candidate.applied ? detectStyles.currentRow : ''}`.trim() || undefined}

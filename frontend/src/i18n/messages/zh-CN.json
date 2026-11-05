@@ -333,6 +333,7 @@
   "detect.resolveFailed": "解析失败（{reason}）",
   "detect.noCandidates": "这个域名没有候选地址",
   "detect.empty": "还没有检测结果；点上面的「检测」开始。",
+  "detect.empty.unusable": "测过的地址没有一条能加速；先重新检测。",
   "detect.col.hostname": "域名",
   "detect.col.ip": "候选 IP",
   "detect.col.status": "状态",

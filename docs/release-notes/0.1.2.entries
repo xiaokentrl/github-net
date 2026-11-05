@@ -52,3 +52,5 @@ updated|zh|队列明细一行一条域名：这一条写到哪个地址、连上
 updated|en|Show queue details as one row per hostname: each row states its address, measured latency and reachability; the latency now comes from this address's own last probe so the numbers survive a restart, and an address that fails its latest probe no longer shows a latency and is painted as a failure
 updated|zh|二级菜单的「已写/未写」加一道「能不能加速」的门：这个项目所有地址实测都连不通就显示「未写」，色点和行底色跟着；有任意一条通就按实际档位上色。没测过不算连不通，不凭不知道降级
 updated|en|Gate the submenu's written/unwritten badge on reachability: a project whose addresses all fail their latest probe now reads "not written" with the matching dot and row colour, while any reachable address keeps the normal state; never-detected addresses are not treated as unreachable
+updated|zh|详情页候选 IP 表不再列测出连不通的那几条：全都不能加速时这张表是空的，并明说「测过的地址没有一条能加速」；排队、在测、没排上测这些还没结论的照列
+updated|en|The detail page's candidate list no longer shows addresses that failed their probe: when nothing accelerates the table is empty and says so, while queued, in-flight and not-yet-tested candidates stay listed
