@@ -160,6 +160,18 @@ func (f *Fetcher) ClearCache(srcs []Source) ([]string, error) {
 	return cache.Clear(srcs)
 }
 
+// PruneCache 启动时清一次落盘缓存里超过保留期限的文件（拍板 2026-11-05：任何缓存最多存 3 天）。
+// 内存那一份 TTL 只有 30 分钟，不存在超期的东西，所以只动落盘这一层；没接落盘缓存就什么都不做。
+func (f *Fetcher) PruneCache() error {
+	f.mu.Lock()
+	cache := f.cache
+	f.mu.Unlock()
+	if !cache.Enabled() {
+		return nil
+	}
+	return cache.PruneExpired()
+}
+
 func (f *Fetcher) download(ctx context.Context, url string) (map[string][]Entry, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

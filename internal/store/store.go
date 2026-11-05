@@ -13,16 +13,20 @@ import (
 	"time"
 
 	"github.com/xiaokentrl/github-net/internal/accelerator"
+	"github.com/xiaokentrl/github-net/internal/retention"
 	_ "modernc.org/sqlite"
 )
 
-// keepRounds 是底账的保留上限（按轮记，一轮一行）。候选底账只用来回看近期发生过什么，
-// 不是要长期积累的数据集：超过上限就删最老的轮，轮下的候选随外键级联一起删。
+// keepRounds 是底账的条数兜底（按轮记，一轮一行）：只留最近这么多轮，轮下的候选随外键级联一起删。
+// 真正的主上限是时间——见 Prune 里的 retention.MaxAge（任何缓存最多存 3 天）。条数这道留着是为了
+// 极端高频：万一 3 天里跑了几千轮，也不让库无限涨下去。
 const keepRounds = 500
 
 // Store 是打开着的候选底账。所有方法并发安全（database/sql 自带连接池串行化）。
 type Store struct {
 	db *sql.DB
+	// now 是清理时取「现在」的时钟，测试注入假时钟来验保留期限两侧的行为。
+	now func() time.Time
 }
 
 // RoundRow 是底账里的一轮：谁、用哪个方法、什么时候、结论数字是多少。
@@ -72,12 +76,17 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("store: 打不开候选底账: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db}
+	s := &Store{db: db, now: time.Now}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return s, nil
+}
+
+// useClock 把清理用的时钟换成测试给的那一份（只影响「保留期限怎么算」，不改写进去的时间）。
+func (s *Store) useClock(now func() time.Time) {
+	s.now = now
 }
 
 func (s *Store) migrate() error {
@@ -214,11 +223,26 @@ func (s *Store) SaveRound(taskRound, scopeID, strategyID string, r *accelerator.
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("store: 落盘提交失败: %w", err)
 	}
-	return s.prune()
+	return s.Prune()
 }
 
-// prune 把上限之外的旧轮删掉，轮下的候选随外键级联一起走。
-func (s *Store) prune() error {
+// Prune 把不该再留的底账删掉（拍板 2026-11-05：任何缓存最多存 3 天，超期自动清理）。三刀：
+//  1. 超过保留期限的轮整轮删掉，轮下的候选随外键级联一起走，不留孤儿行；
+//  2. 超过保留期限没再测过的地址行删掉——某个域名只要不再检测，它的存量地址就会一直躺着，
+//     原来没有任何东西管它；
+//  3. 最近 keepRounds 轮之外的旧轮删掉（条数兜底，防极端高频把库撑大）。
+//
+// 期限用全局那一个数字 retention.MaxAge，这里不再自己写天数。这几处时间只由本包按
+// UTC 的 RFC3339 定宽写法写入（见 timeFormat 和三处 .UTC().Format(timeFormat)），
+// 同一写法下字符串比大小就是时间比先后，所以直接拿来当删除界限。
+func (s *Store) Prune() error {
+	cutoff := s.now().UTC().Add(-retention.MaxAge).Format(timeFormat)
+	if _, err := s.db.Exec(`DELETE FROM detect_rounds WHERE finished_at < ?`, cutoff); err != nil {
+		return fmt.Errorf("store: 清理超期轮失败: %w", err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM candidate_ips WHERE updated_at < ?`, cutoff); err != nil {
+		return fmt.Errorf("store: 清理超期地址失败: %w", err)
+	}
 	if _, err := s.db.Exec(
 		`DELETE FROM detect_rounds WHERE id NOT IN
 			(SELECT id FROM detect_rounds ORDER BY id DESC LIMIT ?)`, keepRounds,

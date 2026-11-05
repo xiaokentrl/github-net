@@ -14,9 +14,11 @@ import (
 // sourcesClearer 是「清哪几份源缓存」这一步的接缝。
 // 零值就是生产行为：动 github.Default 那一份共用拉源器（检测用的也是它，清完才会真的重下）。
 // 留成可注入是为了让这条命令的单测不碰真目录、不发真请求。
+// PruneCache 是启动时那一次「超过保留期限的落盘缓存删掉」（拍板 2026-11-05），走的还是同一份共用拉源器。
 type sourcesClearer interface {
 	ClearCache(srcs []github.Source) ([]string, error)
 	CacheEnabled() bool
+	PruneCache() error
 }
 
 func (s *Service) sources() sourcesClearer {

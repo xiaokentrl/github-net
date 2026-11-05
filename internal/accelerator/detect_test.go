@@ -871,6 +871,102 @@ func TestRunAppliedFiltersGarbageAndUnknownHostnames(t *testing.T) {
 	}
 }
 
+// 上一轮测出来过、这一轮还想提前扫到的地址：可用的排在「当前生效」之后、本轮解析结果之前（延迟低的更靠前），
+// 明确测不通的排在解析结果之后补位。超过缓存保留期限（3 天）、时间读不懂、以及「上轮压根没测出结论」的整条不当已知。
+func TestRunKnownCandidatesReorderQueue(t *testing.T) {
+	s := newStub()
+	s.candidates["a.test"] = v4host(2)
+	fresh := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	stale := time.Now().UTC().Add(-8 * 24 * time.Hour).Format(time.RFC3339)
+	// 4 天前测的：按旧的 7 天窗口还算「新鲜」，按现在这条 3 天保留期已经过期，绝不能排进来。
+	fourDays := time.Now().UTC().Add(-4 * 24 * time.Hour).Format(time.RFC3339)
+
+	res, err := NewRunner(s.lookup, s.probe, nil).Run(context.Background(),
+		Input{ItemID: "item-ko", Hostnames: []string{"a.test"},
+			Applied: map[string][]string{"a.test": {"192.0.2.99"}},
+			Known: map[string][]KnownCandidate{" A.TEST. ": {
+				{IP: "198.51.100.5", LatencyMS: 50, Status: StatusAvailable, UpdatedAt: fresh},
+				{IP: "198.51.100.3", LatencyMS: 20, Status: StatusAvailable, UpdatedAt: fresh},
+				{IP: "198.51.100.9", LatencyMS: 1, Status: StatusAvailable, UpdatedAt: stale},
+				{IP: "198.51.100.4", LatencyMS: 1, Status: StatusAvailable, UpdatedAt: fourDays},
+				{IP: "198.51.100.8", LatencyMS: 2, Status: StatusAvailable, UpdatedAt: "对不上的时间"},
+				{IP: "203.0.113.4", Status: StatusUnavailable, UpdatedAt: fresh},
+				{IP: "203.0.113.5", Status: StatusUntested, UpdatedAt: fresh},
+				{IP: "192.0.2.99", LatencyMS: 3, Status: StatusAvailable, UpdatedAt: fresh},
+			}},
+		}, budget(6, 1, 30))
+	if err != nil {
+		t.Fatalf("跑不起来：%v", err)
+	}
+
+	want := []string{"192.0.2.99", "198.51.100.3", "198.51.100.5", "192.0.2.1", "192.0.2.2", "203.0.113.4"}
+	got := make([]string, 0, len(res.Candidates))
+	for _, row := range res.Candidates {
+		got = append(got, row.IP)
+	}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("排队顺序该是「已生效 → 上轮可用（延迟升序）→ 本轮解析 → 上轮测不通」，实得 %v", got)
+	}
+	for _, row := range res.Candidates {
+		if row.IP == "198.51.100.9" || row.IP == "198.51.100.4" || row.IP == "198.51.100.8" || row.IP == "203.0.113.5" {
+			t.Errorf("过期（超过 3 天）/时间读不懂/上轮没结论的地址不该当已知排进来：%+v", row)
+		}
+		if row.IP == "198.51.100.3" || row.IP == "198.51.100.5" {
+			if row.Applied {
+				t.Errorf("上轮可用的地址不是当前生效，不该带那个标记：%+v", row)
+			}
+			if !row.Status.final() {
+				t.Errorf("上轮可用的地址照样要真测一遍并定格，实得 %s", row.Status)
+			}
+		}
+	}
+	// 名额合起来算：已生效 1 + 上轮可用 2 只吃掉 3 格，方法那边仍按 6-3 拿上限。
+	if hs := s.hostnames(); len(hs) != 1 || hs[0] != "a.test#3" {
+		t.Errorf("传给方法的候选上限应是 6-3=3，实得 %v", hs)
+	}
+}
+
+// 本轮探测名额不够时，先被截掉的必须是本轮新解析出来的地址：
+// 「上次明明能用」的那几条排到后面去、整轮没有结论，就是这次改动要解决的那件事。
+func TestRunKnownAvailableSurvivesProbeBudget(t *testing.T) {
+	s := newStub()
+	s.candidates["a.test"] = v4host(3)
+	fresh := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+
+	res, err := NewRunner(s.lookup, s.probe, nil).Run(context.Background(),
+		Input{ItemID: "item-bt", Hostnames: []string{"a.test"},
+			Known: map[string][]KnownCandidate{"a.test": {
+				{IP: "198.51.100.7", LatencyMS: 80, Status: StatusAvailable, UpdatedAt: fresh},
+				{IP: "198.51.100.6", LatencyMS: 10, Status: StatusAvailable, UpdatedAt: fresh},
+			}},
+		}, budget(5, 1, 3))
+	if err != nil {
+		t.Fatalf("跑不起来：%v", err)
+	}
+	if len(res.Candidates) != 5 {
+		t.Fatalf("每域名 5 行，实得 %+v", res.Candidates)
+	}
+	if res.Candidates[0].IP != "198.51.100.6" || res.Candidates[1].IP != "198.51.100.7" {
+		t.Fatalf("上轮可用的两条该排在最前面，实得 %v %v", res.Candidates[0].IP, res.Candidates[1].IP)
+	}
+	if res.ProbesUsed != 3 {
+		t.Errorf("探测次数仍受本轮预算管，实得 %d", res.ProbesUsed)
+	}
+	for _, row := range res.Candidates[:2] {
+		if row.Status != StatusAvailable {
+			t.Errorf("上轮可用的那条该被真测到，实得 %+v", row)
+		}
+	}
+	for _, row := range res.Candidates[3:] {
+		if row.Status != StatusUntested {
+			t.Errorf("被预算截断的该是本轮新解析出来的地址，实得 %+v", row)
+		}
+	}
+	if res.Available != 3 {
+		t.Errorf("三条测到、其中上轮可用两条，实得可用 %d", res.Available)
+	}
+}
+
 // 每主机名的计数：可用、未检测、候选数三样都要对得上，界面按主机名汇总显示。
 func TestRunHostOutcomeCounters(t *testing.T) {
 	s := newStub()

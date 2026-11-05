@@ -15,10 +15,11 @@ import (
 // fakeSources 记下「清理已选缓存」这一步收到什么清单、按用例需要返回失败或删除结果。
 // 它不落盘：这条命令的单测不许碰本机真实配置目录。
 type fakeSources struct {
-	enabled  bool
-	calls    [][]github.Source
-	removed  []string
-	failWith error
+	enabled    bool
+	calls      [][]github.Source
+	removed    []string
+	failWith   error
+	pruneCalls int
 }
 
 func (f *fakeSources) ClearCache(srcs []github.Source) ([]string, error) {
@@ -30,6 +31,12 @@ func (f *fakeSources) ClearCache(srcs []github.Source) ([]string, error) {
 }
 
 func (f *fakeSources) CacheEnabled() bool { return f.enabled }
+
+// PruneCache 记下启动清理有没有走到公共源这一层（启动时只走一次，界内界外由 github 包自己的用例验）。
+func (f *fakeSources) PruneCache() error {
+	f.pruneCalls++
+	return f.failWith
+}
 
 // newSourcesService 只装配这条命令读得到的东西：目录 + 注入的清理接缝。
 func newSourcesService(clearer sourcesClearer) *Service {

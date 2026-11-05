@@ -109,11 +109,13 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 }
 
 // FetchChecksums 把 checksums.txt 拉回来取某一行，返回该文件的期望摘要；没有清单就返回空串。
-func (c *Client) FetchChecksums(ctx context.Context, asset UpdateAsset, name string) (string, error) {
+// destDir 由调用方给，用的是升级包那个目录：清单跟着包走，落在同一个目录里才谈得上「超过 3 天的缓存统一清」——
+// 以前丢在系统临时目录，那是全机共享的地方，按保留期限去扫它会误删别人家的同名文件。
+func (c *Client) FetchChecksums(ctx context.Context, asset UpdateAsset, name, destDir string) (string, error) {
 	if asset.Name == "" {
 		return "", nil
 	}
-	path, err := c.Download(ctx, asset, os.TempDir())
+	path, err := c.Download(ctx, asset, destDir)
 	if err != nil {
 		return "", err
 	}

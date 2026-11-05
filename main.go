@@ -88,6 +88,9 @@ func main() {
 	// RegisterService 只在 Run 之前有效，这里仍在 Run 之前，注册顺序与原来写在 Options 里一致。
 	emitProgress := func(name string, payload any) { platformApp.Event.Emit(name, payload) }
 	service := appsvc.NewService(appName, appVersion, emitter.Sequence, emitProgress)
+	// 启动时清一次本机落盘缓存（超过保留期限的一律删掉，拍板 2026-11-05）。放后台跑是因为它可能碰磁盘上
+	// 一个卡住的目录，而清缓存这件事不该拦住窗口起来；清失败不吭声也不影响任何功能。
+	go appsvc.PruneCaches(service)
 	platformApp.RegisterService(application.NewService(service))
 
 	// 启动行为来自用户配置：启动后最小化 → 窗口直接以隐藏方式创建；关窗行为由下面的钩子现读配置。

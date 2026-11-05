@@ -14,6 +14,9 @@ func newTestStore(t *testing.T) *Store {
 	if err != nil {
 		t.Fatalf("开库失败: %v", err)
 	}
+	// 用例里的样本轮都收在 2026-10-31T08:00:05Z，清理用的时钟放在它之后一天多：
+	// 这样「保留期限」这条不会顺手把用例刚写进去的东西删掉，期限两侧的行为由各条用例自己挪时钟验。
+	s.useClock(func() time.Time { return time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC) })
 	t.Cleanup(func() { s.Close() })
 	return s
 }
@@ -273,4 +276,74 @@ func badRound() *accelerator.Result {
 		bad.Candidates[i].Status = accelerator.StatusTimeout
 	}
 	return bad
+}
+
+// 保留期限这条（拍板 2026-11-05：任何缓存最多存 3 天）：超期的轮整轮删（轮下候选随外键级联一起走，
+// 不留孤儿行），超期没再测过的地址行也删。样本轮收在 2026-10-31T08:00:05Z，
+// 时钟放在正好三天后（一秒不差）时东西必须还在，再晚一秒就必须没了——两侧都钉住，
+// 免得把期限写成两天或四天时用例还是绿的。
+func TestPruneDeletesBeyondRetentionAge(t *testing.T) {
+	s := newTestStore(t)
+	s.useClock(func() time.Time { return time.Date(2026, 11, 3, 8, 0, 5, 0, time.UTC) })
+	if err := s.SaveRound("r1", "github", "gitcdn", sampleResult()); err != nil {
+		t.Fatalf("落盘失败: %v", err)
+	}
+	if rounds, err := s.Rounds(0); err != nil || len(rounds) != 1 {
+		t.Fatalf("正好 3 天的一轮不该被删，实际 %d 轮（err=%v）", len(rounds), err)
+	}
+	if pool, err := s.Pool("github.com"); err != nil || len(pool) != 3 {
+		t.Fatalf("正好 3 天的地址行不该被删，实际 %d 行（err=%v）", len(pool), err)
+	}
+
+	s.useClock(func() time.Time { return time.Date(2026, 11, 3, 8, 0, 6, 0, time.UTC) })
+	if err := s.Prune(); err != nil {
+		t.Fatalf("清理失败: %v", err)
+	}
+	if rounds, _ := s.Rounds(0); len(rounds) != 0 {
+		t.Errorf("超过 3 天的轮该删干净，实际还剩 %d 轮", len(rounds))
+	}
+	if pool, _ := s.Pool("github.com"); len(pool) != 0 {
+		t.Errorf("超过 3 天的地址行该删干净，实际还剩 %d 行", len(pool))
+	}
+	var left int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM detect_candidates`).Scan(&left); err != nil {
+		t.Fatalf("数候选行失败: %v", err)
+	}
+	if left != 0 {
+		t.Errorf("轮删了候选行必须跟着走，实际还剩 %d 行", left)
+	}
+}
+
+// 只有超期的那批走，界内的原样留着：清理不是「一把清空重来」。
+func TestPruneKeepsRoundsWithinRetentionAge(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.SaveRound("r-old", "github", "gitcdn", sampleResult()); err != nil {
+		t.Fatalf("第一轮落盘失败: %v", err)
+	}
+	fresh := sampleResult()
+	fresh.FinishedAt = time.Date(2026, 10, 31, 9, 0, 0, 0, time.UTC)
+	fresh.StartedAt = fresh.FinishedAt
+	fresh.Candidates = []accelerator.Candidate{
+		{ID: "n1", Hostname: "cdn.test", IP: "9.9.9.9", Status: accelerator.StatusAvailable, LatencyMS: 11},
+	}
+	fresh.Hostnames = []accelerator.HostOutcome{{Hostname: "cdn.test", Resolved: true}}
+	if err := s.SaveRound("r-new", "github", "gitcdn", fresh); err != nil {
+		t.Fatalf("第二轮落盘失败: %v", err)
+	}
+
+	// 时钟放在 r-old 超期、r-new 还在界内的这一刻。
+	s.useClock(func() time.Time { return time.Date(2026, 11, 3, 8, 59, 0, 0, time.UTC) })
+	if err := s.Prune(); err != nil {
+		t.Fatalf("清理失败: %v", err)
+	}
+	rounds, err := s.Rounds(0)
+	if err != nil || len(rounds) != 1 || rounds[0].TaskRound != "r-new" {
+		t.Fatalf("只该留下没超期的那一轮，实际 %+v（err=%v）", rounds, err)
+	}
+	if pool, _ := s.Pool("github.com"); len(pool) != 0 {
+		t.Errorf("超期域名的地址行该删掉，实际还剩 %d 行", len(pool))
+	}
+	if pool, err := s.Pool("cdn.test"); err != nil || len(pool) != 1 || pool[0].IP != "9.9.9.9" {
+		t.Errorf("界内域名的地址行该留着，实际 %v（err=%v）", pool, err)
+	}
 }

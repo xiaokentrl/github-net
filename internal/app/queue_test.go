@@ -470,7 +470,7 @@ func TestSevenQueueCommandsAreBound(t *testing.T) {
 		}
 	}
 
-	for _, forbidden := range []string{"Shutdown", "ShutdownTaskQueue", "Enqueue"} {
+	for _, forbidden := range []string{"Shutdown", "ShutdownTaskQueue", "Enqueue", "PruneCaches"} {
 		if _, ok := svcType.MethodByName(forbidden); ok {
 			t.Errorf("Service 上不该有 %s 这个方法：前端能调到它就越过边界", forbidden)
 		}

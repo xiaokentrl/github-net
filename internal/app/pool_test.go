@@ -3,6 +3,7 @@ package app
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/xiaokentrl/github-net/internal/accelerator"
 	"github.com/xiaokentrl/github-net/internal/catalog"
@@ -44,6 +45,10 @@ func TestGetCandidatePoolSortsAndAttributes(t *testing.T) {
 			{ID: "c2", Hostname: "codeload.github.com", IP: "9.9.9.9", Status: accelerator.StatusAvailable, LatencyMS: 30},
 			{ID: "c3", Hostname: "github.com", IP: "20.205.243.166", Status: accelerator.StatusQueued},
 		},
+		// 时间要给出「刚刚跑完的一轮」：底账按「任何缓存最多存 3 天」清超期数据，
+		// 零值时间落在 3 天界限之外，会被落盘那一步顺带清掉（真检测的结果都带真时间）。
+		StartedAt:  time.Now().UTC(),
+		FinishedAt: time.Now().UTC(),
 	}
 	if err := svc.candidateStore.SaveRound("r", "github", "gitcdn", result); err != nil {
 		t.Fatalf("落盘失败: %v", err)

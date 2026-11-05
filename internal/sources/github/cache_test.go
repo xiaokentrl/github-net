@@ -223,3 +223,72 @@ func TestCacheFileMustMatchSourceAndToday(t *testing.T) {
 		t.Errorf("读回来的内容应当和写进去的一样，实际 %+v", got["github.com"])
 	}
 }
+
+// 保留期限这条（拍板 2026-11-05：任何缓存最多保存 3 天，超期自动清理）：
+// 超过 3 天的缓存文件和落盘落到一半崩掉留下的临时文件都要删掉；当天那份、正好 3 天那份、
+// 以及同层的子目录一律不碰。清理只在启动时跑一次，判年龄看文件的修改时间（就是它下载回来的那一刻）。
+func TestPruneExpiredRemovesOldCacheFiles(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 11, 5, 8, 0, 0, 0, time.Local)
+	cache := NewFileCache(dir)
+	cache.useClock(func() time.Time { return now })
+	src := testSource("https://example.invalid/hosts")
+	rows := map[string][]Entry{"github.com": {{IP: "1.1.1.1"}}}
+
+	writeAged := func(t *testing.T, name string, age time.Duration, raw string) {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+			t.Fatalf("写 %s 失败: %v", name, err)
+		}
+		when := now.Add(-age)
+		if err := os.Chtimes(path, when, when); err != nil {
+			t.Fatalf("给 %s 摆年龄失败: %v", name, err)
+		}
+	}
+	body, err := json.Marshal(cacheFile{Source: "hellogithub", Day: now.AddDate(0, 0, -4).Format(DayLayout), Hostnames: rows})
+	if err != nil {
+		t.Fatalf("组装旧缓存内容失败: %v", err)
+	}
+	writeAged(t, "hellogithub.json", 4*24*time.Hour, string(body))
+	writeAged(t, ".source-stray.json", 4*24*time.Hour, "落盘落到一半的半截内容")
+	// 正好 3 天：不比界限更早，必须留着。
+	writeAged(t, "gitlab.json", 3*24*time.Hour, "{}")
+
+	if err := cache.Save(src, rows); err != nil {
+		t.Fatalf("当天那份应当写成功: %v", err)
+	}
+	sub := filepath.Join(dir, "notmine")
+	if err := os.Mkdir(sub, 0o700); err != nil {
+		t.Fatalf("建子目录失败: %v", err)
+	}
+
+	if err := cache.PruneExpired(); err != nil {
+		t.Fatalf("清理失败: %v", err)
+	}
+	for _, gone := range []string{"hellogithub.json", ".source-stray.json"} {
+		if _, err := os.Stat(filepath.Join(dir, gone)); !os.IsNotExist(err) {
+			t.Errorf("超过 3 天的 %s 该被删掉，实际 stat=%v", gone, err)
+		}
+	}
+	for _, keep := range []string{src.ID + ".json", "gitlab.json"} {
+		if _, err := os.Stat(filepath.Join(dir, keep)); err != nil {
+			t.Errorf("%s 不该被删（当天/正好 3 天），实际 stat=%v", keep, err)
+		}
+	}
+	if _, err := os.Stat(sub); err != nil {
+		t.Errorf("清理不该碰子目录，实际 stat=%v", err)
+	}
+}
+
+// 没接落盘这一层、以及目录还不存在（这台机器压根没缓存过）时，清理既不该报错也不该 Panic。
+func TestPruneExpiredWithoutCacheIsNoOp(t *testing.T) {
+	f := NewFetcher(&http.Client{}, CacheTTL)
+	if err := f.PruneCache(); err != nil {
+		t.Fatalf("没接落盘目录时清理不该报错: %v", err)
+	}
+	missing := NewFileCache(filepath.Join(t.TempDir(), "sources-cache"))
+	if err := missing.PruneExpired(); err != nil {
+		t.Fatalf("目录还不存在时清理不该报错: %v", err)
+	}
+}

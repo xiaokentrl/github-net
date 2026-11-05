@@ -91,7 +91,7 @@ func (s *Service) DownloadUpdate(info updater.Info) (UpdateDownloadResult, error
 		return UpdateDownloadResult{}, NewError(CodeUpdateVerifyFailed, "算安装包摘要失败", err)
 	}
 	// 摘要比对（清单在才有得比）+ 验签，双闸都要过；任何一闸不过就整包作废。
-	if want, err := s.updater.FetchChecksums(context.Background(), checksums, installer.Name); err != nil {
+	if want, err := s.updater.FetchChecksums(context.Background(), checksums, installer.Name, destDir); err != nil {
 		return UpdateDownloadResult{}, NewError(CodeUpdateVerifyFailed, "校验清单读不出来，拒绝安装", err)
 	} else if want != "" {
 		if err := updater.VerifyChecksum(got, want); err != nil {

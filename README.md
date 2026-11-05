@@ -146,7 +146,7 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 ├── internal/
 │   ├── accelerator/         # 检测编排：budget.go 算一轮预算，detect.go 串起取候选与验候选，管并发、单项 5 秒截止、逐候选状态与带序号事件
 │   │   └── strategies/      # 加速方法单文件自注册：契约、注册表与六个方法（三家公共源、全部公共源、使用已有储存、系统 DNS）
-│   ├── app/                 # 暴露给前端的 28 条命令、DTO 与错误转换：队列 7 条在 queue.go，检测 detect_items.go + detect.go，应用/还原 apply_items.go，更新 update.go，启动自动化 startup_automation.go，清理源缓存 sources_cache.go
+│   ├── app/                 # 暴露给前端的 28 条命令、DTO 与错误转换：队列 7 条在 queue.go，检测 detect_items.go + detect.go，应用/还原 apply_items.go，更新 update.go，启动自动化 startup_automation.go，清理源缓存 sources_cache.go，启动时那一次缓存清扫在 cleanup.go（包级函数，不绑给前端）
 │   ├── catalog/             # 产品数据：11 分类 / 52 项目 / 63 主机名（catalog.json）
 │   ├── config/              # 用户配置：校验、revision、原子保存、旧位置迁移
 │   ├── detector/            # 候选连通性与证书校验（TCP+TLS，2 秒预算），被检测编排调用
@@ -155,8 +155,9 @@ GITHUB_NET_SKIP_REINSTALL=1 git push
 │   ├── identity/            # 产品名字的唯一手写源：户口层常量、派生路径与钉死它们的金标准测试
 │   ├── platform/            # 开机自启适配：Linux 写 XDG autostart；Windows/macOS 明确返回不支持
 │   ├── privilege/           # 特权辅助服务的客户端、服务端与白名单协议（Unix socket）
-│   ├── sources/             # GitHub 三家公共源的地址与合并解析；每源一份当天落盘缓存（sources-cache/），清掉才重新下载
-│   ├── store/               # SQLite 候选底账（detect-history.db）
+│   ├── retention/           # 本机缓存「能存多久」的唯一手写出处：MaxAge = 3 天，底账/地址池/源落盘/升级包与排队新鲜期都引用它
+│   ├── sources/             # GitHub 三家公共源的地址与合并解析；每源一份当天落盘缓存（sources-cache/），清掉或超过 3 天就重新下载
+│   ├── store/               # SQLite 候选底账（detect-history.db）：按 3 天保留期限 + 最近 500 轮两道界自动清
 │   ├── task/                # 内存任务队列：串行执行、九档状态、取消/暂停/重试/两项清理，事件序号与快照水位同源
 │   └── updater/             # 检查 Releases、下载并做 SHA256 + Ed25519 双校验，再交给系统安装器
 ├── frontend/

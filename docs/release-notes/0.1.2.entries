@@ -12,6 +12,8 @@ added|zh|标题栏新增托盘胶囊：主题色点快切、最小化到托盘�
 added|en|Add a title-bar tray pill for quick theme switching, minimize-to-tray and quit, with a pulsing dot while tasks run
 added|zh|设置中心外观页语言改为简体/繁体两颗按钮
 added|en|Replace the language dropdown with two buttons (Simplified/Traditional) in appearance settings
+added|zh|新增本机缓存自动清理：任何缓存最多存 3 天，超期的检测底账、地址池、公共源落盘缓存和升级包在程序启动时自动删掉；配置、已生效的 Hosts 区段与还原依据不算缓存，一行都不碰
+added|en|Add automatic cache cleanup: nothing is kept longer than 3 days — stale detection ledgers, the address pool, cached source files and downloaded upgrade packages are swept at startup, while settings, active hosts entries and restore data are left untouched
 
 # fixed
 fixed|zh|修复设置对话框抢焦点：后台事件一进来输入框就失去焦点
@@ -28,6 +30,8 @@ fixed|zh|配置文件迁移到 ~/.config/github-net/config.json，旧位置自�
 fixed|en|Move the config file to ~/.config/github-net/config.json with automatic migration from the old location
 
 # updated
+updated|zh|更新检测排队：上一轮测出可用、且是 3 天以内测过的地址排到本轮新候选前面，一轮名额不够时先测到的是它们；上轮明确测不通的排到最后补位
+updated|en|Order each detection round by recent results: addresses found usable within the last 3 days are probed before newly resolved ones when the probe budget runs short, previously-failed ones queue last
 updated|zh|更新详情页候选卡：「可用 N · 探测 N 次 · DNS N 次」并到「候选 IP · N 个候选」那一行后面，不再单独占一行
 updated|en|Move the "available / probes / DNS" summary onto the candidate card header row instead of a separate line
 updated|zh|更新界面文案与布局：删除占位提示与说明小字，指标格改为有数据来源的真指标，检测完成时间改相对时间

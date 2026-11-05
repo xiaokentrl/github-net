@@ -46,6 +46,9 @@ type detectExecutor struct {
 	// appliedIPs 读「这些主机名当前写在系统 Hosts 上的是哪些地址」，读不出来就给空。
 	// 留成接缝是为了让测试自己喂一份已知地址，不去碰真文件；线上由 Service 用它那一份 hostsPath 实现。
 	appliedIPs func(hostnames []string) map[string][]string
+	// knownPool 读「这些主机名在候选底账里最近一次的结论」，用来决定这一轮谁先被探测。
+	// 它只改顺序，不改判据：可用与否照样要本轮真连真验证书。nil 或读失败当没有已知，顺序退回解析结果原序。
+	knownPool func(hostnames []string) map[string][]accelerator.KnownCandidate
 	// save 把跑完的一轮写进候选底账（SQLite）。留成接缝：nil 表示没有底账
 	// （库打不开或纯测试场景），照跑不落盘。写失败也不许影响检测结果——底账是「发生过什么的记录」，不是检测结果本身。
 	save func(taskRound, scopeID, strategyID string, r *accelerator.Result)
@@ -56,8 +59,8 @@ type detectExecutor struct {
 
 // newDetectExecutor 建检测执行器。调用方必须在产品目录和设置服务都准备好之后再来建：
 // 目录读不出来时任何检测都没有可查的项目，那种情况队列该继续用 pendingExecutor。
-func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter, gate chan struct{}, rounds *roundBudgets, appliedIPs func(hostnames []string) map[string][]string, save func(taskRound, scopeID, strategyID string, r *accelerator.Result), defaultFor func(scopeID string) (string, bool)) *detectExecutor {
-	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub, gate: gate, rounds: rounds, appliedIPs: appliedIPs, save: save, defaultFor: defaultFor}
+func newDetectExecutor(c *catalog.Catalog, st *config.Store, probe accelerator.ProbeFunc, results *detectResultStore, pub *event.DetectEmitter, gate chan struct{}, rounds *roundBudgets, appliedIPs func(hostnames []string) map[string][]string, knownPool func(hostnames []string) map[string][]accelerator.KnownCandidate, save func(taskRound, scopeID, strategyID string, r *accelerator.Result), defaultFor func(scopeID string) (string, bool)) *detectExecutor {
+	return &detectExecutor{catalog: c, settings: st, strategyFor: strategies.Get, probe: probe, results: results, pub: pub, gate: gate, rounds: rounds, appliedIPs: appliedIPs, knownPool: knownPool, save: save, defaultFor: defaultFor}
 }
 
 // appliedFor 取出这些主机名当前已经写在管理区段里的地址，作为本轮的已知地址交给检测编排。
@@ -148,7 +151,8 @@ func (e *detectExecutor) Execute(ctx context.Context, t task.Task, report task.R
 		applied = e.appliedIPs(item.hostnames)
 	}
 	runner := accelerator.NewRunnerGated(strategy.Lookup, e.probe, &progressBridge{report: report, pub: e.pub}, e.gate)
-	result, err := runner.Run(ctx, accelerator.Input{ItemID: t.ItemID, Hostnames: item.hostnames, Applied: applied}, budget)
+	known := e.knownFor(item.hostnames)
+	result, err := runner.Run(ctx, accelerator.Input{ItemID: t.ItemID, Hostnames: item.hostnames, Applied: applied, Known: known}, budget)
 	if err != nil {
 		// 一轮没跑起来的错误都是「调用方给错了东西」那几类（预算与范围对不上、方法没实现），
 		// 原始错误里没有用户能用来下一步的信息，也不保证不含域名，所以这里只给人话不给 err.Error()。
@@ -173,6 +177,15 @@ func (e *detectExecutor) Execute(ctx context.Context, t task.Task, report task.R
 	// 没查出可用地址是这一轮的结论，不是失败：一轮跑完了就算完成。
 	// 可用几条、谁没测上属候选结果，界面上单独那一栏看，不塞进任务的错误文案里。
 	return task.Outcome{Status: task.StatusDone}
+}
+
+// knownFor 取出这一轮这些主机名的上一轮结论。没有接缝（没底账、纯测试）就不给：
+// 检测编排会退回「完全按本轮解析结果的顺序」，跟改动前一模一样。
+func (e *detectExecutor) knownFor(hostnames []string) map[string][]accelerator.KnownCandidate {
+	if e.knownPool == nil {
+		return nil
+	}
+	return e.knownPool(hostnames)
 }
 
 // item 按项目 ID 取域名与范围。域名在这里就规范化去重，因为预算要按「本轮真的会解析几个域名」算，

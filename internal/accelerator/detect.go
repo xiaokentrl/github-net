@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/xiaokentrl/github-net/internal/accelerator/strategies"
 	"github.com/xiaokentrl/github-net/internal/detector"
 	"github.com/xiaokentrl/github-net/internal/hosts"
+	"github.com/xiaokentrl/github-net/internal/retention"
 )
 
 // CandidateStatus 是一条候选在这一轮里的状态。八档是规划给的最小集合加两档：
@@ -109,15 +111,36 @@ type LookupFunc func(ctx context.Context, in strategies.Input) (strategies.Outpu
 // 才能在不碰外网的前提下跑遍可用、超时、拒绝和各类证书失败。
 type ProbeFunc func(ctx context.Context, t detector.Target) (detector.Result, error)
 
+// KnownCandidate 是上一轮已经测过、这一轮想提前扫到的那条候选地址。
+// 它只决定这一条在本轮队列里排第几，不决定结论——照样要真连、真验证书。
+type KnownCandidate struct {
+	IP        string
+	LatencyMS int64
+	Status    CandidateStatus
+	// UpdatedAt 是底账里那句 UTC 的 RFC3339。读不懂按过期处理：宁可当没这条已知，
+	// 也不拿一个说不清多旧的东西去挤占本轮新候选的名额。
+	UpdatedAt string
+}
+
+// knownFreshWindow 是已知候选还能参与排队的期限（拍板 2026-11-05）：
+// 用的就是全局那条「缓存最多存 3 天」，不再自己写一个天数——比期限更老的东西早就被清掉了，
+// 写两个数字只会互相矛盾。过期的整条不当已知：那种地址本来就该由本轮重新列出来。
+const knownFreshWindow = retention.MaxAge
+
 // Input 是一轮检测的输入。Hostnames 可以重复、可以带大写和尾随点，
 // 本包先规范化再去重，同一轮里一个主机名只解析一次。
 // Applied 是「这个主机名当前写在系统 Hosts 上的是哪些地址」，键按主机名规范化后对上，
 // 由调用方读出来；给 nil 就是没有已知地址。这些地址不进解析结果，但会作为候选列进这一轮，
 // 和解析出来的同等对待。
+// Known 是「这些主机名上一轮测出来过哪些地址、当时结论是什么」，同样由调用方从候选底账读出来。
+// 它只改排队顺序：新鲜期内上轮可用的排到「当前生效」之后、本轮解析结果之前，
+// 新鲜期内上轮明确测不通的沉到解析结果之后；两类都照样占每域名名额、照样被探测、照样扣预算。
+// 给 nil 就是没有已知候选，顺序和以前完全一样。
 type Input struct {
 	ItemID    string
 	Hostnames []string
 	Applied   map[string][]string
+	Known     map[string][]KnownCandidate
 }
 
 // Result 是一轮检测的结论。数组字段宁可给空切片也不给 nil，前端直接读不用判空。
@@ -222,6 +245,7 @@ func (r *Runner) Run(ctx context.Context, in Input, budget Budget) (*Result, err
 		budget:    budget,
 		hostnames: hostnames,
 		applied:   normalizeApplied(in.Applied),
+		known:     normalizeKnown(in.Known),
 		started:   r.now().UTC(),
 	}
 	d.hosts = make([]*HostOutcome, len(hostnames))
@@ -243,6 +267,8 @@ type detection struct {
 	hostnames []string
 	// applied 是规范化后的「主机名 → 当时已写在系统里的地址」，只在本轮开始时填一次，读的时候不再加锁。
 	applied map[string][]string
+	// known 是规范化后的「主机名 → 上一轮测过的地址」，同样只在本轮开始时填一次。
+	known   map[string][]KnownCandidate
 	started time.Time
 
 	mu         sync.Mutex
@@ -288,7 +314,11 @@ func (d *detection) resolveOne(i int) {
 	// 这样「现在用的那个地址还灵不灵」在界面上永远有一行实测结论，不会因为 DNS 不再返回它就消失。
 	// 最多占每域名名额里的 PerHostname-1 个，至少给解析结果留一格：当前生效不许把新候选挤光。
 	seeds := d.appliedSeeds(i, hostname)
-	seen := make(map[string]bool, len(seeds)+d.budget.PerHostname)
+	// 上一轮测出来过、这轮还想提前扫到的地址排在解析结果前面（名额和上面那条合起来仍不许挤光），
+	// 上轮明确测不通的留到解析结果之后再补。
+	head, tail := d.knownSeeds(i, hostname, seeds)
+	seeds = append(seeds, head...)
+	seen := make(map[string]bool, len(seeds)+len(tail)+d.budget.PerHostname)
 	for _, row := range seeds {
 		seen[row.IP] = true
 	}
@@ -312,6 +342,9 @@ func (d *detection) resolveOne(i int) {
 	defer d.mu.Unlock()
 	if err != nil {
 		ho.Detail = lookupFailureText(err)
+		// 解析这一轮没成功，更要把手上已知的那几个地址测一遍：本轮列不出新候选时，
+		// 它们是这一行唯一可能的结论来源。
+		d.appendKnownTail(i, tail, seen)
 		return
 	}
 	ho.Resolved = true
@@ -332,6 +365,22 @@ func (d *detection) resolveOne(i int) {
 		}
 		d.hostRows[i] = append(d.hostRows[i], row)
 		// 解析一出结果就立刻把候选列成「排队中」，不等整批解析完再一次性画出来。
+		d.emitLocked(ho, row, "", StatusQueued)
+	}
+	// 上轮测不通的地址排在最后：名额还有剩才补进来，本轮新候选优先占位。
+	d.appendKnownTail(i, tail, seen)
+}
+
+// appendKnownTail 把上轮明确测不通的已知地址补在本轮队列最后，名额满了就不补。
+// 假定调用方已持锁。解析结果已经列过的那个地址不再补第二行（seen 里已经有了）。
+func (d *detection) appendKnownTail(i int, tail []*Candidate, seen map[string]bool) {
+	ho := d.hosts[i]
+	for _, row := range tail {
+		if seen[row.IP] || len(d.hostRows[i]) >= d.budget.PerHostname {
+			continue
+		}
+		seen[row.IP] = true
+		d.hostRows[i] = append(d.hostRows[i], row)
 		d.emitLocked(ho, row, "", StatusQueued)
 	}
 }
@@ -360,7 +409,71 @@ func (d *detection) appliedSeeds(i int, hostname string) []*Candidate {
 	return seeds
 }
 
-// assembleRows 把各主机名的候选按主机名顺序拼成一条稳定的待探测队列。
+// knownSeeds 把这个主机名新鲜期内的已知地址拆成两队：
+// head 是上轮判为可用的，插在本轮解析结果之前；tail 是上轮明确测不通的（不可用、超时），
+// 排在解析结果之后补位。其它状态（未检测、取消这类「上轮压根没测出来结论」的）整条忽略：
+// 那不是一个「测过之后知道好坏」的地址，拿它挤占本轮名额没有依据。
+//
+// 名额收口和当前生效那一条同一道闸：已生效 + 上轮可用合计不超过 PerHostname-1，
+// 至少给本轮解析结果留一格——上轮的成绩不能把这一轮的新候选全挤光。
+// 假定调用方在本轮开始时已取好 applied。
+func (d *detection) knownSeeds(i int, hostname string, applied []*Candidate) (head, tail []*Candidate) {
+	known := d.known[hostname]
+	if len(known) == 0 {
+		return nil, nil
+	}
+	cutoff := d.runner.now().UTC().Add(-knownFreshWindow)
+	taken := make(map[string]bool, len(applied))
+	for _, row := range applied {
+		taken[row.IP] = true
+	}
+	for _, k := range known {
+		at, err := time.Parse(time.RFC3339, k.UpdatedAt)
+		if err != nil || at.UTC().Before(cutoff) {
+			continue
+		}
+		canonical := canonicalIP(k.IP)
+		if canonical == "" || taken[canonical] {
+			continue
+		}
+		row := &Candidate{
+			ID:        candidateID(d.itemID, hostname, canonical),
+			Hostname:  hostname,
+			IP:        canonical,
+			IPv6:      isIPv6(canonical),
+			Status:    StatusQueued,
+			LatencyMS: k.LatencyMS,
+		}
+		switch k.Status {
+		case StatusAvailable:
+			head = append(head, row)
+		case StatusUnavailable, StatusTimeout:
+			tail = append(tail, row)
+		}
+	}
+	// 快的排前面：这一队要抢的是「预算截断前一定测到」的位置，延迟升序才是「优秀的检测结果」。
+	// 没测出延迟（0）的垫后，和候选池视图那条排序同一口径——把 0 当最快会让一个说不清快慢的地址挤到最前。
+	sort.SliceStable(head, func(a, b int) bool {
+		la, lb := head[a].LatencyMS, head[b].LatencyMS
+		if (la > 0) != (lb > 0) {
+			return la > 0
+		}
+		if la > 0 && la != lb {
+			return la < lb
+		}
+		return head[a].IP < head[b].IP
+	})
+	limit := d.budget.PerHostname - 1 - len(applied)
+	if limit < 0 {
+		limit = 0
+	}
+	if len(head) > limit {
+		head = head[:limit]
+	}
+	sort.SliceStable(tail, func(a, b int) bool { return tail[a].IP < tail[b].IP })
+	return head, tail
+}
+
 // 拼完之后 total 才是最终值——解析期间界面上那个「完成数/总数」的总数会随候选列出而增长，
 // 所以进度只能在这一阶段之后当真。
 func (d *detection) assembleRows() {
@@ -573,6 +686,41 @@ func uniqueHostnames(raw []string) []string {
 		}
 		seen[n] = true
 		out = append(out, n)
+	}
+	return out
+}
+
+// normalizeKnown 同 normalizeApplied，只是每条已知地址还要带着当时的结论和「那次检测的时间」。
+// 这里不判新鲜度：时间基准是本轮开始那一刻，要在排队时才拿得到，所以整条读不懂日期的先留着，
+// 到 knownSeeds 那一步再按过期丢掉。
+func normalizeKnown(raw map[string][]KnownCandidate) map[string][]KnownCandidate {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string][]KnownCandidate, len(raw))
+	for host, list := range raw {
+		name := hosts.NormalizeHostname(host)
+		if name == "" {
+			continue
+		}
+		seen := make(map[string]bool, len(list))
+		rows := make([]KnownCandidate, 0, len(list))
+		for _, k := range list {
+			canonical := canonicalIP(k.IP)
+			if canonical == "" || seen[canonical] {
+				continue
+			}
+			seen[canonical] = true
+			k.IP = canonical
+			rows = append(rows, k)
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		out[name] = rows
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

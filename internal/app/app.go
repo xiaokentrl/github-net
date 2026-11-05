@@ -172,7 +172,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 		s.settings, s.settingsErr = newSettingsStore(c)
 		if s.settings != nil {
 			sanitizeSavedStrategies(s)
-			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit), probeGate, rounds, s.appliedIPsFor, s.saveDetectRound, factoryDefaultStrategy)
+			detectExec = newDetectExecutor(c, s.settings, nil, results, event.NewDetectEmitter(taskEmit), probeGate, rounds, s.appliedIPsFor, s.knownCandidatesFor, s.saveDetectRound, factoryDefaultStrategy)
 			s.detectReady = true
 		}
 	}
@@ -284,6 +284,42 @@ func (s *Service) appliedIPsFor(hostnames []string) map[string][]string {
 		return nil
 	}
 	return appliedFor(snapshot.Block, hostnames)
+}
+
+// knownCandidatesFor 读这些主机名在候选底账里的最近结论，交给检测执行器决定本轮排队顺序。
+// 底账打不开或读失败都给 nil：那是「没有已知」，顺序退回「解析结果原序」，不影响这一轮检测本身。
+// 只查一次整表再按域名挑：一轮检测开局读一次，和上面那条现读同一口径。
+func (s *Service) knownCandidatesFor(hostnames []string) map[string][]accelerator.KnownCandidate {
+	if s.candidateStore == nil {
+		return nil
+	}
+	want := make(map[string]bool, len(hostnames))
+	for _, h := range hostnames {
+		n := hosts.NormalizeHostname(h)
+		if n != "" {
+			want[n] = true
+		}
+	}
+	rows, err := s.candidateStore.Pool("")
+	if err != nil {
+		return nil
+	}
+	out := make(map[string][]accelerator.KnownCandidate)
+	for _, r := range rows {
+		if !want[r.Hostname] {
+			continue
+		}
+		out[r.Hostname] = append(out[r.Hostname], accelerator.KnownCandidate{
+			IP:        r.IP,
+			LatencyMS: r.LatencyMS,
+			Status:    accelerator.CandidateStatus(r.Status),
+			UpdatedAt: r.UpdatedAt,
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // GetAppStatus 返回平台、Hosts 写权限探测结果、DNS 解析选型和应用版本，

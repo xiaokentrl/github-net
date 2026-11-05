@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/xiaokentrl/github-net/internal/accelerator"
 	"github.com/xiaokentrl/github-net/internal/accelerator/strategies"
@@ -163,7 +164,7 @@ func detectStore(t *testing.T, defaults map[string]string) *config.Store {
 // 要用例关心它时再改 exec.appliedIPs。
 func newDetectExecutorForTest(t *testing.T, store *config.Store, probe accelerator.ProbeFunc) *detectExecutor {
 	t.Helper()
-	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil, nil, nil, nil, nil, nil)
+	return newDetectExecutor(detectCatalog(), store, probe, newDetectResultStore(), nil, nil, nil, nil, nil, nil, nil)
 }
 
 func detectCandidates() map[string][]strategies.Candidate {
@@ -255,7 +256,7 @@ func TestDetectExecutorHandsRoundToLedger(t *testing.T) {
 		saved = append(saved, taskRound+"|"+scopeID+"|"+strategyID+"|"+r.ItemID)
 	}
 	exec := newDetectExecutor(detectCatalog(), detectStore(t, nil), availableProbe,
-		newDetectResultStore(), nil, nil, nil, nil, save, nil)
+		newDetectResultStore(), nil, nil, nil, nil, nil, save, nil)
 	exec.strategyFor = lookup.table(lookup.strategy(detectMethodGitHub, []string{detectScopeGitHub}))
 
 	out := exec.Execute(context.Background(),
@@ -286,7 +287,7 @@ func TestDetectExecutorHandsRoundToLedger(t *testing.T) {
 func TestDetectExecutorFallsBackToFactoryDefault(t *testing.T) {
 	lookup := &detectLookup{cands: detectCandidates()}
 	exec := newDetectExecutor(detectCatalog(), detectStore(t, nil), availableProbe,
-		newDetectResultStore(), nil, nil, nil, nil, nil,
+		newDetectResultStore(), nil, nil, nil, nil, nil, nil,
 		func(scopeID string) (string, bool) {
 			if scopeID == detectScopeGitHub {
 				return detectMethodGitHub, true
@@ -721,6 +722,89 @@ func TestDetectExecutorFeedsAppliedIPsIntoRound(t *testing.T) {
 		for _, c := range h.Candidates {
 			if c.Applied {
 				t.Errorf("没给已知地址却冒出了「当前生效」的行：%+v", c)
+			}
+		}
+	}
+}
+
+// 底账接缝真的接进了这一轮：上轮可用、且在新鲜期内的地址排到本轮解析结果前面，
+// 于是档位名额只剩一格时被占掉的是它，而不是本轮新查出来的地址。
+// 超过缓存保留期限（3 天）那条（哪怕延迟更好）不参与；没给底账接缝时顺序一个不变。
+func TestDetectExecutorFeedsKnownPoolIntoRound(t *testing.T) {
+	lookup := &detectLookup{cands: detectCandidates()}
+	exec := newDetectExecutorForTest(t, detectStore(t, nil), availableProbe)
+	exec.strategyFor = lookup.table(lookup.strategy(detectMethodGitHub, []string{detectScopeGitHub}))
+	fresh := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	stale := time.Now().UTC().Add(-4 * 24 * time.Hour).Format(time.RFC3339)
+	var asked []string
+	exec.knownPool = func(hostnames []string) map[string][]accelerator.KnownCandidate {
+		asked = append([]string(nil), hostnames...)
+		return map[string][]accelerator.KnownCandidate{
+			detectHostAPI: {
+				{IP: "198.51.100.8", LatencyMS: 1, Status: accelerator.StatusAvailable, UpdatedAt: stale},
+				{IP: "198.51.100.7", LatencyMS: 40, Status: accelerator.StatusAvailable, UpdatedAt: fresh},
+			},
+		}
+	}
+
+	if out := exec.Execute(context.Background(),
+		task.Task{Kind: task.KindDetect, ItemID: "api", ScopeID: detectScopeGitHub, StrategyID: detectMethodGitHub},
+		(&detectReports{}).report); out.Status != task.StatusDone {
+		t.Fatalf("一轮跑完该收在完成，实际 %+v", out)
+	}
+	if strings.Join(asked, ",") != detectHostAPI+","+detectHostCodeload {
+		t.Errorf("读底账要用去重后的域名，实得 %v", asked)
+	}
+
+	view, ok := exec.results.view("api")
+	if !ok {
+		t.Fatal("这一轮的结果该存进结果存储供详情页取")
+	}
+	for _, h := range view.Hosts {
+		if h.Hostname != detectHostAPI {
+			continue
+		}
+		if len(h.Candidates) == 0 || h.Candidates[0].IP != "198.51.100.7" {
+			t.Fatalf("新鲜期内上轮可用的那条该排在最前面，实得 %+v", h.Candidates)
+		}
+		if h.Candidates[0].Applied {
+			t.Errorf("上轮可用的地址不是当前生效，不该带那个标记：%+v", h.Candidates[0])
+		}
+		for _, c := range h.Candidates {
+			if c.IP == "198.51.100.8" {
+				t.Errorf("过期那条不该当已知排进来：%+v", c)
+			}
+		}
+	}
+	limit, ok := config.ProfileCandidateLimit(config.ProfileLow)
+	if !ok {
+		t.Fatal("省流档没有每主机名候选上限")
+	}
+	hostsCalled, _, maxes := lookup.calls()
+	seen := map[string]int{}
+	for i, h := range hostsCalled {
+		seen[h] = maxes[i]
+	}
+	if got := seen[detectHostAPI]; got != limit-1 {
+		t.Errorf("上轮可用那条占了一格，传给方法的上限应是 %d，实得 %d", limit-1, got)
+	}
+	if got := seen[detectHostCodeload]; got != limit {
+		t.Errorf("底账里没有的域名上限不该少，应是 %d，实得 %d", limit, got)
+	}
+
+	// 反向：没接底账接缝（库打不开那类装配）时，一行已知候选都不该冒出来。
+	bare := newDetectExecutorForTest(t, detectStore(t, nil), availableProbe)
+	bare.strategyFor = exec.strategyFor
+	if out := bare.Execute(context.Background(),
+		task.Task{Kind: task.KindDetect, ItemID: "api", ScopeID: detectScopeGitHub, StrategyID: detectMethodGitHub},
+		(&detectReports{}).report); out.Status != task.StatusDone {
+		t.Fatalf("没有底账也照样该跑完一轮，实际 %+v", out)
+	}
+	bareView, _ := bare.results.view("api")
+	for _, h := range bareView.Hosts {
+		for _, c := range h.Candidates {
+			if strings.HasPrefix(c.IP, "198.51.100.") {
+				t.Errorf("没接底账接缝却冒出了上轮地址：%+v", c)
 			}
 		}
 	}

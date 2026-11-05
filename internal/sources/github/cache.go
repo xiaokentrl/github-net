@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/xiaokentrl/github-net/internal/retention"
 )
 
 // FileCache 是「每个源各记一天」的落盘缓存（拍板 2026-11-02）：
@@ -111,6 +113,40 @@ func (c *FileCache) Clear(srcs []Source) ([]string, error) {
 		return removed, fmt.Errorf("这几份源缓存没能删掉：%s", strings.Join(problems, "；"))
 	}
 	return removed, nil
+}
+
+// PruneExpired 删掉这个目录里超过保留期限的落盘缓存（拍板 2026-11-05：任何缓存最多只保存 3 天，超期自动清理）。
+// 期限用全局那一个数字 retention.MaxAge，不在这里另写天数。「多旧」看文件的修改时间：本包写下它的那一刻
+// 就是这份内容下载回来的那一刻，落盘落到一半崩掉留下的 .source-*.json 临时文件也按同一条走。
+// 目录还不存在就是这台机器上压根没缓存过，不是失败。
+func (c *FileCache) PruneExpired() error {
+	if !c.Enabled() {
+		return nil
+	}
+	entries, err := os.ReadDir(c.dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("缓存目录读不动: %w", err)
+	}
+	cutoff := c.now().Add(-retention.MaxAge)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			// 连时间都拿不到就这一趟不碰它，下次启动再看；清理不该拦住任何功能。
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			if err := os.Remove(filepath.Join(c.dir, e.Name())); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("超期缓存 %s 删不掉: %w", e.Name(), err)
+			}
+		}
+	}
+	return nil
 }
 
 // writeCacheFile 在同目录建唯一临时文件、同步落盘再改名替换；目录 0700、文件 0600。
