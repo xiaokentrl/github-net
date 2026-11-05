@@ -6,6 +6,7 @@ import { getErrorMessage } from '../../api/errors'
 import { pickBestCandidate } from '../detect/candidateChoice'
 import { useBarResize } from '../../components/layout/useBarResize'
 import { t } from '../../i18n'
+import { formatDateTime } from '../../i18n/formatters'
 import { clampQueueHeight, QUEUE_HEIGHT_DEFAULT, QUEUE_HEIGHT_MIN } from './queueHeight'
 import { clampQueueListWidth, QUEUE_LIST_DEFAULT_WIDTH } from './queueListWidth'
 import { applyTaskSnapshot, markTaskLoadError, useTaskQueue } from './taskStore'
@@ -45,53 +46,41 @@ function qdFocusIndex(kids: Task[]): number {
   return i >= 0 ? i : Math.max(0, kids.length - 1)
 }
 
-// 明细第二列「当前阶段 / 结果」的文字。以前落定的行只剩一个色点和一个「—」，
-// 用户看不出这一项到底做成了什么，所以逐档给一句实话：
-// 写了几条、还差几条、还是没写；检测给「几可用」；排队也照实说。
-// 数字来源是后端这次读回来的逐条 Hosts 事实（HostsState.entries），界面不自己数区段。
-function stageResultOf(task: Task, entries: HostEntryState[], detect: { hosts: number; available: number } | null): string {
+// 明细第二列「当前阶段 / 结果」的文字，只给还没摊平成逐条域名的那些行用：
+// 排队说排队、跑起来说当前阶段、失败和跳过说原因。落定（完成／已还原）的行摊成一行一条域名，
+// 每条域名自己说「写上了没有、地址是什么」，这里就不再给一句汇总。
+function stageResultOf(task: Task): string {
   if (task.status === 'running' || task.status === 'restoring') return task.phaseText || t('queue.detail.running')
   if (task.status === 'failed' || task.status === 'rolledback' || task.status === 'skipped') {
     return task.errorMsg || t(statusKeyOf(task.status))
   }
   if (task.status === 'waiting') return t('queue.status.waiting')
-  const written = entries.filter((e) => e.written).length
-  if (task.status === 'done') {
-    if (task.kind === 'detect') {
-      return detect === null ? t('queue.status.done') : t('queue.detail.detected', { hosts: detect.hosts, available: detect.available })
-    }
-    // 应用成功：说清这个项目的哪几条现在写在 Hosts 上（covered/total 一物二用，partial 一眼能看出）。
-    return entries.length === 0 ? t('queue.status.done') : t('queue.detail.applied', { covered: written, total: entries.length })
-  }
-  if (task.status === 'restored') {
-    return entries.length === 0 ? t('queue.status.restored') : t('queue.detail.restored', { total: entries.length })
-  }
-  return '—'
+  if (task.status === 'restored') return t('queue.status.restored')
+  return t('queue.status.done')
 }
 
-// 明细行下面那张逐条子表的一行。`ip` 为真才是「一个地址」，走等宽绿字；
-// 其余都是状态话术（未写入／判不出归属／没有可用地址／解析失败），走中性字色，不冒充结果。
-type EntryLine = { hostname: string; value: string; ip: boolean }
+// 摊平之后一行就是「一条域名」，没有下面那层点开才铺的子表了。每行带三个事实：
+//   state：这一行的下落（已写入／未写入／可用／没有可用地址／解析失败／判不出归属／已还原／还写着）
+//   ip ＋ latencyMs ＋ measuredAt：这一行现在的地址、连上要多久、那次实测是什么时候，
+//     没有就是空串和 0。耗时和定格时间都只认这一条地址自己的实测（后端逐条带的候选池定格）。
+//   tone：这一行自己的底色档——一个项目写了一半时，写上的绿、没写上的灰，一眼看出差哪条
+// 选址算法和详情页同一份（pickBestCandidate），两边出现两个地址就是错的。
+// 应用／还原的地址来自后端这次读回来的逐条 Hosts 事实；整段判不出归属时后端给空数组，
+// 退回目录里这个项目的域名清单，状态写「判不出归属」，不自己编 IP。
+type EntryLine = { hostname: string; state: string; ip: string; reason: string; latencyMs: number; measuredAt: string; tone: Tone }
 
-// 每一行任务都摊成「一条域名一行」，检测、应用、还原三类一样给（拍板 2026-11-02）：
-//   - 检测：这一轮每条域名选中的最优可用地址；有候选但没一条可用→「没有可用地址」；解析不出来→「解析失败」。
-//     选址算法和详情页同一份（pickBestCandidate），两边出现两个地址就是错的。
-//   - 应用／还原：后端这次读回来的逐条 Hosts 事实；整段判不出归属时后端给空数组，
-//     退回目录里这个项目的域名清单，值写「判不出归属」，不自己编 IP。
-// 跑起来的行会一行一行补上（检测事件把已完成的域名先画出来），所以「还没跑完」不等于「缺行」。
-// 每个主机名最优可用候选的延迟：展开行把「连上要多久」跟在地址后面，字段才算齐。
-function latencyByHostOf(result: DetectResultView | undefined): Map<string, number> {
-  const out = new Map<string, number>()
-  for (const host of result?.hosts ?? []) {
-    const best = pickBestCandidate(host.candidates ?? [])
-    if (best && best.latencyMs > 0) out.set(host.hostname, best.latencyMs)
+// 一条地址的耗时和通不通，只认它自己那一次实测：后端逐条带的定格（候选池里同名同址那一行）优先，
+// 内存这一轮里同一颗地址的候选只作补充。同域名另一个地址的数不能顶上来——那是编。
+// 定格说这颗地址不通就不给毫秒数：给一个连不通的地址摆上延迟，等于替它做保证。
+type HostRow = NonNullable<DetectResultView['hosts']>[number]
+function probeOf(entry: HostEntryState, host: HostRow | undefined): { ms: number; unreachable: boolean } {
+  if (entry.probeStatus) {
+    const ok = entry.probeStatus === 'available'
+    return { ms: ok ? entry.latencyMs ?? 0 : 0, unreachable: !ok }
   }
-  return out
-}
-
-// 值拼上耗时：没有耗时就只给地址，不摆一个「0ms」充数。
-function withLatency(ip: string, latencyMs: number | undefined): string {
-  return latencyMs ? `${ip} · ${latencyMs}ms` : ip
+  const best = host ? pickBestCandidate(host.candidates ?? []) : null
+  if (best && best.ip === entry.ip) return { ms: best.latencyMs > 0 ? best.latencyMs : 0, unreachable: false }
+  return { ms: 0, unreachable: false }
 }
 
 function entryLinesOf(
@@ -100,41 +89,60 @@ function entryLinesOf(
   hostnames: string[],
   result: DetectResultView | undefined,
 ): EntryLine[] {
-  const latency = latencyByHostOf(result)
+  const hostByName = new Map((result?.hosts ?? []).map((h) => [h.hostname, h]))
   if (kind === 'detect') {
     return (result?.hosts ?? []).map((host) => {
       const best = pickBestCandidate(host.candidates ?? [])
-      if (best) return { hostname: host.hostname, value: withLatency(best.ip, best.latencyMs), ip: true }
-      return { hostname: host.hostname, value: host.resolved ? t('queue.detail.noUsableAddress') : t('queue.detail.resolveFailed'), ip: false }
+      if (best) return { hostname: host.hostname, state: t('queue.detail.rowUsable'), ip: best.ip, reason: '', latencyMs: best.latencyMs > 0 ? best.latencyMs : 0, measuredAt: '', tone: 'written' }
+      if (!host.resolved) return { hostname: host.hostname, state: t('queue.detail.resolveFailed'), ip: '', reason: '', latencyMs: 0, measuredAt: '', tone: 'failed' }
+      return { hostname: host.hostname, state: t('queue.detail.noUsableAddress'), ip: '', reason: '', latencyMs: 0, measuredAt: '', tone: 'unwritten' }
     })
   }
   if (entries.length > 0) {
-    // written 为真但后端没给地址（理论上不会）也按「未写入」显示：这一栏宁可不给数，也不给空的。
-    // 未写入的行能从检测结果推出原因的就带上（解析失败／没有可用候选），推不出才说「未写入」。
-    const hostByName = new Map((result?.hosts ?? []).map((h) => [h.hostname, h]))
+    // 没写上的行也照实带上区段里现在写着的地址（含没有认领者的旧行）：「当前写的是什么」和
+    // 「是不是我们写的」是两件事，界面只说后一件就把前一件藏掉了。
+    // 为什么没写上先取这一条地址自己的定格（连不通），再退回这一轮整域的结论
+    // （解析失败／没有可用地址），都没有才只说下落。
     return entries.map((entry) => {
-      let value = t('queue.detail.entryNotWritten')
+      const host = hostByName.get(entry.hostname)
+      const probe = entry.ip ? probeOf(entry, host) : { ms: 0, unreachable: false }
+      const ms = probe.ms
+      // 这一行说过实测（不管通不通）就把定格时间留着：鼠标停上去能看见这句结论是什么时候测的。
+      const at = entry.measuredAt ?? ''
       if (entry.written && entry.ip) {
-        value = withLatency(entry.ip, latency.get(entry.hostname))
-      } else {
-        const host = hostByName.get(entry.hostname)
-        if (host && host.resolved === false) value = t('queue.detail.resolveFailed')
-        else if (host && !pickBestCandidate(host.candidates ?? [])) value = t('queue.detail.noUsableAddress')
+        // 区段里确实写着这一条，状态词照说「已写入」；但它自己最后一次实测连不通，
+        // 底色就不能涂成功那一档——那一绿是在替它保证「这条在加速」，而我们已经知道它不通。
+        const reason = probe.unreachable ? t('queue.detail.rowUnreachable') : ''
+        const tone: Tone = probe.unreachable ? 'failed' : kind === 'restore' ? 'failed' : 'written'
+        return { hostname: entry.hostname, state: kind === 'restore' ? t('queue.detail.rowNotRestored') : t('queue.detail.rowWritten'), ip: entry.ip, reason, latencyMs: ms, measuredAt: at, tone }
       }
-      return { hostname: entry.hostname, value, ip: Boolean(entry.written && entry.ip) }
+      if (kind === 'restore') {
+        return { hostname: entry.hostname, state: t('queue.detail.rowRestored'), ip: entry.ip ?? '', reason: probe.unreachable ? t('queue.detail.rowUnreachable') : '', latencyMs: ms, measuredAt: at, tone: 'unwritten' }
+      }
+      let reason = ''
+      let tone: Tone = 'unwritten'
+      if (probe.unreachable) reason = t('queue.detail.rowUnreachable')
+      else if (host && host.resolved === false) {
+        reason = t('queue.detail.resolveFailed')
+        tone = 'failed'
+      } else if (host && !pickBestCandidate(host.candidates ?? [])) reason = t('queue.detail.noUsableAddress')
+      return { hostname: entry.hostname, state: t('queue.detail.entryNotWritten'), ip: entry.ip ?? '', reason, latencyMs: ms, measuredAt: at, tone }
     })
   }
-  return hostnames.map((hostname) => ({ hostname, value: t('queue.detail.entryUnowned'), ip: false }))
+  return hostnames.map((hostname) => ({ hostname, state: t('queue.detail.entryUnowned'), ip: '', reason: '', latencyMs: 0, measuredAt: '', tone: 'unwritten' }))
 }
 
 
-// 队列面板：双栏——左「任务列表」（轮，对应原型包裹任务），右「任务明细」（轮下的项目任务，
-// 三列：名称 / 当前阶段结果 / 进度耗时）。切页面不丢进度——状态住 taskStore，不在这里。
+// 队列面板：双栏——左「任务列表」（轮，对应原型包裹任务），右「任务明细」。
+// 明细三列：名称 / 当前阶段 · 结果 / 进度 · 耗时。落定（完成／已还原）的项目摊成一行一条域名，
+// 名称那一格重复项目名，第二列说这一条的下落和地址，第三列给「第几条／共几条；连上要多久」。
+// 排队、跑着、失败、跳过仍是一行一个项目——那几档要说的是项目级别的一句话（阶段名或失败原因）。
+// 切页面不丢进度——状态住 taskStore，不在这里。
 // height 来自配置里的队列高度（布局屏预设和面板上方那条横向手柄都写这一个字段；null 用默认）。
 // 收起是界面自己的事：原型也没把它落进配置，重开窗口还是展开的。
 // listWidth + onListWidthChange：两栏之间那条分隔条可拖，宽度落在配置里（原型同一条规则）。
 // activeItemId + onPickItem 承担双向联动：点明细行 → 主详情显示该子菜单的候选 IP；
-// 主详情/左树选中子菜单 → 明细行高亮并翻到所在页。
+// 主详情/左树选中子菜单 → 明细那几行一起高亮，焦点行滚进视野。
 // hostsOf：后端每次 GetItems 现读的 Hosts 事实（含逐条主机名写到哪个地址）。
 // 明细那一列要说「写了几条、哪几条」，这份数字只能从这儿来，界面不自己数区段。
 // hostnamesOf：目录里每个项目的域名清单，只在整段判不出归属（后端逐条给空数组）时用来逐条列域名。
@@ -212,22 +220,9 @@ export function TaskPanel({
   const kids = selected ? selected.kids : []
   const focus = qdFocusIndex(kids)
 
-  // 翻页：一页能放几行按明细面板高度现算；焦点跨页自动跟随，箭头手动翻后保持。
-  // 逐条替换默认就铺开：应用一轮跑完，每一项的每条域名写到了哪个 IP（或没写上）要一眼看到，
-  // 不该一行一行点开才知道。▸/▾ 留着给手动收起；切轮时重置，上一轮收起的那几条不带到这一轮。
-  const [collapsedRows, setCollapsedRows] = useState<ReadonlySet<string>>(new Set())
-  const toggleRow = useCallback((id: string) => {
-    setCollapsedRows((current) => {
-      const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
-  useEffect(() => setCollapsedRows(new Set()), [selectedRoundId])
-
-  // 逐条子表先按整轮算一遍：翻页要按「展开之后真实占多高」分配，渲染只画当页那几条。
-  // 两处共用同一份，才不会「翻页按 3 条算、画出来占 6 条」把列表顶出面板。
+  // 落定（完成／已还原）的任务摊成「一行一条域名」，不再有点开才铺的那层子表：
+  // 应用一轮跑完，每条域名写到了哪个 IP（或为什么没写上）要一眼看到。
+  // 逐条先按整轮算一遍再画，检测、应用、还原三类共用同一份口径。
   const lineRows = useMemo(
     () =>
       kids.map((task) => {
@@ -419,68 +414,63 @@ export function TaskPanel({
                   </thead>
                   <tbody>
                     {kids.map((task, i) => {
-                      const entries = (task.itemId && hostsOf.get(task.itemId)?.entries) || []
                       const result = task.itemId ? state.results[task.itemId] : undefined
-                      const stageResult = stageResultOf(
-                        task,
-                        entries,
-                        result ? { hosts: (result.hosts ?? []).length, available: result.available } : null,
-                      )
-                      const prog = task.progress > 0 || task.status === 'running'
-                        ? `${task.progress}%${task.duration ? ' · ' + task.duration : ''}`
-                        : task.duration || '—'
-                      // 逐条子表用的就是翻页那一份：检测给这一轮每条域名的结果，应用/还原给每条域名现在的下落。
-                      const lines = lineRows[i] ?? []
-                      const expandable = lines.length > 0
-                      const open = !collapsedRows.has(task.id)
-                      // 展开按钮的说法跟着任务走：检测那行摊开的是这一轮每条域名的结果，不是替换。
-                      const toggleKey = task.kind === 'detect' ? (open ? 'queue.detail.collapseDetect' : 'queue.detail.expandDetect') : open ? 'queue.detail.collapseEntries' : 'queue.detail.expandEntries'
+                      const tone = projectState(hostsOf.get(task.itemId ?? ''), state.tasks, task.itemId ?? '', result).tone
+                      const focused = task.id === kids[focus]?.id
+                      const isSel = Boolean(task.itemId && task.itemId === activeItemId)
+                      const rowClass = (rowTone: Tone, bar: boolean) =>
+                        [TASK_ROW_CLASS[rowTone], bar && focused ? styles.focus : '', isSel ? styles.sel : ''].filter(Boolean).join(' ') || undefined
+                      const dot = <span className={`${styles.dot} ${styles['dot-' + task.status]}`} />
+                      // 落定（完成／已还原）且有逐条域名 → 一行一条域名，底色跟这一行自己的下落。
+                      // 排队、跑着、失败、跳过仍是一行一个项目：那几档要说的是项目级别的一句实话
+                      // （当前阶段或失败原因），拆到域名上反而把这句话弄丢了。
+                      const lines = task.status === 'done' || task.status === 'restored' ? lineRows[i] ?? [] : []
+                      if (lines.length > 0) {
+                        return (
+                          <Fragment key={task.id}>
+                            {lines.map((line, idx) => (
+                              <tr
+                                key={line.hostname}
+                                data-task-id={task.id}
+                                className={rowClass(line.tone, idx === 0)}
+                                onClick={() => pickItem(task.itemId)}
+                              >
+                                <td>
+                                  {dot}
+                                  <span title={task.name}>{task.name}</span>
+                                </td>
+                                <td>
+                                  {t('queue.detail.rowEntry', { state: line.state, index: idx + 1, total: lines.length })}
+                                  <span className={styles.dim}>；</span>
+                                  <span title={line.hostname}>{line.hostname}</span>
+                                  {/* 地址和原因各说各的：写着的那颗地址也可能连不通，两句话要同排，
+                                      不能因为带了地址就把「这条地址连不通」藏掉。 */}
+                                  {line.ip ? <span className={styles.rowIp}> {line.ip}</span> : null}
+                                  {line.reason ? <span className={styles.rowReason}> {line.reason}</span> : null}
+                                </td>
+                                <td className={styles.dim}>
+                                  <span title={line.measuredAt ? t('queue.detail.measuredAt', { at: formatDateTime(line.measuredAt) }) : undefined}>
+                                    {idx + 1}/{lines.length}；{line.latencyMs ? `${line.latencyMs}ms` : '—'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </Fragment>
+                        )
+                      }
+                      const prog =
+                        task.progress > 0 || task.status === 'running'
+                          ? `${task.progress}%${task.duration ? ' · ' + task.duration : ''}`
+                          : task.duration || '—'
                       return (
-                        <Fragment key={task.id}>
-                          <tr
-                            data-task-id={task.id}
-                            className={`${TASK_ROW_CLASS[projectState(hostsOf.get(task.itemId ?? ''), state.tasks, task.itemId ?? '', result).tone]} ${task.id === kids[focus]?.id ? styles.focus : ''} ${task.itemId && task.itemId === activeItemId ? styles.sel : ''}`.trim() || undefined}
-                            onClick={() => pickItem(task.itemId)}
-                          >
-                            <td>
-                              {expandable ? (
-                                <button
-                                  type="button"
-                                  className={styles.expandBtn}
-                                  aria-expanded={open}
-                                  aria-label={t(toggleKey)}
-                                  title={t(toggleKey)}
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    toggleRow(task.id)
-                                  }}
-                                >
-                                  {open ? '▾' : '▸'}
-                                </button>
-                              ) : (
-                                <span className={styles.expandSlot} aria-hidden="true" />
-                              )}
-                              <span className={`${styles.dot} ${styles['dot-' + task.status]}`} />
-                              <span title={task.name}>{task.name}</span>
-                            </td>
-                            <td className={task.status === 'failed' ? styles.err : ''}>{stageResult}</td>
-                            <td className={styles.dim}>{prog}</td>
-                          </tr>
-                          {expandable && open ? (
-                            <tr className={styles.entryRow}>
-                              <td colSpan={3}>
-                                <ul className={styles.entryList}>
-                                  {lines.map((line) => (
-                                    <li key={line.hostname} className={styles.entryItem}>
-                                      <span className={styles.entryHost}>{line.hostname}</span>
-                                      <span className={line.ip ? styles.entryIp : `${styles.entryIp} ${styles.entryMissing}`}>{line.value}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </td>
-                            </tr>
-                          ) : null}
-                        </Fragment>
+                        <tr key={task.id} data-task-id={task.id} className={rowClass(tone, true)} onClick={() => pickItem(task.itemId)}>
+                          <td>
+                            {dot}
+                            <span title={task.name}>{task.name}</span>
+                          </td>
+                          <td className={task.status === 'failed' ? styles.err : ''}>{stageResultOf(task)}</td>
+                          <td className={styles.dim}>{prog}</td>
+                        </tr>
                       )
                     })}
                     {kids.length === 0 && (

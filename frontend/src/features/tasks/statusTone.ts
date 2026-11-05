@@ -4,8 +4,10 @@
 // 树、状态徽章、全二级菜单表、当前写入 IP 列、候选表、队列明细都从这里取档位，
 // 颜色只用这四个值。状态源每次渲染都会重算，一变所有视图一起变，不会停在旧颜色上。
 //
-// 「已写Hosts / 未写Hosts」只看后端现读回来的逐条事实 entries[].written，
-// 不看检测结果：这样页面刷新、异步回读、检测完成都不会让状态自己乱跳。
+// 「已写Hosts」的档位先看后端现读回来的逐条事实 entries[].written，
+// 再看这一批地址的实测结论：一条能加速的都没有，那一格就压成「未写」（拍板 2026-11-06 晚）。
+// 实测结论有两个来源（同名同址，缺一个就认另一个）：后端从候选池贴回的 entries[].probeStatus（重启也还在）
+// 和最近一轮检测里每条候选的定格。没测过不等于连不通——一点证据都没有时不降级，照文件事实给档。
 import { Status } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { DetectResultView, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
@@ -16,14 +18,37 @@ export type ProjectState = { tone: Tone; progress?: Progress; reason?: string; w
 
 export const TONE_VALUES: readonly Tone[] = ['working', 'failed', 'written', 'unwritten']
 
-// 「这一轮一个可用候选都没有」算坏消息，落 failed 档（红）。
-// 没检测过、这一轮还没有域名行、用户主动取消，都不算：那些不是「测完没结果」。
-// 有没有可用按候选实算，和详情页挑最优那份口径一致，不另抄一份数字。
-export function noUsableResult(result: DetectResultView | undefined): boolean {
-  if (!result || result.cancelled) return false
-  const hosts = result.hosts ?? []
-  if (hosts.length === 0) return false
-  return !hosts.some((h) => (h.candidates ?? []).some((c) => String(c.status) === 'available'))
+// 只有这三种是「测完给出的结论」。排队中、在测、被取消、没排上测——这些都只是还没有结论，
+// 拿它们当证据会把「没测过」显示成「连不通」。
+const DECISIVE = new Set(['available', 'unavailable', 'timeout'])
+
+// addressUsable 判断「这一条地址到底能不能加速」。只认这条地址自己的定格：
+// 没有定格＝不知道＝算能用（不许凭不知道降级）。unavailable／timeout＝连不通。
+export function addressUsable(status: string | undefined): boolean {
+  if (!status || !DECISIVE.has(status)) return true
+  return status === 'available'
+}
+
+// 这个项目手上所有「已出结论」的地址，两个来源摊平：区段里正写着的地址自己的定格 + 最近一轮每条候选的定格。
+function verdictsOf(hosts: HostsState | undefined, result: DetectResultView | undefined): string[] {
+  const out: string[] = []
+  for (const entry of hosts?.entries ?? []) {
+    if (entry.ip && entry.probeStatus) out.push(entry.probeStatus)
+  }
+  if (result && !result.cancelled) {
+    for (const host of result.hosts ?? []) {
+      for (const c of host.candidates ?? []) out.push(String(c.status))
+    }
+  }
+  return out.filter((s) => DECISIVE.has(s))
+}
+
+// 「全都不能加速」＝有实测证据、且证据里没有任何一条 available。
+// 这一句判的是整个项目，和逐条的 addressUsable 是同一条规则的两次落点：一条不通只降那一条。
+export function nothingAccelerates(hosts: HostsState | undefined, result: DetectResultView | undefined): boolean {
+  const verdicts = verdictsOf(hosts, result)
+  if (verdicts.length === 0) return false
+  return !verdicts.some((s) => s === 'available')
 }
 
 // 四档文案键；处理中再按「在做什么」换成更具体的一个词。
@@ -100,7 +125,7 @@ function progressOf(task: ToneTask): Progress {
   return 'restoring'
 }
 
-// 单一入口：所有视图都调它。优先级＝在跑的 > 坏消息 > 逐条写入事实。
+// 单一入口：所有视图都调它。优先级＝在跑的 > 坏消息 > 逐条写入事实，最后再过一道「能不能加速」的降级。
 export function projectState(hosts: HostsState | undefined, tasks: readonly ToneTask[], itemId: string, result?: DetectResultView): ProjectState {
   let active: ToneTask | undefined
   let last: ToneTask | undefined
@@ -120,9 +145,9 @@ export function projectState(hosts: HostsState | undefined, tasks: readonly Tone
   if (last && TASK_TONE[String(last.status)] === 'failed') {
     return { tone: 'failed', reason: last.errorMsg, written }
   }
-  // 这一轮测完一个可用候选都没有：和失败同档（红），列表、树、徽章一起变红。
-  if (noUsableResult(result)) return { tone: 'failed', written }
-  return { tone: written ? 'written' : 'unwritten', written }
+  // 这一轮测完一个可用候选都没有：不再报失败，而是照「这一项现在能不能加速」压成未写档（拍板 2026-11-06 晚）。
+  const usable = !nothingAccelerates(hosts, result)
+  return { tone: written && usable ? 'written' : 'unwritten', written }
 }
 
 // 一行项目该显示的那个词；处理中会说得更具体。

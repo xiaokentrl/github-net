@@ -11,7 +11,7 @@ import uiStyles from '../../components/ui/ui.module.css'
 import { pickBestCandidate } from '../detect/candidateChoice'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
 import { ensureLastResults, isTerminalTask, useTaskQueue } from '../tasks/taskStore'
-import { projectState, toneForCandidate, toneForItem, type Tone } from '../tasks/statusTone'
+import { addressUsable, projectState, toneForCandidate, toneForItem, type Tone } from '../tasks/statusTone'
 import styles from './ItemDetail.module.css'
 import detectStyles from './DetectResult.module.css'
 
@@ -353,16 +353,23 @@ export function ItemDetail({
               const hs = hostsOf.get(it.id)
               const res = state.results[it.id]
               // 「【Hosts】当前写入 IP」摊成每个域名一行，行首带写入短标签（拍板 2026-11-06）：
-              // 标签只看区段里这一行到底有没有地址（entry.ip），不看这条是不是本工具认领的——
+              // 标签先看在不在区段里（entry.ip），再看这一条自己最后一次实测通不通——
+              // 写着但连不通的那条压成「未写」（拍板 2026-11-06 晚），地址照原样摊出来供还原对账，只是不算写成。
               // 认领关系管的是档位和那颗「还原」，两件事不混。没写的行只说「域名 → —」，原因在下面候选表里。
               // 逐条事实后端只在账对得上时才给；整段都不存在时给空数组，可这时文件的事实是确定的（一段都没有），
               // 所以按目录里的域名摊成「未写」。判读不了、还没读过（conflict/unknown）不能反过来说「未写」，那一格仍留 —。
               const entryLines = hs?.entries ?? []
               const lines =
                 entryLines.length > 0
-                  ? entryLines.map((entry) => ({ hostname: entry.hostname, ip: entry.ip || '', live: Boolean(entry.ip) }))
+                  ? entryLines.map((entry) => {
+                      // 标签看两件事：区段里这行有没有地址，以及这一条自己最后一次实测通不通。
+                      // 写着但连不通的那条只能算「未写」——那一格说Hosts写成了没有，一条连不通的地址没写成。
+                      const hasAddress = Boolean(entry.ip)
+                      const dead = hasAddress && !addressUsable(entry.probeStatus)
+                      return { hostname: entry.hostname, ip: entry.ip || '', live: hasAddress && !dead, dead }
+                    })
                   : hs?.status === HostsStatus.HostsNone
-                    ? (it.hostnames ?? []).map((hostname) => ({ hostname, ip: '', live: false }))
+                    ? (it.hostnames ?? []).map((hostname) => ({ hostname, ip: '', live: false, dead: false }))
                     : []
               // 待还原条数另算，只数本项目现在认领的那几条：还原落定的回执要说退了几条，不是文件里有几行。
               const claimed = (hs?.entries ?? []).filter((entry) => entry.written && entry.ip).length
@@ -371,7 +378,7 @@ export function ItemDetail({
               const availableCount = cands.filter((c) => c.status === 'available').length
               const selectedRow = it.id === item.id
               // 行底色跟统一四档走：状态源每次渲染重算，一变整行颜色立刻跟着变。
-              // 这一轮零可用的项目由 projectState 判进失败档，整行跟着红。
+              // 全都连不通的项目由 projectState 压进未写档，整行跟着灰（拍板 2026-11-06 晚）。
               const rowTone = TONE_ROW_CLASS[toneForItem(hs, state.tasks, it.id, res)]
               const rowClass = [rowTone, selectedRow ? styles.rowSel : ''].filter(Boolean).join(' ')
               return (
@@ -392,10 +399,14 @@ export function ItemDetail({
                             key={line.hostname}
                             className={`${styles.writeItem} ${line.live ? styles.writeItemWritten : ''}`}
                           >
-                            <span className={`${styles.writeTag} ${line.live ? styles.writeTagOk : styles.writeTagNo}`}>
+                            <span
+                              className={`${styles.writeTag} ${line.live ? styles.writeTagOk : styles.writeTagNo}`}
+                              title={line.dead ? t('queue.detail.rowUnreachable') : undefined}
+                            >
                               {t(line.live ? 'detail.metric.tagWritten' : 'detail.metric.tagUnwritten')}
                             </span>
-                            {line.hostname}→{line.live ? line.ip : '—'}
+                            {/* 区段里写着地址就照原样摊出来（还原要对账这颗地址），标签只说算不算写成。 */}
+                            {line.hostname}→{line.ip || '—'}
                           </span>
                         ))}
                       </span>

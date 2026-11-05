@@ -115,11 +115,18 @@ export interface DetectResultView {
  *     或者上一个项目还原后留下一条没有认领者的工具行。
  *     这时 IP 照给区段里现在实际写着的地址（区段里没有才给空串）：
  *     「当前写入 IP」讲的是这个域名现在指向哪，不能因为认领关系变了就说没写。
+ *   - ProbeStatus / LatencyMS / MeasuredAt：候选池对「这个主机名 + 这个地址」的最后一次实测定格。
+ *     界面第三列那句「连上要多久」只能来自这里，而且只认这一条地址自己的数——
+ *     池里没有这一行就三个字段全留空，不拿同域名的另一个地址的延迟顶上去（那是编）。
+ *     这三个字段是纯读侧补画：一次 GetItems 读一遍池，不改写入判定，也不动任何链路。
  */
 export interface HostEntryState {
     "hostname": string;
     "ip"?: string;
     "written": boolean;
+    "probeStatus"?: string;
+    "latencyMs"?: number;
+    "measuredAt"?: string;
 }
 
 /**

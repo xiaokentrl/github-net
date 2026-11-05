@@ -68,10 +68,51 @@ const (
 //     或者上一个项目还原后留下一条没有认领者的工具行。
 //     这时 IP 照给区段里现在实际写着的地址（区段里没有才给空串）：
 //     「当前写入 IP」讲的是这个域名现在指向哪，不能因为认领关系变了就说没写。
+//   - ProbeStatus / LatencyMS / MeasuredAt：候选池对「这个主机名 + 这个地址」的最后一次实测定格。
+//     界面第三列那句「连上要多久」只能来自这里，而且只认这一条地址自己的数——
+//     池里没有这一行就三个字段全留空，不拿同域名的另一个地址的延迟顶上去（那是编）。
+//     这三个字段是纯读侧补画：一次 GetItems 读一遍池，不改写入判定，也不动任何链路。
 type HostEntryState struct {
-	Hostname string `json:"hostname"`
-	IP       string `json:"ip,omitempty"`
-	Written  bool   `json:"written"`
+	Hostname    string `json:"hostname"`
+	IP          string `json:"ip,omitempty"`
+	Written     bool   `json:"written"`
+	ProbeStatus string `json:"probeStatus,omitempty"`
+	LatencyMS   int64  `json:"latencyMs,omitempty"`
+	MeasuredAt  string `json:"measuredAt,omitempty"`
+}
+
+// EntryProbe 是池里一条地址的定格，按「主机名 + 地址」喂给上面那三个字段。
+type EntryProbe struct {
+	Status     string
+	LatencyMS  int64
+	MeasuredAt string
+}
+
+// probeKey 是定格索引的键。主机名先归一化，地址按原样比——
+// 池里存的写法就是当初探测用的写法，这里不做第二套归一化，免得对不上号。
+func probeKey(hostname, ip string) string { return hostname + "\x00" + ip }
+
+// AttachEntryProbes 把池里的逐地址定格挂到已经摊好的逐条事实上。
+// 表读不出来（池没接、库坏了）就当没有定格：界面那一格留空，不报错也不装成「不通」。
+// 返回同一个切片，方便链式调用。
+func AttachEntryProbes(states []HostsState, probes map[string]EntryProbe) []HostsState {
+	if len(probes) == 0 {
+		return states
+	}
+	for i := range states {
+		for j := range states[i].Entries {
+			e := &states[i].Entries[j]
+			if e.IP == "" {
+				continue
+			}
+			p, ok := probes[probeKey(hosts.NormalizeHostname(e.Hostname), e.IP)]
+			if !ok {
+				continue
+			}
+			e.ProbeStatus, e.LatencyMS, e.MeasuredAt = p.Status, p.LatencyMS, p.MeasuredAt
+		}
+	}
+	return states
 }
 
 // HostsState 是某个项目的 Hosts 状态快照。

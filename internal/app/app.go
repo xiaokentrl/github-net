@@ -258,16 +258,42 @@ func (s *Service) Ping(token string) (string, error) {
 // Hosts 状态是每次调用现读的：只读打开系统 Hosts，找出本工具的管理区段，再问一次特权服务
 // 「最后一次成功写入是哪批映射」，两边比对后按项目逐个判定。
 // 读不到文件报 readFailed、区段判读不了或被改过报 conflict，这两种都不会被显示成「未替换」。
+// 逐条事实还额外带上候选池对那一条地址的最后一次定格（通不通、连上要多久、什么时候测的），
+// 让队列明细和详情页在重启后照样说得出这一条的数；池里没有这一行就留空。
 func (s *Service) GetItems() (ItemsSnapshot, error) {
 	if s.productCatalogErr != nil {
 		// 前端在这里只会拿到错误；快照仍给空数组形状，避免有人直接用返回值时撞上 null。
 		return ItemsSnapshot{Categories: []CatalogCategory{}, Hosts: []HostsState{}}, ToPublicError(s.productCatalogErr)
 	}
 	snapshot := hosts.Read(s.hostsPath)
+	states := HostsStates(s.productCatalog, snapshot, s.readAppliedState(), s.hostsReads.Add(1))
+	// 逐条地址的耗时和通不通来自候选池的最后一次定格，跟这一轮检测在不在内存里无关：
+	// 重启后队列明细照样要说得出「这一条连上要多久」，说不出来就留空。
+	AttachEntryProbes(states, s.entryProbes())
 	return ItemsSnapshot{
 		Categories: CatalogToCategories(s.productCatalog),
-		Hosts:      HostsStates(s.productCatalog, snapshot, s.readAppliedState(), s.hostsReads.Add(1)),
+		Hosts:      states,
 	}, nil
+}
+
+// entryProbes 把候选池收成「主机名 + 地址 → 最新定格」，只给逐条事实当补画。
+// 池没接或读失败给 nil：那一格留空，界面不猜，也不拿同域名的另一个地址的数顶上去。
+func (s *Service) entryProbes() map[string]EntryProbe {
+	if s.candidateStore == nil {
+		return nil
+	}
+	rows, err := s.candidateStore.Pool("")
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]EntryProbe, len(rows))
+	for _, r := range rows {
+		out[probeKey(r.Hostname, r.IP)] = EntryProbe{Status: r.Status, LatencyMS: r.LatencyMS, MeasuredAt: r.UpdatedAt}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // readAppliedState 问一次特权服务「最后一次成功写入是哪批映射」。

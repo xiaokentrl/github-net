@@ -1,7 +1,7 @@
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { Kind, Status } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
-import { PROGRESS_LABEL, TONE_LABEL, noUsableResult, type Tone } from '../../features/tasks/statusTone'
+import { PROGRESS_LABEL, TONE_LABEL, nothingAccelerates, type Tone } from '../../features/tasks/statusTone'
 import type { DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 
 // 树不再自己发明档位：用和表格、徽章、队列同一套四档、同一批词、同一批颜色。
@@ -29,9 +29,9 @@ export function liveByItem(tasks: { itemId: string; kind: Kind; status: Status }
   return out
 }
 
-// 四档判定，和 statusTone.projectState 同规则：在跑的 > 坏消息 > 逐条写入事实。
-// 「已写Hosts」只看后端现读的 entries[].written，不看检测结果，
-// 页面刷新、检测完成、异步回读都不会让树自己跳色。
+// 四档判定，和 statusTone.projectState 同规则：在跑的 > 坏消息 > 逐条写入事实，最后过一道「能不能加速」。
+// 「已写Hosts」看后端现读的 entries[].written，再按这一批地址的实测结论降档：
+// 全连不通就显示「未写」，色点和行底色跟着走（拍板 2026-11-06 晚）。
 export function itemStatus(hosts: HostsState | undefined, live: LiveKind | undefined, result?: DetectResultView): TreeStatus {
   if (live === 'detecting') return { key: PROGRESS_LABEL.detecting, tone: 'working' }
   if (live === 'applying') return { key: PROGRESS_LABEL.applying, tone: 'working' }
@@ -40,9 +40,10 @@ export function itemStatus(hosts: HostsState | undefined, live: LiveKind | undef
   if (hosts?.status === HostsStatus.HostsConflict || hosts?.status === HostsStatus.HostsReadFailed) {
     return { key: TONE_LABEL.failed, tone: 'failed', reason: hosts.message }
   }
-  // 这一轮测完一个可用候选都没有：色点和行底色走失败档（红），和表格同一口径。
-  if (noUsableResult(result)) return { key: TONE_LABEL.failed, tone: 'failed' }
   const written = (hosts?.entries ?? []).some((entry) => entry.written && entry.ip)
+  // 「全都不能加速」压成未写档（拍板 2026-11-06 晚）：那一行说的是 Hosts 到底写没写成，
+  // 写着一条连不通的地址不算写成。有一条能加速才按实际档位上色。
+  if (written && nothingAccelerates(hosts, result)) return { key: TONE_LABEL.unwritten, tone: 'unwritten' }
   return written
     ? { key: TONE_LABEL.written, tone: 'written' }
     : { key: TONE_LABEL.unwritten, tone: 'unwritten' }

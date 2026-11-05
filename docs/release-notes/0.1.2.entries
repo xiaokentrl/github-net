@@ -48,3 +48,7 @@ updated|zh|删除任务队列的暂停、继续、取消等待、重试失败和
 updated|en|Remove pause, resume, cancel-waiting, retry-failed and clear-queue from the task queue: the panel keeps only "Clear finished", task statuses drop from nine to eight (terminal six to five); one-click restore stays on the toolbar and no longer clears the queue history afterwards
 updated|zh|删除 Pages 和 Gist 两个子菜单（公共源不覆盖其域名）
 updated|en|Remove the Pages and Gist submenus (their domains are not covered by public sources)
+updated|zh|队列明细一行一条域名：这一条写到哪个地址、连上要多久、通不通逐条说；耗时改读候选池里这条地址自己的最后实测，重启后数字照样在，实测不通的地址不再摆一个延迟数字并压成红档
+updated|en|Show queue details as one row per hostname: each row states its address, measured latency and reachability; the latency now comes from this address's own last probe so the numbers survive a restart, and an address that fails its latest probe no longer shows a latency and is painted as a failure
+updated|zh|二级菜单的「已写/未写」加一道「能不能加速」的门：这个项目所有地址实测都连不通就显示「未写」，色点和行底色跟着；有任意一条通就按实际档位上色。没测过不算连不通，不凭不知道降级
+updated|en|Gate the submenu's written/unwritten badge on reachability: a project whose addresses all fail their latest probe now reads "not written" with the matching dot and row colour, while any reachable address keeps the normal state; never-detected addresses are not treated as unreachable

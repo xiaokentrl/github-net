@@ -472,73 +472,13 @@ tr.qUnwritten td, tr.qUnwritten:hover td { background: var(--band); }
   color: var(--text-2);
 }
 
-/* 逐条替换：明细行点开才铺的一层，缩进对齐任务名那一格。 */
-.expandBtn {
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  margin-right: 4px;
-  font-size: 10px;
-  line-height: 1;
-  color: var(--text-3);
-  background: none;
-  border: none;
-  border-radius: 3px;
-  cursor: pointer;
-}
-
-.expandBtn:hover {
-  color: var(--primary);
-  background: var(--ctl);
-}
-
-/* 不能点开的行留一格占位，色点和任务名才对得齐。 */
-.expandSlot {
-  display: inline-block;
-  width: 16px;
-  margin-right: 4px;
-}
-
-.entryRow {
-  cursor: default !important;
-}
-
-.entryRow td {
-  padding: 2px 12px 8px 24px;
-  background: var(--hov);
-}
-
-.entryList {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.entryItem {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-  font-size: 11px;
-}
-
-.entryHost {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-2);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.entryIp {
-  flex: none;
+/* 摊平后的一行一条域名：地址沿用等宽绿字，和详情页、候选表同一套说法。 */
+.rowIp {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: var(--green);
 }
 
-/* 「未写入」不是错误，是没生效的那几条——用中性字色，不套红。 */
-.entryMissing {
+/* 「没有可用地址」「解析失败」这些是下落，不是错误本身——用中性字色，不套红。 */
+.rowReason {
   color: var(--text-3);
 }

@@ -28,7 +28,9 @@ import * as updater$0 from "../updater/models.js";
 import * as $models from "./models.js";
 
 /**
- * ApplyItems 把指定项目排进应用队列：把该项目最近一轮检测的可用候选写进系统 Hosts。
+ * ApplyItems 把指定项目排进应用队列：把该项目当前挑中的候选地址写进系统 Hosts。
+ * 写盘前有一道复验：结论超过 applyFreshWindow 的那些先现场探一遍，验通的才写，
+ * 一个都没验通就一个字不写、任务落失败（拍板 2026-11-06：永远不把不能正常加速的地址写进 Hosts）。
  * 勾了几项就排几行——做不了的那几项也进同一轮，以「跳过」落定并写明原因，
  * 不从这一轮里消失（用户勾 6 项、队列只剩 1 行、剩下 5 行去哪了，比报错更难查）。
  * 整批校验已经换成逐项判定，但项目在不在目录里、清单空不空仍然整批拒。
@@ -136,6 +138,8 @@ export function GetDetectResult(itemID: string): $CancellablePromise<$models.Det
  * Hosts 状态是每次调用现读的：只读打开系统 Hosts，找出本工具的管理区段，再问一次特权服务
  * 「最后一次成功写入是哪批映射」，两边比对后按项目逐个判定。
  * 读不到文件报 readFailed、区段判读不了或被改过报 conflict，这两种都不会被显示成「未替换」。
+ * 逐条事实还额外带上候选池对那一条地址的最后一次定格（通不通、连上要多久、什么时候测的），
+ * 让队列明细和详情页在重启后照样说得出这一条的数；池里没有这一行就留空。
  */
 export function GetItems(): $CancellablePromise<$models.ItemsSnapshot> {
     return $Call.ByID(1316963034);
