@@ -352,10 +352,18 @@ export function ItemDetail({
             {(category.items ?? []).map((it) => {
               const hs = hostsOf.get(it.id)
               const res = state.results[it.id]
-              // 「【Hosts】当前写入 IP」只列本工具现在还认领的写入：还原后认领被释放，
-              // 区段里退回的「应用前旧映射」已经不是本工具写入的，这一格要跟着退成「—」。
-              // 和还原弹框的待还原清单（claimed）同一个口径，不会一个空了另一个还挂着地址。
-              const lines = (hs?.entries ?? []).filter((entry) => entry.written && entry.ip)
+              // 「【Hosts】当前写入 IP」摊成每个域名一行，行首带写入短标签（拍板 2026-11-06）：
+              // 标签只看区段里这一行到底有没有地址（entry.ip），不看这条是不是本工具认领的——
+              // 认领关系管的是档位和那颗「还原」，两件事不混。没写的行只说「域名 → —」，原因在下面候选表里。
+              // 逐条事实后端只在账对得上时才给；整段都不存在时给空数组，可这时文件的事实是确定的（一段都没有），
+              // 所以按目录里的域名摊成「未写」。判读不了、还没读过（conflict/unknown）不能反过来说「未写」，那一格仍留 —。
+              const entryLines = hs?.entries ?? []
+              const lines =
+                entryLines.length > 0
+                  ? entryLines.map((entry) => ({ hostname: entry.hostname, ip: entry.ip || '', live: Boolean(entry.ip) }))
+                  : hs?.status === HostsStatus.HostsNone
+                    ? (it.hostnames ?? []).map((hostname) => ({ hostname, ip: '', live: false }))
+                    : []
               // 待还原条数另算，只数本项目现在认领的那几条：还原落定的回执要说退了几条，不是文件里有几行。
               const claimed = (hs?.entries ?? []).filter((entry) => entry.written && entry.ip).length
               const cands = (res?.hosts ?? []).flatMap((host) => host.candidates ?? [])
@@ -379,12 +387,15 @@ export function ItemDetail({
                   <td>
                     {lines.length > 0 ? (
                       <span className={styles.writeStack}>
-                        {lines.map((entry) => (
+                        {lines.map((line) => (
                           <span
-                            key={entry.hostname}
-                            className={`${styles.writeItem} ${styles.writeItemWritten}`}
+                            key={line.hostname}
+                            className={`${styles.writeItem} ${line.live ? styles.writeItemWritten : ''}`}
                           >
-                            {entry.hostname}→{entry.ip}
+                            <span className={`${styles.writeTag} ${line.live ? styles.writeTagOk : styles.writeTagNo}`}>
+                              {t(line.live ? 'detail.metric.tagWritten' : 'detail.metric.tagUnwritten')}
+                            </span>
+                            {line.hostname}→{line.live ? line.ip : '—'}
                           </span>
                         ))}
                       </span>

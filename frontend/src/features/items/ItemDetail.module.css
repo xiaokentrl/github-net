@@ -468,8 +468,23 @@ tr.rowFailed td, tr.rowFailed:hover td { background: var(--red-soft); }
 tr.rowWritten td, tr.rowWritten:hover td { background: var(--green-soft); }
 tr.rowUnwritten td, tr.rowUnwritten:hover td { background: var(--band); }
 
-/* 这一列只列本工具当前写入的条目，统一用绿色底，和整行底色同一套颜色。 */
+/* 这一列每个域名一行：写着地址的那几行保持绿底，未写的行不涂色，
+   状态由行首那颗短标签说清（写入＝绿底白字，未写＝描边不加底——
+   未写那一行的行底色本来就是 --band，再涂同色的底等于没涂，看不出那是个标签）。 */
 .writeItemWritten { background: var(--green-soft); }
+
+.writeTag {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 15px;
+  vertical-align: middle;
+}
+
+.writeTagOk { background: var(--green); color: var(--on-primary); }
+.writeTagNo { border: 1px solid var(--border-strong); color: var(--text-2); }
 
 tr.rowSel td,
 tr.rowSel th {

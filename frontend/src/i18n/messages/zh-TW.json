@@ -219,6 +219,8 @@
   "detail.table.item": "二級選單",
   "detail.table.action": "動作",
   "detail.metric.appliedIp": "【Hosts】目前寫入 IP",
+  "detail.metric.tagWritten": "寫入",
+  "detail.metric.tagUnwritten": "未寫",
   "detail.metric.latency": "連線耗時",
   "detail.metric.available": "可用候選",
   "detail.metric.bestIp": "偵測最佳 IP",
