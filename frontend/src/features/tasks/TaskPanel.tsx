@@ -204,7 +204,7 @@ export function TaskPanel({
 
   // 全部还原：要求队列空闲（原型语义）；成功后清空队列记录并刷新 Hosts 状态。
   // 工具栏那颗「恢复」和这里共用同一条实现（useRestoreAll），规则只写一遍。
-  const { restoreAll: onRestoreAll } = useRestoreAllTasks(handleError, onHostsChanged)
+  const { restoreAll: onRestoreAll, confirmDialog: restoreAllConfirm } = useRestoreAllTasks(handleError, onHostsChanged)
 
   // ===== 双栏状态 =====
   // 轮次状态由它的任务推出来：有在跑的=执行中，全排队=排队中，有失败=失败，其余=完成。
@@ -553,6 +553,8 @@ export function TaskPanel({
           </div>
         )}
       </section>
+      {/* 全部还原确认框：点队列头那颗只开框，确认才发命令。 */}
+      {restoreAllConfirm}
     </>
   )
 }

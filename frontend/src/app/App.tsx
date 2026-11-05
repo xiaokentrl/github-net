@@ -15,8 +15,10 @@ import { Toolbar } from '../components/layout/Toolbar'
 import { CategoryTree } from '../components/navigation/CategoryTree'
 import type { HostsLookup } from '../components/navigation/CategoryNode'
 import { liveByItem } from '../components/navigation/treeStatus'
+import { Dialog } from '../components/ui/Dialog'
 import { Toast } from '../components/ui/Toast'
 import { pushNotice } from '../components/ui/toastStore'
+import uiStyles from '../components/ui/ui.module.css'
 import { SettingsDialog, type SettingsPaneID } from '../features/settings/SettingsDialog'
 import { ItemDetail } from '../features/items/ItemDetail'
 import { TaskPanel } from '../features/tasks/TaskPanel'
@@ -668,12 +670,18 @@ export function App() {
   // 结果只走右下角提示面板——这条命令不进队列、不写 Hosts，没有别的界面能显示它。
   // 数字全部来自后端回执：清掉几份、今天到底下载过没有，只有那份落盘记录知道。
   const [clearBusy, setClearBusy] = useState(false)
+  // 点工具栏那颗只开确认框，不碰任何数据：原生 window.confirm 的标题和两颗按钮归 WebKit，
+  // 语言包改不了，写不出「先不清理／清掉这 N 项缓存」这种带结果的文案，所以换成公共 Dialog。
+  const [clearAsk, setClearAsk] = useState<string[] | null>(null)
   const clearCheckedCache = useCallback((checked: ReadonlySet<string>) => {
-    queueExpandRef.current?.()
     if (checked.size === 0) return
-    if (!window.confirm(t('toolbar.clearCache.confirm', { count: checked.size }))) return
+    queueExpandRef.current?.()
+    setClearAsk([...checked])
+  }, [])
+  const runClearCheckedCache = useCallback((ids: string[]) => {
+    setClearAsk(null)
     setClearBusy(true)
-    clearSourcesCache([...checked])
+    clearSourcesCache(ids)
       .then((res) => {
         const notice = cacheNoticeOf(res)
         pushNotice(notice.kind, notice.text)
@@ -689,14 +697,16 @@ export function App() {
   }, [])
 
   // 批量检测：项目清单已由详情页按 detectableItems 过滤，这里不再重算第二遍口径。
-  // 先问后端要预算预估；预算盖不全时按规划先请用户确认，取消就不发。
+  // 先问后端要预算预估；预算盖不全时开确认框请用户拍板，取消就不发（同上一条：不用原生 confirm，文案要写结果）。
+  const [budgetAsk, setBudgetAsk] = useState<{ ids: string[]; needed: number; budget: number; shortfall: number } | null>(null)
   const startDetectAll = useCallback(
     (items: CatalogItem[]) => {
       const ids = items.map((it) => it.id)
       setDetectError('')
       detectBudget(ids)
         .then((budget) => {
-          if (budget.shortfall > 0 && !window.confirm(t('detect.budget.confirm', { needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall }))) {
+          if (budget.shortfall > 0) {
+            setBudgetAsk({ ids, needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall })
             return
           }
           queueExpandRef.current?.()
@@ -706,6 +716,11 @@ export function App() {
     },
     [],
   )
+  const runDetectAll = useCallback((ids: string[]) => {
+    setBudgetAsk(null)
+    queueExpandRef.current?.()
+    detectItems(ids).catch((err: unknown) => reportRejection(setDetectError, err))
+  }, [])
 
   const startApply = useCallback((itemId: string) => {
     setHostsError('')
@@ -786,7 +801,7 @@ export function App() {
   // 工具栏「恢复」和队列面板那颗共用同一条实现（useRestoreAll）；失败按同一条规矩：原位一句 + 右下角一条。
   // 还原不进队列、没有任务落定事件，所以成功后在这里重读目录，树上的状态才跟着回到「未替换」。
   const handleRestoreError = useCallback((err: unknown) => reportRejection(setHostsError, err), [])
-  const { busy: restoreBusy, restoreAll } = useRestoreAllTasks(handleRestoreError, loadCatalog)
+  const { busy: restoreBusy, restoreAll, confirmDialog: restoreAllConfirm } = useRestoreAllTasks(handleRestoreError, loadCatalog)
 
   const sidebar = (
     <CategoryTree
@@ -943,6 +958,59 @@ export function App() {
           onApplyFocusFollow={changeApplyFocusFollow}
         />
       )}
+      {/* 三处确认框（拍板 2026-11-05）：全部还原／清理已选缓存／预算不够还开不开。
+          原来都用系统原生 window.confirm，标题和按钮归 WebKit、语言包改不了，按「按钮写结果」必然不合格。 */}
+      {restoreAllConfirm}
+      {clearAsk ? (
+        <Dialog
+          title={t('toolbar.clearCache.ask.title', { count: clearAsk.length })}
+          onClose={() => setClearAsk(null)}
+          footer={
+            <>
+              <button type="button" className={uiStyles.btn} onClick={() => setClearAsk(null)}>
+                {t('toolbar.clearCache.ask.cancel')}
+              </button>
+              <button
+                type="button"
+                className={`${uiStyles.btn} ${uiStyles.primary}`}
+                onClick={() => runClearCheckedCache(clearAsk)}
+              >
+                {t('toolbar.clearCache.ask.action', { count: clearAsk.length })}
+              </button>
+            </>
+          }
+        >
+          <p>{t('toolbar.clearCache.confirm', { count: clearAsk.length })}</p>
+        </Dialog>
+      ) : null}
+      {budgetAsk ? (
+        <Dialog
+          title={t('detect.budget.ask.title', { count: budgetAsk.ids.length, shortfall: budgetAsk.shortfall })}
+          onClose={() => setBudgetAsk(null)}
+          footer={
+            <>
+              <button type="button" className={uiStyles.btn} onClick={() => setBudgetAsk(null)}>
+                {t('detect.budget.ask.cancel')}
+              </button>
+              <button
+                type="button"
+                className={`${uiStyles.btn} ${uiStyles.primary}`}
+                onClick={() => runDetectAll(budgetAsk.ids)}
+              >
+                {t('detect.budget.ask.action')}
+              </button>
+            </>
+          }
+        >
+          <p>
+            {t('detect.budget.confirm', {
+              needed: budgetAsk.needed,
+              budget: budgetAsk.budget,
+              shortfall: budgetAsk.shortfall,
+            })}
+          </p>
+        </Dialog>
+      ) : null}
       {/* 右下角提示面板：挂在应用根上、整应用只有一份，数据在 components/ui/toastStore 里。 */}
       <Toast />
     </>

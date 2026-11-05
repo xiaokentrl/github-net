@@ -1,6 +1,8 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { clearQueue, getTasks, restoreAllHosts } from '../../api/client'
+import { Dialog } from '../../components/ui/Dialog'
 import { pushNotice } from '../../components/ui/toastStore'
+import uiStyles from '../../components/ui/ui.module.css'
 import { t } from '../../i18n'
 import { applyTaskSnapshot, refreshAllResults, useTaskQueue } from './taskStore'
 
@@ -9,15 +11,24 @@ import { applyTaskSnapshot, refreshAllResults, useTaskQueue } from './taskStore'
 // 真还原过就把队列记录清掉，最后重拉快照。失败交给调用方挂在各自的错误位置。
 // onRestored 是「Hosts 变了，去重读一遍」的出口：还原不进队列，也就没有任务落定事件，
 // 不在这里喊一声，树上的「已替换/部分生效」会一直停在还原前的样子。
+//
+// 确认框走公共 Dialog，不用系统原生 window.confirm：原生框的标题和两颗按钮归 WebKit，
+// 语言包一个字也改不了，写不出「先不还原／全部还原」这种带结果的文案。
+// 点按钮只是开框，一个数据都不动；只有框里点「全部还原」才真发命令（开框只读的规矩）。
 export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?: () => void) {
   const state = useTaskQueue()
   const busy = state.tasks.some(
     (task) => task.status === 'running' || task.status === 'waiting' || task.status === 'restoring',
   )
+  const [askOpen, setAskOpen] = useState(false)
 
   const restoreAll = useCallback(() => {
     if (busy) return
-    if (!window.confirm(t('queue.restoreAll.confirm'))) return
+    setAskOpen(true)
+  }, [busy])
+
+  const runRestoreAll = useCallback(() => {
+    setAskOpen(false)
     restoreAllHosts()
       .then((count) => {
         if (count === 0) return undefined
@@ -31,7 +42,26 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
       .then(() => refreshAllResults())
       .then(() => onRestored?.())
       .catch(onError)
-  }, [busy, onError, onRestored])
+  }, [onError, onRestored])
 
-  return { busy, restoreAll }
+  const confirmDialog = askOpen ? (
+    <Dialog
+      title={t('queue.restoreAll.ask.title')}
+      onClose={() => setAskOpen(false)}
+      footer={
+        <>
+          <button type="button" className={uiStyles.btn} onClick={() => setAskOpen(false)}>
+            {t('queue.restoreAll.ask.cancel')}
+          </button>
+          <button type="button" className={`${uiStyles.btn} ${uiStyles.primary}`} onClick={runRestoreAll}>
+            {t('queue.restoreAll.ask.action')}
+          </button>
+        </>
+      }
+    >
+      <p>{t('queue.restoreAll.confirm')}</p>
+    </Dialog>
+  ) : null
+
+  return { busy, restoreAll, confirmDialog }
 }

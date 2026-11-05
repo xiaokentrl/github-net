@@ -30,6 +30,8 @@ fixed|zh|配置文件迁移到 ~/.config/github-net/config.json，旧位置自�
 fixed|en|Move the config file to ~/.config/github-net/config.json with automatic migration from the old location
 fixed|zh|修复「还原本菜单」确认框文案：标题改成点明还原哪个菜单、共几项，两颗按钮改写结果（「还原这 N 项」「先不还原」），不再只写「确认还原／取消」
 fixed|en|Fix the "restore this menu" confirmation dialog: the title now names the menu and item count, and both buttons state their outcome ("Restore these N items" / "Don't restore yet") instead of a generic confirm/cancel
+fixed|zh|清理缓存、预算不足、全部还原三处确认改用公共对话框：标题点明是哪件事、几项，两颗按钮各写点击后的结果，不再用系统原生确认框的「确定／取消」
+fixed|en|Switch the clear-cache, over-budget and restore-all confirmations to the shared dialog: each title names the action and count and both buttons state their outcome, replacing the native confirm's generic OK/Cancel
 
 # updated
 updated|zh|更新检测排队：上一轮测出可用、且是 3 天以内测过的地址排到本轮新候选前面，一轮名额不够时先测到的是它们；上轮明确测不通的排到最后补位
