@@ -3,10 +3,8 @@ package app
 import (
 	"context"
 	"errors"
-	"sort"
 	"strings"
 
-	"github.com/xiaokentrl/github-net/internal/hosts"
 	"github.com/xiaokentrl/github-net/internal/privilege"
 	"github.com/xiaokentrl/github-net/internal/task"
 )
@@ -19,17 +17,27 @@ type dispatchExecutor struct {
 	// priv 是特权服务客户端接缝；nil 表示这一层还没接（测试场景），
 	// 应用/恢复任务会以「失败」落进队列被看见。
 	priv privilege.Caller
-	// results 是检测结果存储：应用前从「最近一轮」取可用候选。
+	// results 是检测结果存储：应用/还原收尾时按 Hosts 现状重标「当前生效」。
 	results *detectResultStore
 	// appliedIPs 读「这些主机名当前写在系统 Hosts 上的是哪些地址」；应用/还原收尾时
 	// 用它把候选的「当前生效」标记重标一遍，详情页的「当前写入 IP」才有实时事实。
 	appliedIPs func(hostnames []string) map[string][]string
-	// usableMappings 和入口的 applyBlocker 同源：内存优先、候选池兜底的当前可写映射。
-	usableMappings func(itemID string) []hosts.Mapping
+	// usablePicks 和入口的 applyBlocker 同源：内存优先、候选池兜底的候选地址，
+	// 每条带「结论新不新」。挑地址只有这一处，执行器不再自己写第二套标准。
+	usablePicks func(itemID string) []usablePick
+	// verify 是写盘前那道复验：现场把不新鲜的候选探一遍，验通才准写。
+	verify candidateVerifier
 }
 
-func newDispatchExecutor(detect task.Executor, priv privilege.Caller, results *detectResultStore, appliedIPs func(hostnames []string) map[string][]string, usableMappings func(itemID string) []hosts.Mapping) *dispatchExecutor {
-	return &dispatchExecutor{detect: detect, priv: priv, results: results, appliedIPs: appliedIPs, usableMappings: usableMappings}
+// candidateVerifier 是写盘前那道复验的接缝：给一批候选地址，返回当场验通的那几条，
+// 并把每条结论（通与不通）回写到它来的地方（内存那一轮 + 候选池）。
+// 线上传 Service.verifyCandidates；测试传假件，才能不碰外网跑遍通、不通和取消三种分支。
+type candidateVerifier func(ctx context.Context, itemID string, picks []usablePick) []usablePick
+
+func newDispatchExecutor(detect task.Executor, priv privilege.Caller, results *detectResultStore,
+	appliedIPs func(hostnames []string) map[string][]string,
+	usablePicks func(itemID string) []usablePick, verify candidateVerifier) *dispatchExecutor {
+	return &dispatchExecutor{detect: detect, priv: priv, results: results, appliedIPs: appliedIPs, usablePicks: usablePicks, verify: verify}
 }
 
 func (e *dispatchExecutor) Execute(ctx context.Context, t task.Task, report task.Report) task.Outcome {
@@ -40,7 +48,7 @@ func (e *dispatchExecutor) Execute(ctx context.Context, t task.Task, report task
 		}
 		return e.detect.Execute(ctx, t, report)
 	case task.KindApply:
-		return e.apply(t, report)
+		return e.apply(ctx, t, report)
 	case task.KindRestore:
 		return e.restore(t, report)
 	default:
@@ -48,35 +56,67 @@ func (e *dispatchExecutor) Execute(ctx context.Context, t task.Task, report task
 	}
 }
 
-// apply 把一个项目当前可用的候选写进 Hosts。
-// 选址规则：每个主机名取延迟最低的可用候选（并列时 IPv4 优先，写 Hosts 的兼容面更大）。
-// 地址来源和入口的 applyBlocker 同一份 usableMappingsFor：内存里最近一轮优先，
-// 重启过后退回候选池缓存的可用地址——「检测一次，重启也能应用」是候选缓存存在的意义。
-func (e *dispatchExecutor) apply(t task.Task, report task.Report) task.Outcome {
+// apply 把一个项目的候选地址写进 Hosts。
+// 选址来源和入口的 applyBlocker 同一条（内存那一轮优先，重启后退回候选池），
+// 「检测一次、重启也能应用」就是这么来的。
+// 但挑中的地址不直接写：结论放超过 applyFreshWindow 的那些，先现场复验一遍，
+// 验通的才交给特权服务（拍板 2026-11-06：永远不把不能正常加速的地址写进系统 Hosts）。
+// 一个都没验通就一个字不写，任务以失败落进队列——「应用成功」从此只可能是「当场验过能加速」。
+func (e *dispatchExecutor) apply(ctx context.Context, t task.Task, report task.Report) task.Outcome {
 	if e.priv == nil {
 		return task.Outcome{Status: task.StatusFailed, Message: pendingExecutorMessage}
 	}
-	// 接缝没接（纯测试场景）就退回内存一份：nil 直接调会炸。
-	var mappings []hosts.Mapping
-	if e.usableMappings != nil {
-		mappings = e.usableMappings(t.ItemID)
-	} else if view, ok := e.results.view(t.ItemID); ok {
-		mappings = bestMappings(view)
+	if e.usablePicks == nil {
+		return task.Outcome{Status: task.StatusFailed, Message: "挑地址那一层还没接上，这一条没有开始"}
 	}
-	if len(mappings) == 0 {
+	picks := e.usablePicks(t.ItemID)
+	if len(picks) == 0 {
 		return task.Outcome{Status: task.StatusFailed, Message: "内存和候选缓存里都没有可用的地址，先检测再应用"}
 	}
+	writable := picks
+	stale := false
+	for _, p := range picks {
+		if !p.fresh {
+			stale = true
+			break
+		}
+	}
+	if stale {
+		report("verify", "正在复验候选地址", 0)
+		if e.verify != nil {
+			writable = e.verify(ctx, t.ItemID, picks)
+		} else {
+			// 复验这层没接上（纯测试场景）：不敢拿放旧的结论写盘，只放过窗口内的那几条。
+			writable = freshOnly(picks)
+		}
+	}
+	if len(writable) == 0 {
+		return task.Outcome{Status: task.StatusFailed, Message: "候选地址现在都连不通，先重新检测再应用"}
+	}
+	mappings := mappingsOf(writable)
 	report("apply", "正在写入系统 Hosts", 0)
 	if err := e.priv.Apply(t.ItemID, mappings); err != nil {
 		return task.Outcome{Status: task.StatusFailed, Message: privilegeErrorText(err)}
 	}
 	// 写完把「当前生效」标记按 Hosts 现状重标一遍：检测那轮的标记是写入前的旧事实。
-	hostnames := make([]string, 0)
-	for _, m := range mappings {
-		hostnames = append(hostnames, m.Hostnames...)
+	hostnames := make([]string, 0, len(writable))
+	for _, p := range writable {
+		hostnames = append(hostnames, p.hostname)
 	}
 	e.markApplied(t.ItemID, hostnames)
 	return task.Outcome{Status: task.StatusDone}
+}
+
+// freshOnly 是复验没接上时的兜底：只放过窗口内的结论，过期的整条丢掉。
+// 宁可少写几个域名，也不替一个说不清多旧的地址作保。
+func freshOnly(picks []usablePick) []usablePick {
+	out := make([]usablePick, 0, len(picks))
+	for _, p := range picks {
+		if p.fresh {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // markApplied 用 appliedIPs 接缝现读 Hosts，重标该项目候选的「当前生效」；
@@ -132,46 +172,4 @@ func unwrapMessage(err error) string {
 		return text[idx+2:]
 	}
 	return text
-}
-
-// bestMappings 从一轮结果里给每个主机名挑一个「最好用」的可用候选并按 IP 分组。
-// 没有可用候选的主机名不进映射：写一个连不上的 IP 比不写更糟。
-func bestMappings(view DetectResultView) []hosts.Mapping {
-	type pick struct {
-		ip      string
-		latency int64
-		ipv6    bool
-	}
-	best := make(map[string]pick)
-	for _, h := range view.Hosts {
-		for _, c := range h.Candidates {
-			if c.Status != "available" {
-				continue
-			}
-			current, ok := best[c.Hostname]
-			better := !ok || c.LatencyMS < current.latency || (c.LatencyMS == current.latency && current.ipv6 && !c.IPv6)
-			if better {
-				best[c.Hostname] = pick{ip: c.IP, latency: c.LatencyMS, ipv6: c.IPv6}
-			}
-		}
-	}
-	if len(best) == 0 {
-		return nil
-	}
-	byIP := make(map[string][]string)
-	for hostname, p := range best {
-		byIP[p.ip] = append(byIP[p.ip], hostname)
-	}
-	ips := make([]string, 0, len(byIP))
-	for ip := range byIP {
-		ips = append(ips, ip)
-	}
-	sort.Strings(ips)
-	out := make([]hosts.Mapping, 0, len(ips))
-	for _, ip := range ips {
-		names := byIP[ip]
-		sort.Strings(names)
-		out = append(out, hosts.Mapping{IP: ip, Hostnames: names})
-	}
-	return out
 }

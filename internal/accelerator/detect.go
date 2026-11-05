@@ -559,14 +559,16 @@ func (d *detection) settle(row *Candidate, hostIdx int, res detector.Result, err
 		row.Status = StatusUntested
 		row.Reason = "候选地址不符合探测层的规则，这一条没有检测"
 	} else {
-		row.Status, row.Reason = verdict(res)
+		row.Status, row.Reason = Verdict(res)
 	}
 	d.emitLocked(d.hosts[hostIdx], row, "", row.Status)
 }
 
-// verdict 把探测结果换成候选状态。唯一的「可用」判据是连上并且证书对这个主机名有效：
+// Verdict 把探测结果换成候选状态。唯一的「可用」判据是连上并且证书对这个主机名有效：
 // 只连上没验证书的候选不能算可用，否则就是把「IP 通着」当成「这个地址能替这个域名服务」。
-func verdict(res detector.Result) (CandidateStatus, string) {
+// 导出给应用前的复验用（internal/app/executors.go）：检测怎么判可用，复验就怎么判，
+// 两边不许各写一套标准。
+func Verdict(res detector.Result) (CandidateStatus, string) {
 	switch {
 	case res.OK && res.Verified:
 		return StatusAvailable, ""

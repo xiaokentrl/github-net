@@ -71,6 +71,13 @@ type Service struct {
 	// 打不开就是 nil：检测照跑，只是不留底账。读接口下一轮接。
 	candidateStore *store.Store
 
+	// netGate 是全进程那一道网络并发闸（检测和本轮新加的应用前复验共用同一个闸位池）。
+	netGate chan struct{}
+
+	// applyProbe 是应用前复验用的探测接缝：nil 就是 detector.ProbeHTTPS，和检测那条同一个默认。
+	// 测试注入假件，才能不碰外网跑遍「验通、验不通、目标不合法」三种分支。
+	applyProbe accelerator.ProbeFunc
+
 	// rounds 是批量检测共享预算的账本（每轮一份，内存态）。
 	rounds *roundBudgets
 
@@ -162,6 +169,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 		hostsPath:         HostsPath(),
 		detectResults:     results,
 		candidateStore:    candDB,
+		netGate:           probeGate,
 		rounds:            rounds,
 		stamp:             currentBuildStamp(),
 	}
@@ -180,7 +188,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	s.updater = updater.NewClient()
 	s.pubKey = updater.PublicKey()
 	s.autostart = platform.NewAutostart()
-	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results, s.appliedIPsFor, s.usableMappingsFor), taskEmit)
+	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results, s.appliedIPsFor, s.usablePicksFor, s.verifyCandidates), taskEmit)
 	return s
 }
 

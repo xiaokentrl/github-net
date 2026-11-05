@@ -76,6 +76,63 @@ func (s *detectResultStore) clearApplied() {
 	}
 }
 
+// roundFinishedAt 给一个项目最近一轮的探测定格时间；没有记录给零值。
+// 调用方（应用前的时效判定）把零值按「不新鲜」处理：说不清什么时候测出来的结论，
+// 一律要现场复验一遍才准写进系统 Hosts。
+func (s *detectResultStore) roundFinishedAt(itemID string) time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.byItem[itemID]
+	if !ok {
+		return time.Time{}
+	}
+	return rec.result.FinishedAt
+}
+
+// markProbe 把一次现场复验的结论刷回内存这一轮里那条候选：状态、延迟、定格时间一起换。
+// 刷新定格时间等于这条结论从这一刻起重新计算新鲜度，不用再为同一件事复验第二次。
+// 找不到对应那行就什么都不动；动过就重算本轮与各主机的「可用」计数，
+// 界面上那句「可用 N」跟着新事实走，不会留着复验前的数字。
+func (s *detectResultStore) markProbe(itemID, hostname, ip string, status accelerator.CandidateStatus,
+	latencyMS int64, reason string, at time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.byItem[itemID]
+	if !ok {
+		return
+	}
+	r := rec.result
+	touched := false
+	for i := range r.Candidates {
+		c := &r.Candidates[i]
+		if c.Hostname != hostname || c.IP != ip {
+			continue
+		}
+		c.Status = status
+		c.LatencyMS = latencyMS
+		c.Reason = reason
+		c.FinishedAt = at.UTC().Format(time.RFC3339)
+		touched = true
+	}
+	if !touched {
+		return
+	}
+	r.Available = 0
+	for i := range r.Hostnames {
+		r.Hostnames[i].Available = 0
+	}
+	available := make(map[string]int, len(r.Hostnames))
+	for _, c := range r.Candidates {
+		if c.Status == accelerator.StatusAvailable {
+			r.Available++
+			available[c.Hostname]++
+		}
+	}
+	for i := range r.Hostnames {
+		r.Hostnames[i].Available = available[r.Hostnames[i].Hostname]
+	}
+}
+
 // view 把某项目最近一轮结果整理成给前端的 DTO。没有记录时 ok 为 false，
 // 调用方返回「还没有检测结果」的空形状，这不是错误。
 func (s *detectResultStore) view(itemID string) (DetectResultView, bool) {

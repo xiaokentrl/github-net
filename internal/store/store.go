@@ -344,6 +344,20 @@ func (s *Store) Pool(hostname string) ([]PoolRow, error) {
 // timeFormat 是底账里时间的统一写法：UTC 的 RFC3339，和内存结果视图一致。
 const timeFormat = time.RFC3339
 
+// MarkPoolProbe 把应用前复验的新结论刷回候选池那一行：只改状态、延迟、测量时间三列，
+// 来源和 IPv6 标记一个字不动。行不存在就当无事发生——内存那一轮来的候选本来就不必在池里有行，
+// 那部分的事实由内存结果和 SaveRound 管。
+func (s *Store) MarkPoolProbe(hostname, ip, status string, latencyMS int64, at time.Time) error {
+	if _, err := s.db.Exec(
+		`UPDATE candidate_ips SET status = ?, latency_ms = ?, updated_at = ?
+		 WHERE hostname = ? AND ip = ?`,
+		status, latencyMS, at.UTC().Format(timeFormat), hostname, ip,
+	); err != nil {
+		return fmt.Errorf("store: 候选池写不回复验结论: %w", err)
+	}
+	return nil
+}
+
 func b2i(b bool) int {
 	if b {
 		return 1

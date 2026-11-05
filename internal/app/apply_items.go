@@ -1,13 +1,18 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"os/exec"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/xiaokentrl/github-net/internal/accelerator"
+	"github.com/xiaokentrl/github-net/internal/detector"
 	"github.com/xiaokentrl/github-net/internal/hosts"
 	"github.com/xiaokentrl/github-net/internal/privilege"
 	"github.com/xiaokentrl/github-net/internal/task"
@@ -17,7 +22,9 @@ import (
 // 服务可达与否不在这验——队列任务里会验并给出可见失败），执行器验内容并干活。
 // 这一批命令都不自己写 Hosts：写系统的只有特权辅助服务（internal/privilege）。
 
-// ApplyItems 把指定项目排进应用队列：把该项目最近一轮检测的可用候选写进系统 Hosts。
+// ApplyItems 把指定项目排进应用队列：把该项目当前挑中的候选地址写进系统 Hosts。
+// 写盘前有一道复验：结论超过 applyFreshWindow 的那些先现场探一遍，验通的才写，
+// 一个都没验通就一个字不写、任务落失败（拍板 2026-11-06：永远不把不能正常加速的地址写进 Hosts）。
 // 勾了几项就排几行——做不了的那几项也进同一轮，以「跳过」落定并写明原因，
 // 不从这一轮里消失（用户勾 6 项、队列只剩 1 行、剩下 5 行去哪了，比报错更难查）。
 // 整批校验已经换成逐项判定，但项目在不在目录里、清单空不空仍然整批拒。
@@ -51,9 +58,11 @@ func (s *Service) ApplyItems(itemIDs []string) ([]task.Task, error) {
 // applyBlocker 说清这个项目这会儿为什么还不能应用；能应用返回空串。
 // 返回的句子直接进任务并显示到队列明细，所以写的是用户照着能做的下一步，不是内部原因。
 func (s *Service) applyBlocker(itemID string) string {
-	// 内存和候选池里有一样可用的地址就放行（拍板 2026-11-03）：重启过后内存是空的，
-	// 池里缓存的可用地址照样能写——以前只看内存，重启一次就逼用户重新检测。
-	if len(s.usableMappingsFor(itemID)) > 0 {
+	// 内存和候选池里有一样候选的地址就放行（拍板 2026-11-03）：重启过后内存是空的，
+	// 池里缓存的可用地址照样能进入候选——以前只看内存，重启一次就逼用户重新检测。
+	// 注意这里放行的只是「有候选」：结论放久了的那些要等任务开始执行时现场复验通过才真写盘，
+	// 复验不过就一个地址都不写（拍板 2026-11-06），所以点这颗按钮本身不联网。
+	if len(s.usablePicksFor(itemID)) > 0 {
 		return ""
 	}
 	// 拦下了也要分清两种说法，下一步动作不一样：有检测结果但全不可用 → 重新检测；
@@ -64,25 +73,54 @@ func (s *Service) applyBlocker(itemID string) string {
 	return "这个项目还没有检测结果，先检测再应用"
 }
 
-// usableMappingsFor 给一个项目挑「现在就能写」的映射（拍板 2026-11-03 重写）：
-// 每个主机名取它当前已知的最优可用——内存里最近一轮优先（最新鲜），
-// 内存没覆盖到的域名用候选池里跨源累积的缓存补齐。切源随便切，应用合并全部已知。
+// applyFreshWindow 是「这份可用结论还算新鲜、点应用不用现场重测」的期限（拍板 2026-11-06）。
+// 定 10 分钟：正常用法是检测完顺手点应用，那一份必然是新鲜的、一次网络都不发；
+// 再放久就只是在替一个可能已经被换掉的地址作保。
+// 这条和缓存保留期是两件事（那个只有 retention.MaxAge 一个数字），别互相引用。
+const applyFreshWindow = 10 * time.Minute
+
+// usablePick 是一个域名当前挑中的那个地址，外加这条结论的两件事实。
+type usablePick struct {
+	hostname string
+	ip       string
+	latency  int64
+	ipv6     bool
+	// fresh 为真：这份 available 结论是 applyFreshWindow 内测出来的，可以直接写。
+	// 为假：必须让应用执行器现场复验通过才准写——旧结论只是候选，不是通行证。
+	fresh bool
+	// fromPool 为真：这条来自落盘的候选池，复验结论要刷回池里那一行；
+	// 为假：来自内存那一轮，只刷内存。
+	fromPool bool
+}
+
+// usablePicksFor 给一个项目列出当前候选的地址（时效按现在算）。
+func (s *Service) usablePicksFor(itemID string) []usablePick {
+	return s.usablePicksAt(itemID, time.Now())
+}
+
+// usablePicksAt 给一个项目挑「现在候选能写」的域名→地址（拍板 2026-11-03 定来源，2026-11-06 补时效）：
+// 每个域名取它当前已知最优的可用地址——内存里最近一轮优先（最新鲜），
+// 内存没覆盖的域名用候选池里跨源累积的缓存补齐。切源随便切，应用合并全部已知。
 // 选址规则和 bestMappings 同一条：延迟最低、并列 IPv4 优先。一个域名都没有给空。
-func (s *Service) usableMappingsFor(itemID string) []hosts.Mapping {
-	best := make(map[string]bestPick)
-	consider := func(hostname, ip string, latencyMS int64, ipv6 bool) {
-		current, ok := best[hostname]
-		better := !ok || latencyMS < current.latency || (latencyMS == current.latency && current.ipv6 && !ipv6)
+// 每条再按「结论距今是否超过 applyFreshWindow」标 fresh；时间读不懂一律当不新鲜，
+// 宁可多复验一次，也不拿一个说不清多旧的地址直接写盘。
+func (s *Service) usablePicksAt(itemID string, now time.Time) []usablePick {
+	best := make(map[string]usablePick)
+	consider := func(p usablePick) {
+		current, ok := best[p.hostname]
+		better := !ok || p.latency < current.latency || (p.latency == current.latency && current.ipv6 && !p.ipv6)
 		if better {
-			best[hostname] = bestPick{ip: ip, latency: latencyMS, ipv6: ipv6}
+			best[p.hostname] = p
 		}
 	}
-	// 内存里最近一轮：最新鲜的一份。
+	// 内存里最近一轮：最新鲜的一份，整轮共用它的定格时间。
+	roundFinished := s.detectResults.roundFinishedAt(itemID)
+	roundFresh := !roundFinished.IsZero() && now.Sub(roundFinished.UTC()) <= applyFreshWindow
 	if view, ok := s.detectResults.view(itemID); ok {
 		for _, h := range view.Hosts {
 			for _, c := range h.Candidates {
 				if c.Status == "available" {
-					consider(c.Hostname, c.IP, c.LatencyMS, c.IPv6)
+					consider(usablePick{hostname: c.Hostname, ip: c.IP, latency: c.LatencyMS, ipv6: c.IPv6, fresh: roundFresh})
 				}
 			}
 		}
@@ -90,7 +128,7 @@ func (s *Service) usableMappingsFor(itemID string) []hosts.Mapping {
 	// 池补齐：只补内存没覆盖的域名（覆盖了的以内存为准，它更新鲜）。
 	_, _, item, ok := s.lookupItem(itemID)
 	if !ok || len(item.Hostnames) == 0 || s.candidateStore == nil {
-		return mappingsOf(best)
+		return picksOf(best)
 	}
 	want := make(map[string]bool, len(item.Hostnames))
 	for _, h := range item.Hostnames {
@@ -100,7 +138,7 @@ func (s *Service) usableMappingsFor(itemID string) []hosts.Mapping {
 	}
 	rows, err := s.candidateStore.Pool("")
 	if err != nil {
-		return mappingsOf(best)
+		return picksOf(best)
 	}
 	for _, r := range rows {
 		if r.Status != "available" || !want[r.Hostname] {
@@ -109,27 +147,51 @@ func (s *Service) usableMappingsFor(itemID string) []hosts.Mapping {
 		if _, covered := best[r.Hostname]; covered {
 			continue
 		}
-		consider(r.Hostname, r.IP, r.LatencyMS, r.IPv6)
+		consider(usablePick{
+			hostname: r.Hostname, ip: r.IP, latency: r.LatencyMS, ipv6: r.IPv6,
+			fresh: withinFreshWindow(r.UpdatedAt, now), fromPool: true,
+		})
 	}
-	return mappingsOf(best)
+	return picksOf(best)
 }
 
-// bestPick 是一个主机名当前选中的最优可用地址。
-type bestPick = struct {
-	ip      string
-	latency int64
-	ipv6    bool
+// withinFreshWindow 判一条落盘时间戳是否还在复验豁免窗口内。读不懂（空串、格式不对、
+// 时间在未来得离谱）一律按不新鲜：这种行只能现场复验，不能免检写盘。
+func withinFreshWindow(stamp string, now time.Time) bool {
+	t, err := time.Parse(time.RFC3339, strings.TrimSpace(stamp))
+	if err != nil {
+		return false
+	}
+	return now.Sub(t.UTC()) <= applyFreshWindow
 }
 
-// mappingsOf 把「主机名 → 最优」收成按 IP 分组的写盘映射：延迟并列的 IPv4 优先
-// 在 consider 里已经比过，这里只管分组和稳定排序。
-func mappingsOf(best map[string]bestPick) []hosts.Mapping {
+// picksOf 把「每个域名一个候选地址」摊成稳定顺序的切片（按域名排），
+// 执行器按它逐条复验、再把验通的收成写盘映射。
+func picksOf(best map[string]usablePick) []usablePick {
 	if len(best) == 0 {
 		return nil
 	}
+	names := make([]string, 0, len(best))
+	for hostname := range best {
+		names = append(names, hostname)
+	}
+	sort.Strings(names)
+	out := make([]usablePick, 0, len(names))
+	for _, hostname := range names {
+		out = append(out, best[hostname])
+	}
+	return out
+}
+
+// mappingsOf 把选中的域名→地址按 IP 分组收成写盘映射：同一个地址顶着多个域名时合成一行。
+// 域名和 IP 各自按字典序排，写出去的内容对同一批输入是稳定的。
+func mappingsOf(picks []usablePick) []hosts.Mapping {
+	if len(picks) == 0 {
+		return nil
+	}
 	byIP := make(map[string][]string)
-	for hostname, p := range best {
-		byIP[p.ip] = append(byIP[p.ip], hostname)
+	for _, p := range picks {
+		byIP[p.ip] = append(byIP[p.ip], p.hostname)
 	}
 	ips := make([]string, 0, len(byIP))
 	for ip := range byIP {
@@ -143,6 +205,75 @@ func mappingsOf(best map[string]bestPick) []hosts.Mapping {
 		out = append(out, hosts.Mapping{IP: ip, Hostnames: names})
 	}
 	return out
+}
+
+// recordProbeResult 把一次现场复验的结论回写到它来的地方（拍板 2026-11-06：通与不通都回写）。
+// 内存那一轮里那条候选的状态、延迟、定格时间一起刷；来自池的那行同步刷状态和测量时间，
+// 来源与归属不动。这样界面说的「可用」和下一次应用挑的东西，都是刚验过的事实，
+// 不会反复拿一个已经废掉的地址去试。
+// 刷盘失败不回报：少刷一行缓存不影响这次写没写对，把错误抛回队列只会盖掉真正的结论。
+func (s *Service) recordProbeResult(itemID string, pick usablePick, status string, reason string, latencyMS int64, at time.Time) {
+	if s.detectResults != nil {
+		s.detectResults.markProbe(itemID, pick.hostname, pick.ip, accelerator.CandidateStatus(status), latencyMS, reason, at)
+	}
+	if !pick.fromPool || s.candidateStore == nil {
+		return
+	}
+	_ = s.candidateStore.MarkPoolProbe(hosts.NormalizeHostname(pick.hostname), pick.ip, status, latencyMS, at)
+}
+
+// verifyCandidates 是应用写盘前那道复验（拍板 2026-11-06）：
+// 窗口内测出来的结论直接放过，一次网络都不发；更早的每条现场探一遍，验通的才准写。
+// 通与不通都当场回写来源，所以同一件事不会为同一条废地址复验第二次。
+// 各条并行探，共用检测那一道全局闸——应用这条路不会把同时活动的外部请求数翻倍。
+func (s *Service) verifyCandidates(ctx context.Context, itemID string, picks []usablePick) []usablePick {
+	passed := make([]bool, len(picks))
+	var wg sync.WaitGroup
+	for i, p := range picks {
+		if p.fresh {
+			passed[i] = true
+			continue
+		}
+		wg.Add(1)
+		go func(i int, p usablePick) {
+			defer wg.Done()
+			passed[i] = s.verifyOne(ctx, itemID, p)
+		}(i, p)
+	}
+	wg.Wait()
+	out := make([]usablePick, 0, len(picks))
+	for i, p := range picks {
+		if passed[i] {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// verifyOne 现场探一条候选地址，把结论回写，返回这条现在能不能写进 Hosts。
+// 判据和检测那轮是同一条（accelerator.Verdict：连上并且证书对这个域名有效），
+// 这里不重写第二套标准。探测目标不合法（地址不是 IP 字面量）按不通处理：
+// 那种行本来就不该出现在候选里，宁可少写也不猜。
+func (s *Service) verifyOne(ctx context.Context, itemID string, p usablePick) bool {
+	if s.netGate != nil {
+		select {
+		case s.netGate <- struct{}{}:
+			defer func() { <-s.netGate }()
+		case <-ctx.Done():
+			return false
+		}
+	}
+	probe := s.applyProbe
+	if probe == nil {
+		probe = detector.ProbeHTTPS
+	}
+	res, err := probe(ctx, detector.Target{IP: p.ip, Hostname: p.hostname})
+	status, reason := accelerator.StatusUntested, "探测没有给出结论，这一条没有复验"
+	if err == nil {
+		status, reason = accelerator.Verdict(res)
+	}
+	s.recordProbeResult(itemID, p, string(status), reason, res.LatencyMS, time.Now())
+	return status == accelerator.StatusAvailable
 }
 
 // RestoreItems 把指定项目排进还原队列：退回它应用前的映射。

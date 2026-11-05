@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xiaokentrl/github-net/internal/accelerator"
 	"github.com/xiaokentrl/github-net/internal/accelerator/strategies"
@@ -59,6 +60,7 @@ func (f *fakePriv) State() (hosts.Written, error) {
 
 // newApplyService 建一个入口+执行器都齐的服务：队列执行器是分发台
 // （检测走可按住的假执行器，应用/恢复走注入的假特权客户端），结果存储由用例预填。
+// 挑地址和写盘前复验都接真方法（Service 自己的那两个），用例只换 s.applyProbe 这个假探测器。
 func newApplyService(t *testing.T, priv privilege.Caller) *Service {
 	t.Helper()
 	c := detectCatalog()
@@ -66,7 +68,7 @@ func newApplyService(t *testing.T, priv privilege.Caller) *Service {
 	table := fakeTable(t, map[string][]strategies.Strategy{
 		detectScopeGitHub: {fakeStrategy("live.one", "还在的方法", detectScopeGitHub)},
 	}, map[string]strategies.Strategy{"live.one": fakeStrategy("live.one", "还在的方法", detectScopeGitHub)})
-	return &Service{
+	s := &Service{
 		productCatalog: c,
 		strategyTable:  table,
 		settings: config.NewStore(
@@ -74,22 +76,31 @@ func newApplyService(t *testing.T, priv privilege.Caller) *Service {
 			c.ScopeIDs(), map[string]bool{"live.one": true}, c.CategoryIDs()),
 		priv:          priv,
 		detectResults: results,
-		tasks:         task.NewQueue(newDispatchExecutor(newGatedExecutor(), priv, results, nil, nil), nil),
 	}
+	s.tasks = task.NewQueue(newDispatchExecutor(newGatedExecutor(), priv, results, nil, s.usablePicksFor, s.verifyCandidates), nil)
+	return s
 }
 
-// putAvailableResult 给项目预存一轮「有可用候选」的结论，延迟差别用于验证选址。
+// putAvailableResult 给项目预存一轮「刚刚测出来」的结论（新鲜，点应用不该再联网复验），
+// 延迟差别用于验证选址。
 func putAvailableResult(s *Service, itemID string) {
+	putAvailableResultAged(s, itemID, 0)
+}
+
+// putAvailableResultAged 同上，但整轮的定格时间往前挪 age——挪过 applyFreshWindow
+// 就变成「放旧了的结论」，应用前必须现场复验。
+func putAvailableResultAged(s *Service, itemID string, age time.Duration) {
 	s.detectResults.put(detectScopeGitHub, "live.one", &accelerator.Result{
-		ItemID:    itemID,
-		Available: 2,
+		ItemID:     itemID,
+		Available:  2,
+		FinishedAt: time.Now().Add(-age),
 		Candidates: []accelerator.Candidate{
 			{ID: "c1", Hostname: "api.github.com", IP: "203.0.113.10", Status: accelerator.StatusAvailable, LatencyMS: 100},
 			{ID: "c2", Hostname: "api.github.com", IP: "203.0.113.11", Status: accelerator.StatusAvailable, LatencyMS: 40},
 			{ID: "c3", Hostname: "codeload.github.com", IP: "203.0.113.12", Status: accelerator.StatusUnavailable},
 		},
 		Hostnames: []accelerator.HostOutcome{
-			{Hostname: "api.github.com", Resolved: true},
+			{Hostname: "api.github.com", Resolved: true, Available: 2},
 			{Hostname: "codeload.github.com", Resolved: true},
 		},
 	})
