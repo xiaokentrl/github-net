@@ -1,0 +1,66 @@
+/* 清理弹框：三个上下排列的可多选卡片，选中态用主色描边区分，禁用态降透明度。 */
+.hint {
+  margin: 0 0 10px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--ctl);
+  cursor: pointer;
+}
+
+.option:hover {
+  border-color: var(--border-strong);
+}
+
+.option.selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.option.disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.option input {
+  flex: none;
+  margin-top: 3px;
+  accent-color: var(--primary);
+  cursor: inherit;
+}
+
+.optionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.optionTitle {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.optionHint {
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.needCheck {
+  margin: 2px 0 0;
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.5;
+}

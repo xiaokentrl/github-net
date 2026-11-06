@@ -333,7 +333,7 @@ func (s *Service) itemsOfMenu(menuID string) []string {
 // automationDetect 按菜单排一批检测，用这个范围的默认方法（配置里存的选择 → 出厂默认）。
 // 返回值是这批任务落在的轮 ID；队列去重时可能带出别的轮，所以按任务逐条取，不假设只有一个。
 func (s *Service) automationDetect(itemIDs []string) ([]string, error) {
-	tasks, err := s.DetectItems(itemIDs, "")
+	tasks, err := s.DetectItems(itemIDs, "", "")
 	if err != nil {
 		return nil, err
 	}

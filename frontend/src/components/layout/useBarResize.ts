@@ -19,6 +19,8 @@ export type BarResizeOptions = {
   axis?: BarAxis
   /** 往哪个方向拖算「变大」。队列在下方：手柄往上拖才是变高，所以要取反。 */
   invert?: boolean
+  /** 锁住时不接受按下，整条分隔条保持原样；侧栏和任务列表不传，照旧可拖。 */
+  disabled?: boolean
 }
 
 // 分隔条拖动的通用实现：侧栏宽度、队列里「任务列表」宽度、队列高度共用这一套时序。
@@ -35,6 +37,7 @@ export function useBarResize(
 ): BarResize {
   const axis = options.axis ?? 'x'
   const invert = options.invert ?? false
+  const disabled = options.disabled ?? false
   const targetRef = useRef<HTMLElement | null>(null)
   const clampRef = useRef(clamp)
   clampRef.current = clamp
@@ -70,7 +73,8 @@ export function useBarResize(
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
-      if (event.button !== 0) return
+      // 锁住时连按下都不接：后面的 move/up 因为 drag.current 为空自然什么都不做。
+      if (disabled || event.button !== 0) return
       event.preventDefault()
       const element = targetRef.current
       const measured = axis === 'x' ? element?.offsetWidth : element?.offsetHeight
@@ -83,7 +87,7 @@ export function useBarResize(
       setDragging(true)
       setLiveValue(startValue)
     },
-    [axis, value, fallback, posOf],
+    [axis, value, fallback, posOf, disabled],
   )
 
   const onPointerMove = useCallback(

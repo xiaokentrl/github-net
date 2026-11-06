@@ -300,6 +300,12 @@
   font-size: 12.5px;
 }
 
+/* 表格拿到键盘焦点时给一圈提示，用户才知道方向键会作用在这张表上。 */
+.itemTable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
 .itemTable th {
   padding: 6px 12px;
   border: 1px solid var(--border-strong);
@@ -325,10 +331,8 @@
   background: var(--hov);
 }
 
-.rowSel,
-.itemTable tbody tr.rowSel:hover {
-  background: var(--primary-soft);
-}
+/* 选中行的主色高亮不涂在 tr 上：四档底色画在 td 上，会把它整个盖掉。
+   真正那层高亮放在文件末尾，叠在 td 背景之上，状态色仍能透出来。 */
 
 .itemName {
   white-space: nowrap;
@@ -486,7 +490,14 @@ tr.rowUnwritten td, tr.rowUnwritten:hover td { background: var(--band); }
 .writeTagOk { background: var(--green); color: var(--on-primary); }
 .writeTagNo { border: 1px solid var(--border-strong); color: var(--text-2); }
 
-tr.rowSel td,
-tr.rowSel th {
-  box-shadow: inset 3px 0 0 var(--primary);
+/* 选中行：在四档状态底色上再叠一层半透明主色，一眼能看出选中，状态色也不被抹掉。
+   选择器带 .itemTable tbody tr，压过四档底色和「有可用 IP」那几条 td 规则；悬停同样生效。 */
+.itemTable tbody tr.rowSel td,
+.itemTable tbody tr.rowSel:hover td {
+  background-image: linear-gradient(var(--primary-wash), var(--primary-wash));
+}
+
+/* 左缘色条只画在首格，免得每一格都竖一条线。 */
+.itemTable tbody tr.rowSel td:first-child {
+  box-shadow: inset 4px 0 0 var(--primary);
 }

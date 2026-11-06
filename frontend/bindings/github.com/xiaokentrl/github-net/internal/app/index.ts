@@ -20,6 +20,7 @@ export type {
     DetectResultView,
     HostEntryState,
     HostsState,
+    IPCacheClearResult,
     ItemsSnapshot,
     PoolEntryView,
     RuntimeInfo,

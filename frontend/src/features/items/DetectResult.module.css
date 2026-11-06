@@ -75,6 +75,21 @@
   background: var(--hov);
 }
 
+/* 方向键／鼠标选中的候选行：表格拿到焦点时才亮，压过四档状态底色和悬停色。 */
+.cands:focus tbody tr.candFocus td,
+.cands:focus tbody tr.candFocus:hover td {
+  background: var(--primary-soft);
+}
+
+.cands:focus tbody tr.candFocus td:first-child {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.cands:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
 /* 序号列窄、延迟列给一点宽度（原型第 280–281 行定过；评分列已删，第 5 列就是延迟）。 */
 .cands th:nth-child(1),
 .cands td:nth-child(1) {

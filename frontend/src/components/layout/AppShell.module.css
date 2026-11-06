@@ -1,7 +1,7 @@
 /* 骨架尺寸逐条抄原型：.app(22) .topbar(24) .toolbar(51) .main(124) .sidebar(126) .tree-scroll(127)
    .sidebar-footer(130) .sf-btn(131–133) .right(229) .detail(230) .statusbar(376)。
    队列高度那条横向手柄（原型 .resizer 232–235）在队列面板自己身上，不在这里。
-   .logo 那两个色值不换成令牌：原型第 25 行的品牌标识在六套主题里都没被覆盖，换肤不该把它一起换掉。 */
+   .logo 那两个色值不换成令牌：原型第 25 行的品牌标识在各套主题里都没被覆盖，换肤不该把它一起换掉。 */
 .app {
   display: flex;
   flex-direction: column;
@@ -17,8 +17,10 @@
   gap: var(--gap);
   height: var(--topbar-h);
   padding: 0 var(--pad);
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  /* 比页面和工具栏都明显一档的专用底色 + 强一档的分界线：无边框窗口里，
+     这一行是用户唯一能认出「标题栏在这里」的依据，不能和工具栏糊成一片。 */
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--topbar-bg);
   /* 顶栏就是标题栏：整条可拖动，按钮自己标 no-drag。窗口没有系统标题栏，拖动全靠这一行。 */
   --wails-draggable: drag;
 }
@@ -98,32 +100,6 @@
 .text {
   color: var(--text-2);
   white-space: nowrap;
-}
-
-/* 档位快捷按钮：照原型 .network-profile-quick 第 92–93 行的一颗小描边按钮，
-   文字是「档位 · ≤每轮上限 候选」，点开进设置中心的网络与流量页。 */
-.profileQuick {
-  flex: none;
-  height: 26px;
-  padding: 0 9px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-2);
-  font-family: inherit;
-  font-size: 11.5px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.profileQuick:hover {
-  background: var(--hov);
-  color: var(--text);
-}
-
-.profileQuick:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
 }
 
 /* 保存提示只占一行里剩下的一点地方：窗口窄了先把它截断，不把工具栏挤成两行。 */

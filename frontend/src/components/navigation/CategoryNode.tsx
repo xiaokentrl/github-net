@@ -34,6 +34,7 @@ export function CategoryNode({
   results,
   expanded,
   selectedId,
+  startIndex,
   checkedIds,
   onToggleChecked,
   onManualBrowse,
@@ -48,6 +49,8 @@ export function CategoryNode({
   results: Record<string, DetectResultView>
   expanded: boolean
   selectedId: string
+  // 这个分类在「当前展开的全部二级菜单」平坦清单里的起点，方向键跨分类导航用。
+  startIndex: number
   onToggle: (categoryID: string) => void
   onSelect: (itemID: string) => void
   checkedIds: ReadonlySet<string>
@@ -118,7 +121,7 @@ export function CategoryNode({
 
       {expanded && (
         <ul role="group" className={styles.children}>
-          {items.map((item) => {
+          {items.map((item, index) => {
             const hosts = hostsOf.get(item.id)
             const status = itemStatus(hosts, liveOf.get(item.id), results[item.id])
             const active = item.id === selectedId
@@ -128,6 +131,7 @@ export function CategoryNode({
                   role="treeitem"
                   tabIndex={0}
                   data-item-id={item.id}
+                  data-arrow-index={startIndex + index}
                   aria-selected={active}
                   className={`${styles.node} ${styles.item} ${active ? styles.active : ''} ${styles[status.tone]}`}
                   onClick={() => {

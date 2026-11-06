@@ -8,6 +8,7 @@
 // 再看这一批地址的实测结论：一条能加速的都没有，那一格就压成「未写」（拍板 2026-11-06 晚）。
 // 实测结论有两个来源（同名同址，缺一个就认另一个）：后端从候选池贴回的 entries[].probeStatus（重启也还在）
 // 和最近一轮检测里每条候选的定格。没测过不等于连不通——一点证据都没有时不降级，照文件事实给档。
+// 另外，本轮检测跑完却一个可用候选都没有：没有可写 Hosts，直接判失败档（红），四处一起红。
 import { Status } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { DetectResultView, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
@@ -49,6 +50,17 @@ export function nothingAccelerates(hosts: HostsState | undefined, result: Detect
   const verdicts = verdictsOf(hosts, result)
   if (verdicts.length === 0) return false
   return !verdicts.some((s) => s === 'available')
+}
+
+// 这一轮检测跑完、一个可用候选都没有：没有可写 Hosts，该判失败档（红）。
+// 没检测过、这轮连域名行都没有、用户主动取消、候选还全在排队/在测（还没出结论），
+// 都不算——那些不是「测完没结果」。按候选实算，不另抄一份数字。
+export function noAvailableThisRound(result: DetectResultView | undefined): boolean {
+  if (!result || result.cancelled) return false
+  const hosts = result.hosts ?? []
+  const statuses = hosts.flatMap((host) => (host.candidates ?? []).map((c) => String(c.status)))
+  if (!statuses.some((s) => DECISIVE.has(s))) return false
+  return !statuses.some((s) => s === 'available')
 }
 
 // 四档文案键；处理中再按「在做什么」换成更具体的一个词。
@@ -125,7 +137,7 @@ function progressOf(task: ToneTask): Progress {
   return 'restoring'
 }
 
-// 单一入口：所有视图都调它。优先级＝在跑的 > 坏消息 > 逐条写入事实，最后再过一道「能不能加速」的降级。
+// 单一入口：所有视图都调它。优先级＝在跑的 > 坏消息 > 本轮零可用（红） > 逐条写入事实，最后再过一道「能不能加速」的降级。
 export function projectState(hosts: HostsState | undefined, tasks: readonly ToneTask[], itemId: string, result?: DetectResultView): ProjectState {
   let active: ToneTask | undefined
   let last: ToneTask | undefined
@@ -145,9 +157,12 @@ export function projectState(hosts: HostsState | undefined, tasks: readonly Tone
   if (last && TASK_TONE[String(last.status)] === 'failed') {
     return { tone: 'failed', reason: last.errorMsg, written }
   }
-  // 这一轮测完一个可用候选都没有：不再报失败，而是照「这一项现在能不能加速」压成未写档（拍板 2026-11-06 晚）。
-  const usable = !nothingAccelerates(hosts, result)
-  return { tone: written && usable ? 'written' : 'unwritten', written }
+  // 这一轮测完一个可用候选都没有：没有可写 Hosts，判失败档（红）。
+  // 树、徽章、全二级菜单表、队列明细共用这个状态源，四处一起红，不会出现表格红了树没红。
+  if (noAvailableThisRound(result)) return { tone: 'failed', written }
+  // 手上地址全连不通（例如旧映射失效）：不算「已写 Hosts」，退回未写档，别显示成成功绿。
+  if (written && nothingAccelerates(hosts, result)) return { tone: 'unwritten', written }
+  return { tone: written ? 'written' : 'unwritten', written }
 }
 
 // 一行项目该显示的那个词；处理中会说得更具体。

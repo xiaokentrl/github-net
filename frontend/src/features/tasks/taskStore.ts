@@ -173,6 +173,13 @@ export async function refreshAllResults(): Promise<void> {
   await Promise.all(Object.keys(state.results).map((id) => refreshResult(id).catch(() => undefined)))
 }
 
+// clearResults 把界面手上这份最近结论和进行中计数整份丢掉。
+// 「清理全部 IP 缓存」用：后端底账和内存结论都清了，前端不丢就会继续摆着旧候选，
+// 用户看到的列表像没跟着变。
+export function clearResults(): void {
+  publish({ results: {}, live: {} })
+}
+
 // ensureLastResults 把后端还留着、但 store 里还没有的那几份结论补读进来：
 // 刷新页面后 store 是空的，详情页那三格（检测最优 IP／可用候选／上次检测）会全成「—」，
 // 可后端明明记得上一轮的结果——界面不读就是自己装看不见。

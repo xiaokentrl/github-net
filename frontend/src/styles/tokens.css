@@ -2,7 +2,7 @@
    颜色在原型 :root（第 8–17 行）和 html 兜底层（第 529–530 行），
    尺寸在 .topbar(24) .toolbar(51) .sidebar(126) .node(145) .node.item(154) .queue(301) .statusbar(376)，
    基准字号在 html,body(20)。
-   六套配色都在 themes.css 里按同一批变量整块覆盖，这里只登记晨光白（light）一份；
+   七套配色共用同一批变量：晨光白（light）登记在这里，另外六套在 themes.css 整块覆盖；
    切换机制是 html[data-theme="..."]，页面组件不写自己的主题色。 */
 :root {
   /* 晨光白是浅色主题也要声明 color-scheme：不声明时原生控件（下拉弹层、勾选框、滚动条）
@@ -10,6 +10,9 @@
   color-scheme: light;
   --bg: #f5f6f8;
   --panel: #fff;
+  /* 标题栏专用底：比卡片/工具栏明显深一档、带本主题主色倾向，
+     一眼就能把整条自绘标题栏从页面里分出来。另外六套在 themes.css 各覆盖一次。 */
+  --topbar-bg: #e3e9f7;
   --border: #e3e6eb;
   --border-strong: #d0d5dd;
   --text: #1f2430;
@@ -17,6 +20,8 @@
   --text-3: #8a93a3;
   --primary: #2563eb;
   --primary-soft: #eaf0fe;
+  /* 选中行在四档状态底色上再叠的一层主色：半透明，状态色还能透出来。 */
+  --primary-wash: rgba(37, 99, 235, 0.16);
   --green: #16a34a;
   --green-soft: #e8f7ee;
   --amber: #d97706;
@@ -38,7 +43,7 @@
   --band: #f0f2f5;
 
   /* 对话框与主色底上的字（原型 html 兜底层 + 各主题的点名覆盖）。
-     值抄的是原型浅色那一份；另外五套在 themes.css 里各覆盖一次，页面只引用变量。 */
+     值抄的是原型浅色那一份；另外六套在 themes.css 里各覆盖一次，页面只引用变量。 */
   --mask: rgba(15, 23, 42, 0.45);
   --pop: 0 20px 60px rgba(16, 24, 40, 0.25);
   --on-primary: #fff;

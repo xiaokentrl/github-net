@@ -27,13 +27,16 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
     setAskOpen(true)
   }, [busy])
 
+  // 返回 Promise：清理弹框把「清除已写入的 Hosts」和其它清理项一起排进同一批任务时，
+  // 要能等这一笔还原落定再统一刷新，逻辑仍只有这一份。
   const runRestoreAll = useCallback(() => {
     setAskOpen(false)
-    restoreAllHosts()
+    return restoreAllHosts()
       .then((count) => {
         // 全部还原不进队列、也没有任务落定事件：除了树里那行状态退回「未替换」，
-        // 界面上本来没有别的回执，这里补一条。成功档是回执，读完自己走。
+        // 界面上本来没有别的回执，这里补一条。一条都没还原也明说，免得点了像没反应。
         if (count > 0) pushNotice('success', t('hosts.restoreAll.done', { count }))
+        else pushNotice('info', t('hosts.restoreAll.none'))
       })
       .then(() => getTasks().then(applyTaskSnapshot))
       // 「当前写入 IP」的权威在后端检测结果里，还原后整批重拉一遍。
@@ -61,5 +64,5 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
     </Dialog>
   ) : null
 
-  return { busy, restoreAll, confirmDialog }
+  return { busy, restoreAll, restoreAllNow: runRestoreAll, confirmDialog }
 }

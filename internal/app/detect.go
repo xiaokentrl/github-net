@@ -114,6 +114,13 @@ func (e *detectExecutor) Execute(ctx context.Context, t task.Task, report task.R
 	if err != nil {
 		return detectFailure("读不到当前设置，这一轮没有开始")
 	}
+	// 本次档位记在轮账本上（检测弹框选的那一档）。取到就覆盖这份快照再算预算：
+	// 每域名候选数、并发数和本轮上限一起跟着走，但持久设置一行不改。
+	if e.rounds != nil && t.RoundID != "" {
+		if p := e.rounds.profileOf(t.RoundID); p != "" {
+			cfg.Network.Profile = p
+		}
+	}
 	strategyID, ok := e.strategyID(t.StrategyID, item.scopeID, cfg)
 	if !ok {
 		return detectFailure("这个项目所在的加速范围还没选检测方法，先在设置里为它选一个再检测")

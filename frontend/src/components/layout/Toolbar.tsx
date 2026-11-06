@@ -1,16 +1,13 @@
 import type { Config } from '../../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
-import { profileLabel } from '../../features/settings/profileOptions'
 import { t } from '../../i18n'
 import { InlineStatus, type SaveKind } from '../../components/ui/InlineStatus'
 import uiStyles from '../ui/ui.module.css'
 import styles from './AppShell.module.css'
 
 // 工具栏照原型第 803–817 行的顺序与分组：
-// 左边 模式 / 打开Hosts，右边 清理已选缓存 / 检测全部 / 档位 / 应用队列 / 恢复。
+// 左边 模式 / 打开Hosts / 选择清理项，右边 检测选中项 / 写入 Hosts / 还原 Hosts。
 // 搜索框已挪进侧栏顶部、跟着菜单宽度走（拍板 2026-10-31），工具栏里不再有它。
-// 档位那一格是原型同一颗快捷按钮（第 813 行，文字「省流 · ≤108 候选」）：显示当前档位和每轮候选上限，
-// 点开进设置中心的网络与流量页去改。这里不再放下拉框、上限说明、跳转按钮和版本号——
-// 那些内容把工具栏撑成了两行，而档位与上限在设置页里本来就能改。
+// 档位快捷按钮已移除：档位和每轮候选上限改在设置中心的网络与流量页里看、在那里改。
 // 全选/反选/折叠已挪进侧栏顶部（SidebarTools），原型同步。
 export function Toolbar({
   settings,
@@ -20,7 +17,7 @@ export function Toolbar({
   busy,
   clearBusy,
   clearEnabled,
-  onOpenNetwork,
+  queueBusy,
   onDetectChecked,
   onClearCheckedCache,
   onApplyChecked,
@@ -35,7 +32,7 @@ export function Toolbar({
   busy: boolean
   clearBusy: boolean
   clearEnabled: boolean
-  onOpenNetwork: () => void
+  queueBusy: boolean
   onDetectChecked: () => void
   onClearCheckedCache: () => void
   onApplyChecked: () => void
@@ -45,6 +42,11 @@ export function Toolbar({
 }) {
   if (error) return <span className={styles.text}>{t('settings.error', { reason: error })}</span>
   if (!settings) return <span className={styles.text}>{t('detail.loading')}</span>
+
+  // 四颗动作按钮共用一个「现在能不能点」：队列里还有没落定的任务，
+  // 或保存设置／清理缓存／全部还原这些不进队列的命令正在等回执，都算「正在执行功能」。
+  // 一处判断四颗一起关，不各写各的，免得漏掉某一颗。
+  const actionsBusy = busy || clearBusy || queueBusy || restoreBusy
 
   return (
     <>
@@ -63,45 +65,44 @@ export function Toolbar({
         {t('toolbar.openHosts')}
       </button>
 
-      <span className={styles.spacer} />
-
-      {/* 清理已选缓存：只清勾中项目所属菜单的那几份公共源，清完下一轮检测才会重新下载。
-          没勾任何项目时点不动（后端也会整批拒，这里先把按钮关上，省一次无用的确认框）。 */}
+      {/* 清理缓存：点开框里分两件事——清勾中项目的源缓存，或清掉全部检测出来的 IP 缓存。
+          第二件不需要勾选项；没勾选时框里第一颗自会禁用，有任务在跑时这四颗一起禁用。 */}
       <button
         type="button"
         className={styles.action}
-        disabled={busy || clearBusy || !clearEnabled}
+        disabled={actionsBusy}
         title={t(clearEnabled ? 'toolbar.clearCache.title' : 'toolbar.clearCache.needCheck')}
         onClick={onClearCheckedCache}
       >
         {t('toolbar.clearCache')}
       </button>
 
-      <button type="button" className={styles.action} disabled={busy} onClick={onDetectChecked}>
+      <span className={styles.spacer} />
+
+      <button
+        type="button"
+        className={styles.action}
+        disabled={actionsBusy}
+        title={t('toolbar.detectChecked.title')}
+        onClick={onDetectChecked}
+      >
         {t('toolbar.detectChecked')}
       </button>
 
-      {/* 档位与每轮候选上限合成一颗按钮：数字都来自当前配置，点一下去设置页改。 */}
+      {/* .action 已经 composes 过公共按钮配方（自带 --btn），这里只再挂主色/危险色即可。 */}
       <button
         type="button"
-        className={styles.profileQuick}
-        title={t('toolbar.profile.quickHint')}
-        onClick={onOpenNetwork}
+        className={`${styles.action} ${uiStyles.primary}`}
+        disabled={actionsBusy}
+        title={t('toolbar.applyChecked.title')}
+        onClick={onApplyChecked}
       >
-        {t('toolbar.profile.quick', {
-          profile: profileLabel(settings.network.profile),
-          cap: settings.network.maxCandidateProbesPerRun,
-        })}
-      </button>
-
-      {/* .action 已经 composes 过公共按钮配方（自带 --btn），档位直接挂 ui 的那两份即可。 */}
-      <button type="button" className={`${styles.action} ${uiStyles.primary}`} disabled={busy} onClick={onApplyChecked}>
         {t('toolbar.applyChecked')}
       </button>
       <button
         type="button"
         className={`${styles.action} ${uiStyles.danger}`}
-        disabled={restoreBusy}
+        disabled={actionsBusy}
         title={t('toolbar.restoreTitle')}
         onClick={onRestoreAll}
       >

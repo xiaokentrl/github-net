@@ -92,3 +92,19 @@ func TestStatusToneTablesCoverEveryBackendStatus(t *testing.T) {
 		goStatusSet(t, root, filepath.Join("internal", "app", "dto.go"), goHostsStatus),
 		tsToneTable(t, src, "HOSTS_TONE"))
 }
+
+// 门：本轮检测一个可用候选都没有，必须判失败档（红），不能悄悄压回未写档（灰）。
+// 这一档来回改过（红→灰→红）；表格、徽章、队列明细走 projectState，树走 itemStatus，
+// 两处都得判红，少一处就会出现「表格红了树没红」。类型检查抓不到这种档位漂移。
+func TestNoAvailableThisRoundStaysFailureTone(t *testing.T) {
+	root := repoRoot(t)
+	red := regexp.MustCompile(`if \(noAvailableThisRound\(result\)\) return \{[^}]*tone: 'failed'`)
+	for _, rel := range []string{
+		filepath.Join("frontend", "src", "features", "tasks", "statusTone.ts"),
+		filepath.Join("frontend", "src", "components", "navigation", "treeStatus.ts"),
+	} {
+		if !red.MatchString(readAt(t, root, rel)) {
+			t.Errorf("%s 没把「本轮零可用」判进 failed 档：测完没可用 IP 的行必须标红", rel)
+		}
+	}
+}

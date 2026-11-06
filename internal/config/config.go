@@ -67,7 +67,7 @@ var (
 
 var (
 	allowedProfiles  = map[string]bool{ProfileLow: true, ProfileStandard: true, ProfileFull: true}
-	allowedThemes    = map[string]bool{"light": true, "midnight": true, "oled": true, "forest": true, "ocean": true, "sakura": true}
+	allowedThemes    = map[string]bool{"light": true, "midnight": true, "oled": true, "forest": true, "ocean": true, "sakura": true, "warm-yellow": true}
 	allowedZooms     = map[float64]bool{0.9: true, 1: true, 1.1: true, 1.25: true}
 	allowedLanguages = map[string]bool{"zh-CN": true, "zh-TW": true}
 )
@@ -97,6 +97,13 @@ type LayoutConfig struct {
 	QueueHeight  int `json:"queueHeight"`
 	// QueueListWidth 是队列里左栏「任务列表」的宽度；右边任务明细占剩下的全部。
 	QueueListWidth int `json:"queueListWidth"`
+	// ToastDisabled 关掉右下角提示面板和它收起后的那颗「提示」胶囊。
+	// 出厂默认关掉（设置里那颗开关默认不勾选）。字段仍叫「禁用」是为了不改磁盘格式：
+	// 老配置没写过这个字段时，read() 按出厂默认补成 true；显式写过 false 的按用户选择保留。
+	ToastDisabled bool `json:"toastDisabled"`
+	// QueueHeightLocked 锁住任务队列高度：锁上后拖动条、窗口自愈、布局预设都不再改 queueHeight，
+	// 磁盘上那份就停在锁定时的高度，重启自然恢复。零值＝不锁，老配置缺字段也按不锁走。
+	QueueHeightLocked bool `json:"queueHeightLocked"`
 }
 
 // TreeBehaviorConfig 是两个独立的分类树展开开关，加上树侧勾选的持久化。
@@ -147,7 +154,9 @@ type Patch struct {
 	Zoom                           *float64           `json:"zoom"`
 	SidebarWidth                   *int               `json:"sidebarWidth"`
 	QueueHeight                    *int               `json:"queueHeight"`
+	QueueHeightLocked              *bool              `json:"queueHeightLocked"`
 	QueueListWidth                 *int               `json:"queueListWidth"`
+	ToastDisabled                  *bool              `json:"toastDisabled"`
 	DetectFocusFollow              *bool              `json:"detectFocusFollow"`
 	ApplyFocusFollow               *bool              `json:"applyFocusFollow"`
 	CheckedItemIDs                 *[]string          `json:"checkedItemIds"`
@@ -171,7 +180,8 @@ func Default() Config {
 		Accelerator: AcceleratorConfig{DefaultStrategyByScope: map[string]string{}},
 		Appearance:  AppearanceConfig{Language: "zh-CN", Theme: "light", Zoom: 1},
 		// 队列高度默认取「小」档（拍板 2026-10-31）：主区先让给项目树，要看队列再拖大。
-		Layout: LayoutConfig{SidebarWidth: 240, QueueHeight: QueueHeightSmall, QueueListWidth: 220},
+		// 提示面板出厂默认关掉（true＝被禁用）；队列高度出厂不锁，零值就是默认值。
+		Layout: LayoutConfig{SidebarWidth: 240, QueueHeight: QueueHeightSmall, QueueListWidth: 220, ToastDisabled: true, QueueHeightLocked: false},
 		// 两个焦点跟随出厂默认打开（拍板 2026-10-31）：队列跟着正在跑的项目走是这功能的本意。
 		TreeBehavior: TreeBehaviorConfig{DetectFocusFollow: true, ApplyFocusFollow: true},
 	}
@@ -258,7 +268,7 @@ func (c Config) Validate(scopeIDs map[string]bool, strategies map[string]bool, m
 		return fmt.Errorf("%w: 语言 %s 不在支持列表（简体中文/繁体中文）", ErrInvalid, c.Appearance.Language)
 	}
 	if !allowedThemes[c.Appearance.Theme] {
-		return fmt.Errorf("%w: 主题 %s 不在支持的六套里", ErrInvalid, c.Appearance.Theme)
+		return fmt.Errorf("%w: 主题 %s 不在支持的七套里", ErrInvalid, c.Appearance.Theme)
 	}
 	if !allowedZooms[roundZoom(c.Appearance.Zoom)] {
 		return fmt.Errorf("%w: 缩放只有 90%%、100%%、110%%、125%% 四档", ErrInvalid)
@@ -372,6 +382,9 @@ func read(path string) (Config, readState, error) {
 	}
 	var probe struct {
 		SchemaVersion int `json:"schemaVersion"`
+		Layout        struct {
+			ToastDisabled *bool `json:"toastDisabled"`
+		} `json:"layout"`
 	}
 	if err := json.Unmarshal(raw, &probe); err != nil {
 		return Config{}, readBroken, fmt.Errorf("配置文件不是合法 JSON")
@@ -382,6 +395,11 @@ func read(path string) (Config, readState, error) {
 	var c Config
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return Config{}, readBroken, fmt.Errorf("配置文件字段不合法: %v", err)
+	}
+	// 老配置文件里没写过 toastDisabled：Go 零值 false 会被当成「用户要显示」。
+	// 出厂默认是关掉的，缺字段按默认补上；显式写过 true/false 的一律尊重。
+	if probe.Layout.ToastDisabled == nil {
+		c.Layout.ToastDisabled = Default().Layout.ToastDisabled
 	}
 	return c, readOK, nil
 }
@@ -557,8 +575,14 @@ func applyPatch(c *Config, p Patch) {
 	if p.QueueHeight != nil {
 		c.Layout.QueueHeight = *p.QueueHeight
 	}
+	if p.QueueHeightLocked != nil {
+		c.Layout.QueueHeightLocked = *p.QueueHeightLocked
+	}
 	if p.QueueListWidth != nil {
 		c.Layout.QueueListWidth = *p.QueueListWidth
+	}
+	if p.ToastDisabled != nil {
+		c.Layout.ToastDisabled = *p.ToastDisabled
 	}
 	if p.DetectFocusFollow != nil {
 		c.TreeBehavior.DetectFocusFollow = *p.DetectFocusFollow

@@ -38,6 +38,7 @@ export function LayoutPane({
   onQueueListWidth,
   onDetectFocusFollow,
   onApplyFocusFollow,
+  onToastVisible,
 }: {
   settings: Config
   save: SaveState
@@ -46,13 +47,15 @@ export function LayoutPane({
   onQueueListWidth: (width: number) => void
   onDetectFocusFollow: (enabled: boolean) => void
   onApplyFocusFollow: (enabled: boolean) => void
+  onToastVisible: (enabled: boolean) => void
 }) {
-  // 一屏五张能改的卡：状态条各认各的改动，「禁用」仍看全局是否有请求在路上。
+  // 一屏六张能改的卡：状态条各认各的改动，「禁用」仍看全局是否有请求在路上。
   const sidebarSave = saveStateFor(save, 'sidebar')
   const queueSave = saveStateFor(save, 'queueHeight')
   const listSave = saveStateFor(save, 'queueList')
   const detectFollowSave = saveStateFor(save, 'detectFocusFollow')
   const applyFollowSave = saveStateFor(save, 'applyFocusFollow')
+  const toastSave = saveStateFor(save, 'toastDisabled')
   return (
     <>
       <h3 className={styles.paneTitle}>{t('settings.layout.title')}</h3>
@@ -76,7 +79,7 @@ export function LayoutPane({
         </div>
       </div>
 
-      <div className={styles.card}>
+      <div className={styles.card} title={settings.layout.queueHeightLocked ? t('settings.layout.queueHeightLockedHint') : undefined}>
         <div className={styles.cardTitle}>
           <span className={styles.ico} aria-hidden="true">
             ▥
@@ -88,7 +91,7 @@ export function LayoutPane({
             label={t('settings.layout.queueTitle')}
             value={settings.layout.queueHeight}
             options={QUEUE_PRESETS()}
-            disabled={save.kind === 'pending'}
+            disabled={save.kind === 'pending' || settings.layout.queueHeightLocked}
             onChange={onQueueHeight}
           />
           <InlineStatus kind={queueSave.kind} text={queueSave.text} />
@@ -150,6 +153,25 @@ export function LayoutPane({
           {t('settings.layout.applyFocusToggle')}
         </label>
         <InlineStatus kind={applyFollowSave.kind} text={applyFollowSave.text} />
+      </div>
+
+      <div className={styles.card}>
+        <div className={styles.cardTitle}>
+          <span className={styles.ico} aria-hidden="true">
+            ◎
+          </span>
+          {t('settings.layout.toastTitle')}
+        </div>
+        <label className={styles.checkRow}>
+          <input
+            type="checkbox"
+            checked={settings.layout.toastDisabled === false}
+            disabled={save.kind === 'pending'}
+            onChange={(event) => onToastVisible(event.target.checked)}
+          />
+          {t('settings.layout.toastToggle')}
+        </label>
+        <InlineStatus kind={toastSave.kind} text={toastSave.text} />
       </div>
     </>
   )

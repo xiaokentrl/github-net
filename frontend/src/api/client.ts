@@ -1,8 +1,8 @@
 // 组件不直接调用 Wails 绑定，只走这一层；这里也不写业务规则。
-// 后端 23 条命令，这层登记界面用得上的 20 条（另有 Ping、RuntimeInfo、SettingsStore 三条没用到）。
-// 登记不等于界面都在用：加速方法这 2 条从本轮起由详情页的选择区调用。
+// 后端命令按需登记，界面用不上的（Ping、RuntimeInfo、SettingsStore）不在这里列。
 import {
   ApplyItems,
+  ClearAllIPCache,
   ClearFinishedTasks,
   ClearSourcesCache,
   DetectBudget,
@@ -12,6 +12,7 @@ import {
   GetCandidatePool,
   GetDetectResult,
   GetItems,
+  GetLastDetectProfile,
   GetSettings,
   GetStrategies,
   GetTasks,
@@ -22,9 +23,10 @@ import {
   RestoreItems,
   SaveSettings,
   SelectStrategy,
+  SetLastDetectProfile,
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/service'
 import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
-import type { AppStatus, DetectBudgetPreview, DetectResultView, ItemsSnapshot, PoolEntryView, SourcesCacheResult, StrategySnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { AppStatus, DetectBudgetPreview, DetectResultView, IPCacheClearResult, ItemsSnapshot, PoolEntryView, SourcesCacheResult, StrategySnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
@@ -34,14 +36,16 @@ import type { UpdateDownloadResult } from '../../bindings/github.com/xiaokentrl/
 export type NetworkProfile = 'low' | 'standard' | 'full'
 
 // 设置对话框那几屏会改的值：档位、每轮候选上限、侧栏宽度、队列高度、任务列表宽度、缩放、主题、
-// 两个焦点跟随开关。
+// 两个焦点跟随开关，以及右下角提示面板的启用开关（界面说「显示」，配置里存「禁用」，取反一次）。
 export type SettingsPatch = {
   networkProfile?: NetworkProfile
   language?: string
   maxCandidateProbesPerRun?: number
   sidebarWidth?: number
   queueHeight?: number
+  queueHeightLocked?: boolean
   queueListWidth?: number
+  toastDisabled?: boolean
   zoom?: number
   theme?: string
   closeToTray?: boolean
@@ -67,6 +71,15 @@ export function getSettings(): Promise<Config> {
   return GetSettings()
 }
 
+// 「记住选项」的档位：后端单独一份小文件，不进 config.json、不动设置中心。
+export function getLastDetectProfile(): Promise<string> {
+  return GetLastDetectProfile()
+}
+
+export function setLastDetectProfile(profile: string): Promise<void> {
+  return SetLastDetectProfile(profile)
+}
+
 // 启动自动化最近一次的结论。没跑过时后端给的是 stage 为空串的一份空值，
 // 由调用方判空——界面不该把「还没发生」显示成一句失败。
 export function getAutomationStatus(): Promise<AutomationStatus> {
@@ -86,7 +99,9 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     zoom: patch.zoom ?? null,
     sidebarWidth: patch.sidebarWidth ?? null,
     queueHeight: patch.queueHeight ?? null,
+    queueHeightLocked: patch.queueHeightLocked ?? null,
     queueListWidth: patch.queueListWidth ?? null,
+    toastDisabled: patch.toastDisabled ?? null,
     closeToTray: patch.closeToTray ?? null,
     startMinimized: patch.startMinimized ?? null,
     autoStart: patch.autoStart ?? null,
@@ -117,9 +132,10 @@ export function selectStrategy(scopeId: string, strategyId: string, expectedRevi
 
 // 发起检测：后端整批校验（项目在目录里、范围有可用方法、方法适用），不合格整批拒绝。
 // strategyId 给空按范围默认（配置里存的 → 出厂默认「全部公共源」）；给了就整批用它。
+// profile 是本次检测档位：空串沿用设置里的档位；指定值只在这一轮生效，不写回配置。
 // 已在队列里的项目返回同一条任务，不会重复排队。
-export function detectItems(itemIds: string[], strategyId = ''): Promise<Task[] | null> {
-  return DetectItems(itemIds, strategyId)
+export function detectItems(itemIds: string[], strategyId = '', profile = ''): Promise<Task[] | null> {
+  return DetectItems(itemIds, strategyId, profile)
 }
 
 // 取整份候选池（缓存：每个域名最近一轮的地址），后端已按延迟升序排好、行带二级菜单归属。
@@ -139,6 +155,12 @@ export function clearSourcesCache(itemIds: string[]): Promise<SourcesCacheResult
   return ClearSourcesCache(itemIds)
 }
 
+// 清掉全部检测出来的 IP 缓存：轮底账、逐轮候选、地址池和内存里最近一轮结论。
+// 回执的 rounds / addresses 是真删掉的行数；配置、已生效的 Hosts 和还原依据不动。
+export function clearAllIPCache(): Promise<IPCacheClearResult> {
+  return ClearAllIPCache()
+}
+
 export function getTasks(): Promise<Snapshot> {
   return GetTasks()
 }
@@ -147,9 +169,9 @@ export function clearFinishedTasks(): Promise<Snapshot> {
   return ClearFinishedTasks()
 }
 
-// 批量检测前的预算预估：Needed 盖不全时界面先请用户确认再发起。
-export function detectBudget(itemIds: string[]): Promise<DetectBudgetPreview> {
-  return DetectBudget(itemIds)
+// 批量检测前的预算预估：按本次选中的档位算，Needed 盖不全时界面先请用户确认再发起。
+export function detectBudget(itemIds: string[], profile = ''): Promise<DetectBudgetPreview> {
+  return DetectBudget(itemIds, profile)
 }
 
 // ===== 应用与还原 =====

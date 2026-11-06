@@ -216,6 +216,14 @@ export enum HostsStatus {
 };
 
 /**
+ * IPCacheClearResult 是「清理全部 IP 缓存」的回执，只报真删掉的行数。
+ */
+export interface IPCacheClearResult {
+    "rounds": number;
+    "addresses": number;
+}
+
+/**
  * ItemsSnapshot 是 GetItems 的返回形状：目录 + 每项的真实 Hosts 状态。
  * 目录部分来自 internal/catalog，状态部分只能由后端 Hosts 读取服务填写。
  */

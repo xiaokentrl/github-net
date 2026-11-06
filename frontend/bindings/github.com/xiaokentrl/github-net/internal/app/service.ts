@@ -48,6 +48,14 @@ export function CheckForUpdates(): $CancellablePromise<updater$0.Info> {
 }
 
 /**
+ * ClearAllIPCache 清掉全部检测缓存。底账没打开（库没接上）时仍要清内存这一份：
+ * 界面手上那份旧结论一样是缓存，留着就是「清完了却还看得到」。
+ */
+export function ClearAllIPCache(): $CancellablePromise<$models.IPCacheClearResult> {
+    return $Call.ByID(1383444931);
+}
+
+/**
  * ClearFinishedTasks 移除全部终态记录，保留等待中与执行中的任务，返回清理后的快照。
  * 没有终态记录时什么都不删，也算成功。
  */
@@ -67,9 +75,11 @@ export function ClearSourcesCache(itemIDs: string[] | null): $CancellablePromise
 /**
  * DetectBudget 预估一批项目的共享预算，不排队、不发起检测。
  * 界面在 Shortfall > 0 时先请用户确认，再调 DetectItems。
+ * profile 与 DetectItems 同义：弹框里选的档位也要算进这一轮的预算预估，
+ * 否则「还差多少次」那句会按设置里的旧档位算，和真正开跑的那轮对不上。
  */
-export function DetectBudget(itemIDs: string[] | null): $CancellablePromise<$models.DetectBudgetPreview> {
-    return $Call.ByID(1406865640, itemIDs);
+export function DetectBudget(itemIDs: string[] | null, profile: string): $CancellablePromise<$models.DetectBudgetPreview> {
+    return $Call.ByID(1406865640, itemIDs, profile);
 }
 
 /**
@@ -82,9 +92,11 @@ export function DetectBudget(itemIDs: string[] | null): $CancellablePromise<$mod
  * DetectItems 排一批检测任务。strategyID 给空就按各项目范围的默认方法来
  * （配置里存的选择 → 出厂默认「全部公共源」，口径和执行器一致）；
  * 给了就整批用它——选择区那颗「检测」按钮只检测下拉选中的那一个方法。
+ * profile 是这一次检测用的档位：空串沿用设置里的档位，指定值必须是三档之一。
+ * 它只在这一轮生效，不写回配置——检测弹框里选的档和设置中心那档各管各的。
  */
-export function DetectItems(itemIDs: string[] | null, strategyID: string): $CancellablePromise<task$0.Task[] | null> {
-    return $Call.ByID(499348079, itemIDs, strategyID);
+export function DetectItems(itemIDs: string[] | null, strategyID: string, profile: string): $CancellablePromise<task$0.Task[] | null> {
+    return $Call.ByID(499348079, itemIDs, strategyID, profile);
 }
 
 /**
@@ -143,6 +155,13 @@ export function GetDetectResult(itemID: string): $CancellablePromise<$models.Det
  */
 export function GetItems(): $CancellablePromise<$models.ItemsSnapshot> {
     return $Call.ByID(1316963034);
+}
+
+/**
+ * GetLastDetectProfile 给弹框读上次记住的档位；没记住过给空串（界面回落到省流）。
+ */
+export function GetLastDetectProfile(): $CancellablePromise<string> {
+    return $Call.ByID(1346485582);
 }
 
 /**
@@ -228,6 +247,13 @@ export function SaveSettings(patch: config$0.Patch, expectedRevision: number, mu
  */
 export function SelectStrategy(scopeID: string, strategyID: string, expectedRevision: number, mutationID: string): $CancellablePromise<$models.StrategySnapshot> {
     return $Call.ByID(3592968659, scopeID, strategyID, expectedRevision, mutationID);
+}
+
+/**
+ * SetLastDetectProfile 记住或忘掉档位：空串＝忘掉。失败明确返回，前端不把没落盘的说成记住了。
+ */
+export function SetLastDetectProfile(profile: string): $CancellablePromise<void> {
+    return $Call.ByID(401644178, profile);
 }
 
 /**

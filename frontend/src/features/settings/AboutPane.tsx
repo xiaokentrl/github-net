@@ -26,7 +26,7 @@ export function AboutPane({ status }: { status: AppStatus | null }) {
       <div className={styles.card}>
         <div className={styles.aboutHero}>
           {/* 品牌标识不跟主题走：原型第 25 行的 .logo 与第 471 行的 .about-logo-lg 本来就是同一对色值，
-              六套主题都没覆盖它，所以这里继续写死，和顶栏那个小块保持一致。 */}
+              各套主题都没覆盖它，所以这里继续写死，和顶栏那个小块保持一致。 */}
           <span className={styles.aboutMark} aria-hidden="true">
             GH
           </span>

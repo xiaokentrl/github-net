@@ -65,6 +65,7 @@ export function SettingsDialog({
   onAutoClose,
   onDetectFocusFollow,
   onApplyFocusFollow,
+  onToastVisible,
 }: {
   pane: SettingsPaneID
   settings: Config
@@ -91,6 +92,7 @@ export function SettingsDialog({
   onAutoClose: (enabled: boolean) => void
   onDetectFocusFollow: (enabled: boolean) => void
   onApplyFocusFollow: (enabled: boolean) => void
+  onToastVisible: (enabled: boolean) => void
 }) {
   const closeRef = useRef<HTMLButtonElement>(null)
   // onClose 用 ref 转一手：App 每次渲染都给新的箭头函数，副作用若直接依赖它，
@@ -163,6 +165,7 @@ export function SettingsDialog({
                 onQueueListWidth={onQueueListWidth}
                 onDetectFocusFollow={onDetectFocusFollow}
                 onApplyFocusFollow={onApplyFocusFollow}
+                onToastVisible={onToastVisible}
               />
             )}
             {pane === 'zoom' && <ZoomPane settings={settings} save={save} onZoom={onZoom} />}

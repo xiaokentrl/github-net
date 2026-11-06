@@ -3,8 +3,8 @@
    （第 186–191 行）、.count（第 194 行）、.dot 与 .stext（第 196–215 行）、
    .restore-slot 与 .tree-restore-btn（第 216–225 行）。
    原型写死的浅灰（悬停底、数量徽章底、未替换那颗粒点、浅色主题的高亮底）换成同名令牌，
-   六套配色一起走；只有一处保留字面：.hl 在晨光白下就是 #fff3a3，原型也只给浅色主题写这一份，
-   其余五套由下面那条 html[data-theme]:not([data-theme='light']) 覆盖成金色（原型第 726 行）。 */
+   各套配色一起走；只有一处保留字面：.hl 在晨光白下就是 #fff3a3，原型也只给浅色主题写这一份，
+   其余六套由下面那条 html[data-theme]:not([data-theme='light']) 覆盖成金色（暖黄也被这条自动收进去，原型第 726 行）。 */
 .tree {
   margin: 0;
   padding: 0;
@@ -268,7 +268,7 @@
   box-shadow: 0 0 0 3px var(--amber-soft);
 }
 
-/* 「还没替换」和「后端没读过」都不是好坏结论，用中性灰点（原型 .dot.unset 是字面色，六套配色都没覆盖它）。 */
+/* 「还没替换」和「后端没读过」都不是好坏结论，用中性灰点（原型 .dot.unset 是字面色，各套配色都没覆盖它）。 */
 .dotUnset {
   background: #cbd5e1;
 }

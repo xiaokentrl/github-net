@@ -327,7 +327,7 @@
 }
 
 /* 还原类动作（原型 .btn.btn-sm.restore 第 61–62 行）：琥珀字＋琥珀描边，悬停铺淡琥珀。
-   原型那条边框是写死的 #f0d8b0，这里落 --amber-soft，六套配色共用。 */
+   原型那条边框是写死的 #f0d8b0，这里落 --amber-soft，各套配色共用。 */
 .btn.restore {
   border-color: var(--amber-soft);
   color: var(--amber);

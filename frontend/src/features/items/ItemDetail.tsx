@@ -4,6 +4,7 @@ import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-n
 import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
 import type { CatalogCategory, CatalogItem, DetectResultView, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
+import { arrowKeys } from '../../hooks/arrowKeys'
 import { Dialog } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -119,6 +120,8 @@ export function ItemDetail({
   // writtenCount 是点开那一刻数出来的待还原条数——还原落定后 entries 会被刷新成空，
   // 回执要是跟着现数就会写成「已还原 0 条」。
   const [restoreBox, setRestoreBox] = useState<{ itemId: string; name: string; writtenCount: number } | null>(null)
+  // 候选 IP 表的本地焦点行：这张表没有「选中某个项目」的语义，只记上下移动的位置。
+  const [candFocus, setCandFocus] = useState(0)
   // 这个框是几点几分打开的：用来分清「本框点重新检测跑出来的结论」和「后端留着的上一轮结论」。
   const boxOpenedAt = useRef(0)
   // 框要跟的是「这一项、这一类最近的一条任务」。任务数组只往后追加，所以取筛完的最后一条；
@@ -285,6 +288,17 @@ export function ItemDetail({
   // 解析失败的域名没有候选行，单独在表上方说一句，不混进表里冒充候选。
   const failedHosts = rows.filter((h) => !h.resolved)
 
+  // 方向键：详情表沿用 App 的选中项，候选表只在这张表里记一个本地焦点行。
+  const detailItems = category.items ?? []
+  const detailIndex = detailItems.findIndex((it) => it.id === item.id)
+  const onDetailArrowKeys = arrowKeys(detailItems.length, detailIndex, (next) => {
+    const target = detailItems[next]
+    if (target) onSelectItem(target.id)
+  })
+  // 重新检测后行数可能变少，把旧焦点夹回最后一行，别留下一个指不到行的下标。
+  const safeCandFocus = listedCandidates.length === 0 ? -1 : Math.min(candFocus, listedCandidates.length - 1)
+  const onCandArrowKeys = arrowKeys(listedCandidates.length, safeCandFocus, setCandFocus)
+
 
   return (
     <div className={styles.wrap}>
@@ -323,6 +337,8 @@ export function ItemDetail({
         <table
           ref={tableRef}
           className={styles.itemTable}
+          tabIndex={0}
+          onKeyDown={onDetailArrowKeys}
           style={colWidths ? { tableLayout: 'fixed', width: '100%' } : undefined}
         >
           {colWidths ? (
@@ -353,10 +369,10 @@ export function ItemDetail({
             </tr>
           </thead>
           <tbody>
-            {(category.items ?? []).map((it) => {
+            {detailItems.map((it, index) => {
               const hs = hostsOf.get(it.id)
               const res = state.results[it.id]
-              // 「【Hosts】当前写入 IP」摊成每个域名一行，行首带写入短标签（拍板 2026-11-06）：
+              // 「可写Hosts」摊成每个域名一行，行首带「已写/未写」短标签（拍板 2026-11-06）：
               // 标签先看在不在区段里（entry.ip），再看这一条自己最后一次实测通不通——
               // 写着但连不通的那条压成「未写」（拍板 2026-11-06 晚），地址照原样摊出来供还原对账，只是不算写成。
               // 认领关系管的是档位和那颗「还原」，两件事不混。没写的行只说「域名 → —」，原因在下面候选表里。
@@ -382,11 +398,19 @@ export function ItemDetail({
               const availableCount = cands.filter((c) => c.status === 'available').length
               const selectedRow = it.id === item.id
               // 行底色跟统一四档走：状态源每次渲染重算，一变整行颜色立刻跟着变。
-              // 全都连不通的项目由 projectState 压进未写档，整行跟着灰（拍板 2026-11-06 晚）。
+              // 本轮检测零可用的项目由 projectState 判进失败档，整行跟着红；旧映射失效的退回灰档。
               const rowTone = TONE_ROW_CLASS[toneForItem(hs, state.tasks, it.id, res)]
               const rowClass = [rowTone, selectedRow ? styles.rowSel : ''].filter(Boolean).join(' ')
               return (
-                <tr key={it.id} className={rowClass || undefined} onClick={() => onSelectItem(it.id)}>
+                <tr
+                  key={it.id}
+                  data-arrow-index={index}
+                  className={rowClass || undefined}
+                  onClick={(event) => {
+                    event.currentTarget.closest('table')?.focus()
+                    onSelectItem(it.id)
+                  }}
+                >
                   <td className={styles.itemName}>
                     {selectedRow ? (
                       <span className={styles.rowMark} aria-hidden="true">
@@ -424,6 +448,7 @@ export function ItemDetail({
                   </td>
                   <td>{res?.finishedAt ? formatRelativeTime(res.finishedAt) : '—'}</td>
                   <td className={styles.rowAction}>
+                    {/* 文案先按需求叫「检测」，行为仍是打开还原框；功能随后再换，文案键届时一起重命名。 */}
                     {restorableItems.some((r) => r.id === it.id) ? (
                       <button
                         type="button"
@@ -477,9 +502,9 @@ export function ItemDetail({
             </span>
           ) : null}
           <div className={detectStyles.candidateActions}>
-            {/* 只留两颗（拍板 2026-10-31）：「检测」检测当前菜单下全部能测的项目
-                （原「检测全部」，和单项检测重复所以合并），「应用到 Hosts」只管当前项目。
-                单项检测由上方方法下拉旁那颗「检测」负责（用下拉选中的方法测当前项目）。 */}
+            {/* 只留两颗（拍板 2026-10-31）：「检测本菜单」测当前菜单下全部能测的项目
+                （原「检测全部」，和单项检测重复所以合并），「写入本项目」只管当前项目。
+                方法下拉旁那颗「只测此方法」只用选中的方法测当前项目，两颗不再同名。 */}
             {detectReady && batch.length > 0 ? (
               <button
                 type="button"
@@ -496,6 +521,7 @@ export function ItemDetail({
                 type="button"
                 className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.primary}`}
                 disabled={detecting || !canApply}
+                title={t('hosts.applyTitle')}
                 onClick={() => onApply(item.id)}
               >
                 {t('hosts.apply')}
@@ -519,7 +545,7 @@ export function ItemDetail({
           </p>
         ) : null}
         {/* 表头常驻（拍板 2026-10-31）：还没检测时空一行占位，列的样子先立住。 */}
-        <table className={detectStyles.cands}>
+        <table className={detectStyles.cands} tabIndex={0} onKeyDown={onCandArrowKeys}>
           <thead>
             <tr>
               <th scope="col">{t('detect.col.index')}</th>
@@ -540,7 +566,12 @@ export function ItemDetail({
               listedCandidates.map(({ candidate, host }, index) => (
                 <tr
                   key={candidate.id}
-                  className={`${CANDIDATE_ROW_CLASS[toneForCandidate(candidate.status)]} ${candidate.applied ? detectStyles.currentRow : ''}`.trim() || undefined}
+                  data-arrow-index={index}
+                  className={`${CANDIDATE_ROW_CLASS[toneForCandidate(candidate.status)]} ${candidate.applied ? detectStyles.currentRow : ''} ${index === safeCandFocus ? detectStyles.candFocus : ''}`.trim() || undefined}
+                  onClick={(event) => {
+                    event.currentTarget.closest('table')?.focus()
+                    setCandFocus(index)
+                  }}
                 >
                   <td>{index + 1}</td>
                   <td className={detectStyles.ipCell}>

@@ -1,5 +1,6 @@
 import type { CatalogCategory, DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
+import { arrowKeys } from '../../hooks/arrowKeys'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ErrorMessage } from '../../components/ui/ErrorMessage'
 import { CategoryNode, type HostsLookup, type LiveLookup } from './CategoryNode'
@@ -43,31 +44,52 @@ export function CategoryTree({
   onManualBrowse?: () => void
   onRestoreItems: (itemIDs: string[]) => void
 }) {
+  // 方向键只在看得见的项目之间走：折叠的分类底下那些行不算，跨分类按树里的展示顺序连成一条。
+  const visible = categories.flatMap((category) =>
+    expanded.has(category.id) ? (category.items ?? []).map((item) => item.id) : [],
+  )
+  const currentIndex = visible.indexOf(selectedId)
+  const onArrowKeys = arrowKeys(visible.length, currentIndex, (next) => {
+    const itemID = visible[next]
+    if (!itemID) return
+    onManualBrowse?.()
+    onSelect(itemID)
+  })
+
   if (load === 'loading') return <EmptyState message={t('tree.loading')} />
   if (load === 'error') return <ErrorMessage reason={t('tree.error', { reason: error })} onRetry={onRetry} />
 
   if (categories.length === 0) return <EmptyState message={t('tree.empty')} />
 
+  // 每个分类拿到自己在平坦清单里的起点，行上才能标出全局索引，方向键才能跨分类走。
+  let offset = 0
+  const nodes = categories.map((category) => {
+    const startIndex = offset
+    if (expanded.has(category.id)) offset += (category.items ?? []).length
+    return (
+      <CategoryNode
+        key={category.id}
+        category={category}
+        items={category.items ?? []}
+        hostsOf={hostsOf}
+        liveOf={liveOf}
+        results={results}
+        expanded={expanded.has(category.id)}
+        selectedId={selectedId}
+        startIndex={startIndex}
+        onToggle={onToggle}
+        onSelect={onSelect}
+        checkedIds={checkedIds}
+        onToggleChecked={onToggleChecked}
+        onManualBrowse={onManualBrowse}
+        onRestoreItems={onRestoreItems}
+      />
+    )
+  })
+
   return (
-    <ul role="tree" aria-label={t('tree.ariaLabel')} className={styles.tree}>
-      {categories.map((category) => (
-        <CategoryNode
-          key={category.id}
-          category={category}
-          items={category.items ?? []}
-          hostsOf={hostsOf}
-          liveOf={liveOf}
-          results={results}
-          expanded={expanded.has(category.id)}
-          selectedId={selectedId}
-          onToggle={onToggle}
-          onSelect={onSelect}
-          checkedIds={checkedIds}
-          onToggleChecked={onToggleChecked}
-          onManualBrowse={onManualBrowse}
-          onRestoreItems={onRestoreItems}
-        />
-      ))}
+    <ul role="tree" aria-label={t('tree.ariaLabel')} className={styles.tree} onKeyDown={onArrowKeys}>
+      {nodes}
     </ul>
   )
 }

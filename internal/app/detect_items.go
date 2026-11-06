@@ -25,7 +25,9 @@ import (
 // DetectItems 排一批检测任务。strategyID 给空就按各项目范围的默认方法来
 // （配置里存的选择 → 出厂默认「全部公共源」，口径和执行器一致）；
 // 给了就整批用它——选择区那颗「检测」按钮只检测下拉选中的那一个方法。
-func (s *Service) DetectItems(itemIDs []string, strategyID string) ([]task.Task, error) {
+// profile 是这一次检测用的档位：空串沿用设置里的档位，指定值必须是三档之一。
+// 它只在这一轮生效，不写回配置——检测弹框里选的档和设置中心那档各管各的。
+func (s *Service) DetectItems(itemIDs []string, strategyID string, profile string) ([]task.Task, error) {
 	if s.productCatalogErr != nil {
 		return nil, ToPublicError(s.productCatalogErr)
 	}
@@ -54,6 +56,13 @@ func (s *Service) DetectItems(itemIDs []string, strategyID string) ([]task.Task,
 	if err != nil {
 		return nil, ToPublicError(err)
 	}
+	roundProfile, err := resolveDetectProfile(profile, cfg)
+	if err != nil {
+		return nil, err
+	}
+	// 本轮的预算按选中档位算；cfg 是快照副本，改它不会动用户持久设置。
+	roundCfg := cfg
+	roundCfg.Network.Profile = roundProfile
 	pinned := strings.TrimSpace(strategyID)
 	if pinned != "" {
 		if _, ok := s.strategyTable.lookup(pinned); !ok {
@@ -96,7 +105,8 @@ func (s *Service) DetectItems(itemIDs []string, strategyID string) ([]task.Task,
 	roundName, roundScope := detectRoundLabel(batch, s.scopeName)
 	roundID := s.tasks.BeginRound(task.KindDetect, roundScope, roundName)
 	if s.rounds != nil {
-		s.rounds.put(roundID, s.detectRoundBudget(cfg, batch))
+		s.rounds.put(roundID, s.detectRoundBudget(roundCfg, batch))
+		s.rounds.setProfile(roundID, roundProfile)
 	}
 	tasks := make([]task.Task, 0, len(batch))
 	for _, p := range batch {
@@ -229,7 +239,9 @@ type DetectBudgetPreview struct {
 
 // DetectBudget 预估一批项目的共享预算，不排队、不发起检测。
 // 界面在 Shortfall > 0 时先请用户确认，再调 DetectItems。
-func (s *Service) DetectBudget(itemIDs []string) (DetectBudgetPreview, error) {
+// profile 与 DetectItems 同义：弹框里选的档位也要算进这一轮的预算预估，
+// 否则「还差多少次」那句会按设置里的旧档位算，和真正开跑的那轮对不上。
+func (s *Service) DetectBudget(itemIDs []string, profile string) (DetectBudgetPreview, error) {
 	if s.productCatalogErr != nil {
 		return DetectBudgetPreview{}, ToPublicError(s.productCatalogErr)
 	}
@@ -240,6 +252,11 @@ func (s *Service) DetectBudget(itemIDs []string) (DetectBudgetPreview, error) {
 	if err != nil {
 		return DetectBudgetPreview{}, ToPublicError(err)
 	}
+	roundProfile, err := resolveDetectProfile(profile, cfg)
+	if err != nil {
+		return DetectBudgetPreview{}, err
+	}
+	cfg.Network.Profile = roundProfile
 	seen := make(map[string]bool)
 	hostnames := make(map[string]bool)
 	for _, raw := range itemIDs {
@@ -265,4 +282,18 @@ func (s *Service) DetectBudget(itemIDs []string) (DetectBudgetPreview, error) {
 		return DetectBudgetPreview{}, ToPublicError(err)
 	}
 	return DetectBudgetPreview{Needed: b.Needed, Budget: b.MaxProbes, Shortfall: b.Needed - b.MaxProbes}, nil
+}
+
+// resolveDetectProfile 把「本次档位」收敛成一个后端认得的档位。
+// 空串＝界面没指定（单项检测、开机自动检测），照旧用设置里那一档；
+// 指定值必须落在三档里，认不出来就整批拒绝，不让它悄悄退化成默认档。
+func resolveDetectProfile(profile string, cfg config.Config) (string, error) {
+	p := strings.TrimSpace(profile)
+	if p == "" {
+		return cfg.Network.Profile, nil
+	}
+	if _, ok := config.ProfileCandidateLimit(p); !ok {
+		return "", NewError(CodeInvalidSettings, "这个检测档位不认识，只能选省流、标准或完整检测", nil)
+	}
+	return p, nil
 }

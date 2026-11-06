@@ -35,6 +35,87 @@ func TestDefaultIsValidAndUnsaved(t *testing.T) {
 	if c.Layout.SidebarWidth != 240 || c.Layout.QueueHeight != QueueHeightSmall || c.Layout.QueueListWidth != 220 {
 		t.Errorf("布局默认值不对: %+v", c.Layout)
 	}
+	if !c.Layout.ToastDisabled {
+		t.Error("提示面板出厂默认应关闭（设置里那颗开关默认不勾选）")
+	}
+}
+
+// 提示面板出厂默认关掉；老配置里没写过这个字段时也要按默认走，
+// 显式写过 true/false 的则尊重用户自己选的。
+func TestToastDisabledDefaultAndMissingField(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		explicit *bool
+		want     bool
+	}{
+		{"缺字段按出厂默认关闭", nil, true},
+		{"显式 false 尊重用户选择", flag(false), false},
+		{"显式 true 尊重用户选择", flag(true), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := newPath(t)
+			// 以能通过校验的默认配置为底，只抹掉／改写 layout.toastDisabled。
+			raw, err := json.Marshal(Default())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var doc map[string]any
+			if err := json.Unmarshal(raw, &doc); err != nil {
+				t.Fatal(err)
+			}
+			layout := doc["layout"].(map[string]any)
+			delete(layout, "toastDisabled")
+			if tc.explicit != nil {
+				layout["toastDisabled"] = *tc.explicit
+			}
+			raw, err = json.Marshal(doc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := NewStore(path, map[string]bool{"github": true}, nil, nil).Snapshot()
+			if err != nil {
+				t.Fatalf("读取配置失败: %v", err)
+			}
+			if got.Layout.ToastDisabled != tc.want {
+				t.Errorf("ToastDisabled = %v，期望 %v", got.Layout.ToastDisabled, tc.want)
+			}
+		})
+	}
+}
+
+// 队列高度锁：锁定那一刻的高度和锁定状态都要落盘，重开后原样回来。
+func TestQueueHeightLockSurvivesReopen(t *testing.T) {
+	if Default().Layout.QueueHeightLocked {
+		t.Fatal("出厂默认不该锁住队列高度")
+	}
+	path := newPath(t)
+	s := NewStore(path, map[string]bool{"github": true}, nil, nil)
+	first, err := s.Save(Patch{QueueHeight: num(300)}, 0, "m1")
+	if err != nil {
+		t.Fatalf("调高度失败: %v", err)
+	}
+	if _, err := s.Save(Patch{QueueHeightLocked: flag(true)}, first.Revision, "m2"); err != nil {
+		t.Fatalf("锁定失败: %v", err)
+	}
+
+	// 换一个 Store 读同一份文件，等价于重启应用。
+	reopened := NewStore(path, map[string]bool{"github": true}, nil, nil)
+	got, err := reopened.Snapshot()
+	if err != nil {
+		t.Fatalf("重开后读配置失败: %v", err)
+	}
+	if !got.Layout.QueueHeightLocked {
+		t.Error("重开后高度锁没保住")
+	}
+	if got.Layout.QueueHeight != 300 {
+		t.Errorf("重开后队列高度 = %d，期望锁定时的 300", got.Layout.QueueHeight)
+	}
 }
 
 func TestSnapshotWritesNothingWhenFileMissing(t *testing.T) {

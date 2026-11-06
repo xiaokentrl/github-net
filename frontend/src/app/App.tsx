@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot, SourcesCacheResult } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
-import { applyItems, clearSourcesCache, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, getTasks, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
+import { applyItems, clearAllIPCache, clearSourcesCache, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, getTasks, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
 import { subscribeAutomationStatus, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
 import { automationText } from '../components/layout/StatusBar'
 import { getErrorMessage } from '../api/errors'
@@ -16,14 +16,16 @@ import { CategoryTree } from '../components/navigation/CategoryTree'
 import type { HostsLookup } from '../components/navigation/CategoryNode'
 import { liveByItem } from '../components/navigation/treeStatus'
 import { Dialog } from '../components/ui/Dialog'
+import { ClearCacheDialog, type ClearCacheChoice } from '../components/ui/ClearCacheDialog'
 import { Toast } from '../components/ui/Toast'
 import { pushNotice } from '../components/ui/toastStore'
 import uiStyles from '../components/ui/ui.module.css'
 import { SettingsDialog, type SettingsPaneID } from '../features/settings/SettingsDialog'
 import { ItemDetail } from '../features/items/ItemDetail'
+import { DetectProfileDialog } from '../features/detect/DetectProfileDialog'
 import { TaskPanel } from '../features/tasks/TaskPanel'
 import { subscribeTaskEvents } from '../features/tasks/taskEvents'
-import { isTerminalTask, refreshResult, taskStateSnapshot, useTaskQueue } from '../features/tasks/taskStore'
+import { clearResults, isTerminalTask, refreshResult, taskStateSnapshot, useTaskQueue } from '../features/tasks/taskStore'
 import { useRestoreAllTasks } from '../features/tasks/useRestoreAll'
 import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
@@ -31,7 +33,7 @@ import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/int
 
 type Load = 'loading' | 'ready' | 'error'
 
-// 六套配色的令牌都在 styles/themes.css 里，所以后端给哪个主题就挂哪个：
+// 七套配色的令牌都在 styles/themes.css 里，所以后端给哪个主题就挂哪个：
 // 挂的是 html 的 data-theme，页面组件不写自己的主题色（原型第 2 行与 531–585 行同一机制）。
 function applyTheme(theme: string) {
   document.documentElement.dataset.theme = theme
@@ -314,7 +316,10 @@ export function App() {
   // 树上那一行的状态字和色点要跟着队列走：正在检测、正在写 Hosts、正在还原的项目，原型是整行变色。
   // 队列只有 taskStore 这一份，TaskPanel 和树读的是同一个快照，不存在两份真相。
   const queue = useTaskQueue()
-  // 让队列面板展开的把手：点「检测全部/应用队列/恢复/清理缓存」这类要动队列的按钮时拉一下，
+  // 工具栏四颗动作按钮共用的「队列里还有没落定的任务」：检测/应用/还原排队中也算，
+  // 不只看正在跑的那一条。有任务在途时四颗一起关上，避免重复发起或一边排队一边清缓存。
+  const queueBusy = queue.tasks.some((task) => !isTerminalTask(task.status))
+  // 让队列面板展开的把手：点「检测选中项/写入 Hosts/还原 Hosts/选择清理项」这类要动队列的按钮时拉一下，
   // 队列面板在收起态就自动回到展开高度。把手由 TaskPanel 塞进来。
   const queueExpandRef = useRef<(() => void) | null>(null)
   const liveOf = useMemo(() => liveByItem(queue.tasks), [queue.tasks])
@@ -490,10 +495,25 @@ export function App() {
   )
 
   // 队列面板的高度：上方那条横向手柄和布局屏三档预设都走这一条，和后端一致时不写盘。
+  // 锁上之后这里一律不写：磁盘上的 queueHeight 就停在锁定那一刻，重启自然还是那个高度。
   const changeQueueHeight = useCallback(
     (height: number) => {
-      if (!settings || settings.layout.queueHeight === height) return
+      if (!settings || settings.layout.queueHeightLocked || settings.layout.queueHeight === height) return
       submit({ queueHeight: height }, t('settings.subject.queueHeight'), 'queueHeight')
+    },
+    [settings, submit],
+  )
+
+  // 队列高度锁：状态本身也进配置，重启后仍是锁定态；解锁后才能再拖动或点预设。
+  // 锁上的那一次把当前面板高度一起提交：这就是「锁定时的高度」，不依赖之前拖动保存有没有落定。
+  const changeQueueHeightLock = useCallback(
+    (locked: boolean, height: number) => {
+      if (!settings || settings.layout.queueHeightLocked === locked) return
+      submit(
+        { queueHeightLocked: locked, queueHeight: locked ? height : undefined },
+        t('settings.subject.queueHeightLock'),
+        'queueHeightLocked',
+      )
     },
     [settings, submit],
   )
@@ -609,6 +629,16 @@ export function App() {
     [settings, submit],
   )
 
+  // 右下角提示面板（收起后是那颗「提示」胶囊）的启用/禁用。
+  // 界面开关说「显示」，配置里存的是「禁用」，这里翻一次，其余走同一条保存链路。
+  const changeToastVisible = useCallback(
+    (visible: boolean) => {
+      if (!settings || settings.layout.toastDisabled === !visible) return
+      submit({ toastDisabled: !visible }, t('settings.subject.toastDisabled'), 'toastDisabled')
+    },
+    [settings, submit],
+  )
+
   const openSettings = useCallback((pane: SettingsPaneID) => {
     setDialogPane(pane)
     setDialogOpen(true)
@@ -638,14 +668,12 @@ export function App() {
         }
       }
       setDetectError('')
-      queueExpandRef.current?.()
       if (groups.size === 0) {
         setDetectError(t('toolbar.detectChecked.none'))
         return
       }
-      for (const ids of groups.values()) {
-        detectItems(ids).catch((err: unknown) => reportRejection(setDetectError, err))
-      }
+      // 先选本次档位，选完再由 runDetectWithProfile 按分组发起。
+      setProfileAsk({ groups: [...groups.values()], budgetCheck: false })
     },
     [snapshot],
   )
@@ -682,60 +710,95 @@ export function App() {
     [reportSkippedApply],
   )
 
-  // 清理已选缓存：勾了哪个菜单就清那个菜单的源（拍板 2026-11-02，源一天只下一份）。
-  // 结果只走右下角提示面板——这条命令不进队列、不写 Hosts，没有别的界面能显示它。
-  // 数字全部来自后端回执：清掉几份、今天到底下载过没有，只有那份落盘记录知道。
+  // 清理弹框：点工具栏那颗只开框，框里勾了哪几件就只做哪几件，三项可任意组合。
+  // 前两条清缓存（公共源落盘缓存、SQLite 底账与内存结论），第三条把已写入的 Hosts 全部还原，
+  // 和缓存清理互不依赖；各给一条右下角回执，全部落定后统一重读一次目录让列表跟着变。
+  // 还原函数与忙碌标记由渲染处传入：那个 hook 在本函数之后才声明，直接引用会踩到暂时性死区。
   const [clearBusy, setClearBusy] = useState(false)
-  // 点工具栏那颗只开确认框，不碰任何数据：原生 window.confirm 的标题和两颗按钮归 WebKit，
-  // 语言包改不了，写不出「先不清理／清掉这 N 项缓存」这种带结果的文案，所以换成公共 Dialog。
   const [clearAsk, setClearAsk] = useState<string[] | null>(null)
   const clearCheckedCache = useCallback((checked: ReadonlySet<string>) => {
-    if (checked.size === 0) return
     queueExpandRef.current?.()
     setClearAsk([...checked])
   }, [])
-  const runClearCheckedCache = useCallback((ids: string[]) => {
+  const runClearSelected = useCallback((choice: ClearCacheChoice, restoreAllNow: () => Promise<void>, restoreBusy: boolean) => {
+    const ids = clearAsk ?? []
+    const doSources = choice.sources && ids.length > 0
+    const doAllIP = choice.allIP
+    const doHosts = choice.hosts && !restoreBusy
+    if (!doSources && !doAllIP && !doHosts) return
     setClearAsk(null)
     setClearBusy(true)
-    clearSourcesCache(ids)
-      .then((res) => {
-        const notice = cacheNoticeOf(res)
-        pushNotice(notice.kind, notice.text)
-      })
-      .catch((err: unknown) => pushNotice('error', getErrorMessage(err)))
+    const jobs: Promise<void>[] = []
+    if (doSources) {
+      jobs.push(clearSourcesCache(ids)
+        .then((res) => {
+          const notice = cacheNoticeOf(res)
+          pushNotice(notice.kind, notice.text)
+        })
+        .catch((err: unknown) => { pushNotice('error', getErrorMessage(err)) }))
+    }
+    if (doAllIP) {
+      jobs.push(clearAllIPCache()
+        .then((res) => {
+          clearResults()
+          pushNotice('success', t('toolbar.clearCache.allIP.done', { rounds: res.rounds, addresses: res.addresses }))
+        })
+        .catch((err: unknown) => { pushNotice('error', getErrorMessage(err)) }))
+    }
+    if (doHosts) {
+      // 复用工具栏「还原 Hosts」那一份实现：回执、任务快照、结果重拉、目录重读都在里面。
+      jobs.push(restoreAllNow())
+    }
+    Promise.all(jobs)
+      .then(() => loadCatalog())
       .finally(() => setClearBusy(false))
-  }, [])
+  }, [clearAsk, loadCatalog])
 
-  // strategyId 给空走范围默认；选择区那颗「检测」按钮会带上下拉选中的方法。
+  // 单项检测（方法下拉旁那颗、还原框的「重新检测」）不弹档位框，沿用设置里的档位。
   const startDetect = useCallback((itemId: string, strategyId?: string) => {
     setDetectError('')
-    detectItems([itemId], strategyId ?? '').catch((err: unknown) => reportRejection(setDetectError, err))
+    detectItems([itemId], strategyId ?? '', '').catch((err: unknown) => reportRejection(setDetectError, err))
   }, [])
 
-  // 批量检测：项目清单已由详情页按 detectableItems 过滤，这里不再重算第二遍口径。
-  // 先问后端要预算预估；预算盖不全时开确认框请用户拍板，取消就不发（同上一条：不用原生 confirm，文案要写结果）。
-  const [budgetAsk, setBudgetAsk] = useState<{ ids: string[]; needed: number; budget: number; shortfall: number } | null>(null)
-  const startDetectAll = useCallback(
-    (items: CatalogItem[]) => {
-      const ids = items.map((it) => it.id)
-      setDetectError('')
-      detectBudget(ids)
-        .then((budget) => {
-          if (budget.shortfall > 0) {
-            setBudgetAsk({ ids, needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall })
-            return
-          }
-          queueExpandRef.current?.()
-          return detectItems(ids).catch((err: unknown) => reportRejection(setDetectError, err))
-        })
-        .catch((err: unknown) => reportRejection(setDetectError, err))
-    },
-    [],
-  )
-  const runDetectAll = useCallback((ids: string[]) => {
+  // 批量检测前先选本次档位：groups 是已分好组的待检项目，budgetCheck 表示这一路
+  // 还要按选中档位问一次预算预估（详情页那颗批量检测按钮原来就有这道确认）。
+  const [profileAsk, setProfileAsk] = useState<{ groups: string[][]; budgetCheck: boolean } | null>(null)
+  const [budgetAsk, setBudgetAsk] = useState<{ ids: string[]; needed: number; budget: number; shortfall: number; profile: NetworkProfile } | null>(null)
+
+  const startDetectAll = useCallback((items: CatalogItem[]) => {
+    setDetectError('')
+    setProfileAsk({ groups: [items.map((it) => it.id)], budgetCheck: true })
+  }, [])
+
+  // 档位框点「检测」：这一批的所有分组都按选中的档位发，档位只走命令参数、不写回设置。
+  const runDetectWithProfile = useCallback((profile: NetworkProfile) => {
+    if (!profileAsk) return
+    const { groups, budgetCheck } = profileAsk
+    setProfileAsk(null)
+    setDetectError('')
+    queueExpandRef.current?.()
+    if (!budgetCheck) {
+      for (const ids of groups) {
+        detectItems(ids, '', profile).catch((err: unknown) => reportRejection(setDetectError, err))
+      }
+      return
+    }
+    const ids = groups[0] ?? []
+    detectBudget(ids, profile)
+      .then((budget) => {
+        if (budget.shortfall > 0) {
+          setBudgetAsk({ ids, needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall, profile })
+          return
+        }
+        return detectItems(ids, '', profile).catch((err: unknown) => reportRejection(setDetectError, err))
+      })
+      .catch((err: unknown) => reportRejection(setDetectError, err))
+  }, [profileAsk])
+
+  const runDetectAll = useCallback((ids: string[], profile: NetworkProfile) => {
     setBudgetAsk(null)
     queueExpandRef.current?.()
-    detectItems(ids).catch((err: unknown) => reportRejection(setDetectError, err))
+    detectItems(ids, '', profile).catch((err: unknown) => reportRejection(setDetectError, err))
   }, [])
 
   const startApply = useCallback((itemId: string) => {
@@ -846,7 +909,7 @@ export function App() {
   // 工具栏「恢复」和队列面板那颗共用同一条实现（useRestoreAll）；失败按同一条规矩：原位一句 + 右下角一条。
   // 还原不进队列、没有任务落定事件，所以成功后在这里重读目录，树上的状态才跟着回到「未替换」。
   const handleRestoreError = useCallback((err: unknown) => reportRejection(setHostsError, err), [])
-  const { busy: restoreBusy, restoreAll, confirmDialog: restoreAllConfirm } = useRestoreAllTasks(handleRestoreError, loadCatalog)
+  const { busy: restoreBusy, restoreAll, restoreAllNow, confirmDialog: restoreAllConfirm } = useRestoreAllTasks(handleRestoreError, loadCatalog)
 
   const sidebar = (
     <CategoryTree
@@ -891,8 +954,8 @@ export function App() {
             saveText={save.text}
             busy={save.kind === 'pending'}
             clearBusy={clearBusy}
+            queueBusy={queueBusy}
             clearEnabled={checkedIds.size > 0}
-            onOpenNetwork={() => openSettings('network')}
             onClearCheckedCache={() => clearCheckedCache(checkedIds)}
             onDetectChecked={() => startDetectChecked(checkedIds)}
             onApplyChecked={() => startApplyChecked(checkedIds)}
@@ -944,6 +1007,9 @@ export function App() {
         queue={
           <TaskPanel
             height={settings?.layout.queueHeight ?? null}
+            heightLocked={settings?.layout.queueHeightLocked ?? false}
+            lockSaveError={save.kind === 'failed' && save.subject === 'queueHeightLocked' ? save.text : ''}
+            onToggleHeightLock={changeQueueHeightLock}
             onHeightChange={changeQueueHeight}
             expandRef={queueExpandRef}
             listWidth={settings?.layout.queueListWidth ?? null}
@@ -1001,32 +1067,22 @@ export function App() {
           onAutoClose={changeAutoClose}
           onDetectFocusFollow={changeDetectFocusFollow}
           onApplyFocusFollow={changeApplyFocusFollow}
+          onToastVisible={changeToastVisible}
         />
       )}
-      {/* 三处确认框（拍板 2026-11-05）：全部还原／清理已选缓存／预算不够还开不开。
+      {/* 三处确认框（拍板 2026-11-05）：全部还原／清理缓存／预算不够还开不开。
           原来都用系统原生 window.confirm，标题和按钮归 WebKit、语言包改不了，按「按钮写结果」必然不合格。 */}
       {restoreAllConfirm}
       {clearAsk ? (
-        <Dialog
-          title={t('toolbar.clearCache.ask.title', { count: clearAsk.length })}
-          onClose={() => setClearAsk(null)}
-          footer={
-            <>
-              <button type="button" className={uiStyles.btn} onClick={() => setClearAsk(null)}>
-                {t('toolbar.clearCache.ask.cancel')}
-              </button>
-              <button
-                type="button"
-                className={`${uiStyles.btn} ${uiStyles.primary}`}
-                onClick={() => runClearCheckedCache(clearAsk)}
-              >
-                {t('toolbar.clearCache.ask.action', { count: clearAsk.length })}
-              </button>
-            </>
-          }
-        >
-          <p>{t('toolbar.clearCache.confirm', { count: clearAsk.length })}</p>
-        </Dialog>
+        <ClearCacheDialog
+          sourceCount={clearAsk.length}
+          hostsDisabled={restoreBusy}
+          onCancel={() => setClearAsk(null)}
+          onConfirm={(choice) => runClearSelected(choice, restoreAllNow, restoreBusy)}
+        />
+      ) : null}
+      {profileAsk ? (
+        <DetectProfileDialog onCancel={() => setProfileAsk(null)} onConfirm={runDetectWithProfile} />
       ) : null}
       {budgetAsk ? (
         <Dialog
@@ -1040,7 +1096,7 @@ export function App() {
               <button
                 type="button"
                 className={`${uiStyles.btn} ${uiStyles.primary}`}
-                onClick={() => runDetectAll(budgetAsk.ids)}
+                onClick={() => runDetectAll(budgetAsk.ids, budgetAsk.profile)}
               >
                 {t('detect.budget.ask.action')}
               </button>
@@ -1056,8 +1112,9 @@ export function App() {
           </p>
         </Dialog>
       ) : null}
-      {/* 右下角提示面板：挂在应用根上、整应用只有一份，数据在 components/ui/toastStore 里。 */}
-      <Toast />
+      {/* 右下角提示面板：挂在应用根上、整应用只有一份，数据在 components/ui/toastStore 里。
+          出厂默认关掉，只有配置明确说「没被禁用」才渲染；配置还没读回来时不先闪一下面板或胶囊。 */}
+      {settings?.layout.toastDisabled === false ? <Toast /> : null}
     </>
   )
 }

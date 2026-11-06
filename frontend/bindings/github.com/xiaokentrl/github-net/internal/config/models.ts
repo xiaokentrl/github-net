@@ -42,6 +42,19 @@ export interface LayoutConfig {
      * QueueListWidth 是队列里左栏「任务列表」的宽度；右边任务明细占剩下的全部。
      */
     "queueListWidth": number;
+
+    /**
+     * ToastDisabled 关掉右下角提示面板和它收起后的那颗「提示」胶囊。
+     * 出厂默认关掉（设置里那颗开关默认不勾选）。字段仍叫「禁用」是为了不改磁盘格式：
+     * 老配置没写过这个字段时，read() 按出厂默认补成 true；显式写过 false 的按用户选择保留。
+     */
+    "toastDisabled": boolean;
+
+    /**
+     * QueueHeightLocked 锁住任务队列高度：锁上后拖动条、窗口自愈、布局预设都不再改 queueHeight，
+     * 磁盘上那份就停在锁定时的高度，重启自然恢复。零值＝不锁，老配置缺字段也按不锁走。
+     */
+    "queueHeightLocked": boolean;
 }
 
 /**
@@ -67,7 +80,9 @@ export interface Patch {
     "zoom": number | null;
     "sidebarWidth": number | null;
     "queueHeight": number | null;
+    "queueHeightLocked": boolean | null;
     "queueListWidth": number | null;
+    "toastDisabled": boolean | null;
     "detectFocusFollow": boolean | null;
     "applyFocusFollow": boolean | null;
     "checkedItemIds": string[] | null;

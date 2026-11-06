@@ -127,8 +127,8 @@ func brandGradient(t *testing.T, src, path string) string {
 }
 
 // 品牌标识「GH」出现在两个地方：顶栏的小块和关于屏的大块。
-// 原型第 25 行与第 471 行本来就是同一对色值，六套主题也都不覆盖它，所以这里不引令牌
-// （引进 tokens.css 的 :root 会逼着五套主题各写一份覆盖，反而把「品牌不跟主题走」做丢了）。
+// 原型第 25 行与第 471 行本来就是同一对色值，各套主题也都不覆盖它，所以这里不引令牌
+// （引进 tokens.css 的 :root 会逼着每套非浅色主题各写一份覆盖，反而把「品牌不跟主题走」做丢了）。
 // 两处必须逐字一致，谁改了忘另一处，这一条就红。
 func TestBrandGradientMatchesTopbarLogo(t *testing.T) {
 	root := repoRoot(t)

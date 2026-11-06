@@ -148,6 +148,9 @@ function entryLinesOf(
 // hostnamesOf：目录里每个项目的域名清单，只在整段判不出归属（后端逐条给空数组）时用来逐条列域名。
 export function TaskPanel({
   height,
+  heightLocked,
+  lockSaveError,
+  onToggleHeightLock,
   onHeightChange,
   expandRef,
   listWidth,
@@ -158,8 +161,13 @@ export function TaskPanel({
   hostnamesOf,
 }: {
   height: number | null
+  // 高度锁：锁住期间不写配置，磁盘上的高度就停在锁定那一刻，重开仍是它。
+  heightLocked: boolean
+  lockSaveError: string
+  // 切换锁定要顺手报当前面板高度：锁上那一刻的高度就是重启后要恢复的高度。
+  onToggleHeightLock: (locked: boolean, height: number) => void
   onHeightChange: (height: number) => void
-  // 外部（检测全部/应用队列/恢复/清理缓存这些按钮）要动队列时拉一下：收起态自动展开。
+  // 外部（检测选中项/写入 Hosts/还原 Hosts/选择清理项这些按钮）要动队列时拉一下：收起态自动展开。
   expandRef?: MutableRefObject<(() => void) | null>
   listWidth: number | null
   onListWidthChange: (width: number) => void
@@ -253,27 +261,42 @@ export function TaskPanel({
   // 详情与队列之间那条横向手柄：拖的是队列高度，时序和两条竖栏共用同一份实现。
   // 方向取反——手柄往上拖队列才变高；天花板按窗口高度现算（原型 calcQueueMaxH）。
   const clampHeight = useCallback((value: number) => clampQueueHeight(value, window.innerHeight), [])
-  const heightResize = useBarResize(height, onHeightChange, clampHeight, QUEUE_HEIGHT_DEFAULT, { axis: 'y', invert: true })
+  const heightResize = useBarResize(height, onHeightChange, clampHeight, QUEUE_HEIGHT_DEFAULT, { axis: 'y', invert: true, disabled: heightLocked })
   // 配置还没读回来那一下也用默认高度顶着，不留「按内容撑开」这一种第三态。
-  const shownHeight = heightResize.liveValue ?? height ?? QUEUE_HEIGHT_DEFAULT
+  // 锁上之后这一格永远取配置里那份高度：检测、应用、还原、清理触发的展开，以及收起/展开按钮，
+  // 都不再改它；只有解除锁定后才重新接受拖动、预设和折叠。
+  // 唯一例外是窗口自己缩到装不下时显示按窗口上限收敛一下，磁盘上的锁定值仍不动。
+  const baseHeight = heightLocked
+    ? (height ?? QUEUE_HEIGHT_DEFAULT)
+    : (heightResize.liveValue ?? height ?? QUEUE_HEIGHT_DEFAULT)
+  const shownHeight = clampQueueHeight(baseHeight, window.innerHeight)
 
   // 收起不再是独立的开关布尔（拍板 2026-11-03 重写）：高度压到 45——正好一行工具条——就是收起。
   // 拖动条、小箭头、配置值改的是同一个数，三条路永远一致；旧实现两边各说各话，箭头和拖动会互相打架。
   const queueCollapsed = shownHeight <= QUEUE_HEIGHT_MIN
   // 展开时记住当时多高，箭头展开回这份高度；重开窗口从默认来。
   const expandedHeightRef = useRef(QUEUE_HEIGHT_DEFAULT)
+  // 锁住时任何改高度的请求都在这里止步：既不写配置，也不改本地显示。
+  const applyHeight = useCallback(
+    (next: number) => {
+      if (heightLocked) return
+      onHeightChange(next)
+    },
+    [heightLocked, onHeightChange],
+  )
   const toggleQueue = useCallback(() => {
-    if (queueCollapsed) onHeightChange(expandedHeightRef.current)
+    if (heightLocked) return
+    if (queueCollapsed) applyHeight(expandedHeightRef.current)
     else {
       expandedHeightRef.current = shownHeight
-      onHeightChange(QUEUE_HEIGHT_MIN)
+      applyHeight(QUEUE_HEIGHT_MIN)
     }
-  }, [queueCollapsed, shownHeight, onHeightChange])
-  // 收起态下的展开动作交给外部按钮拉一把：展开到记住的那份高度。
+  }, [heightLocked, queueCollapsed, shownHeight, applyHeight])
+  // 收起态下的展开动作交给外部按钮拉一把：展开到记住的那份高度。锁定时一律不展开。
   const expandQueue = useCallback(() => {
-    if (!queueCollapsed) return
-    onHeightChange(expandedHeightRef.current)
-  }, [queueCollapsed, onHeightChange])
+    if (heightLocked || !queueCollapsed) return
+    applyHeight(expandedHeightRef.current)
+  }, [heightLocked, queueCollapsed, applyHeight])
   if (expandRef) expandRef.current = expandQueue
 
   // 窗口变窄或变矮后，配置里的宽度、高度可能已经超过当前天花板：
@@ -293,7 +316,8 @@ export function TaskPanel({
           const healed = clampQueueListWidth(listWidth, bodyWidth)
           if (healed !== listWidth) onListWidthChange(healed)
         }
-        if (height !== null) {
+        // 锁住时跳过这一步：显示已经夹过，磁盘上的高度要一直停在锁定那一刻。
+        if (height !== null && !heightLocked) {
           const healedHeight = clampQueueHeight(height, window.innerHeight)
           if (healedHeight !== height) onHeightChange(healedHeight)
         }
@@ -305,7 +329,7 @@ export function TaskPanel({
       window.clearTimeout(timer)
       window.removeEventListener('resize', heal)
     }
-  }, [queueCollapsed, draggingList, draggingHeight, listWidth, height, onListWidthChange, onHeightChange])
+  }, [queueCollapsed, draggingList, draggingHeight, listWidth, height, heightLocked, onListWidthChange, onHeightChange])
 
   const pickItem = useCallback(
     (itemId: string) => {
@@ -315,6 +339,10 @@ export function TaskPanel({
   )
 
   const activeCount = state.tasks.filter((task) => task.status === 'running' || task.status === 'waiting').length
+  // 锁上时收起/展开按钮整颗禁用，悬停改说原因；没锁时按当前是不是收起态给原来的文案。
+  const collapseLabel = heightLocked
+    ? t('queue.heightLock.collapseDisabled')
+    : queueCollapsed ? t('queue.expand') : t('queue.collapse')
 
   return (
     <>
@@ -322,10 +350,11 @@ export function TaskPanel({
           收起时也在（拍板 2026-11-02）：收起那条跟着拖出的高度变厚，所以不能再把它藏掉。 */}
       {height !== null && (
         <div
-          className={`${styles.rowResizer} ${heightResize.dragging ? styles.rowResizerDragging : ''}`}
+          className={`${styles.rowResizer} ${heightResize.dragging ? styles.rowResizerDragging : ''} ${heightLocked ? styles.rowResizerLocked : ''}`.trim()}
           role="separator"
           aria-orientation="horizontal"
-          title={t('queue.heightResizer.title')}
+          aria-disabled={heightLocked}
+          title={heightLocked ? t('queue.heightResizer.lockedTitle') : t('queue.heightResizer.title')}
           onPointerDown={heightResize.onPointerDown}
           onPointerMove={heightResize.onPointerMove}
           onPointerUp={heightResize.onPointerUp}
@@ -342,16 +371,29 @@ export function TaskPanel({
           <h2 className={styles.title}>{t('queue.title')}</h2>
           <span className={styles.summary}>{t('queue.summary', { active: activeCount, total: state.tasks.length })}</span>
           <span className={styles.spacer} />
+          {/* 队列高度锁：名字把「锁什么」写全，锁上后主色底；鼠标停上去说清锁定期间和重启后的行为。 */}
+          <button
+            type="button"
+            className={`${styles.heightLockBtn} ${heightLocked ? styles.heightLockBtnLocked : ''}`.trim()}
+            aria-pressed={heightLocked}
+            title={heightLocked ? t('queue.heightLock.lockedTip', { height: Math.round(shownHeight) }) : t('queue.heightLock.unlockedTip')}
+            aria-label={heightLocked ? t('queue.heightLock.unlock') : t('queue.heightLock.lock')}
+            onClick={() => onToggleHeightLock(!heightLocked, Math.round(shownHeight))}
+          >
+            {heightLocked ? t('queue.heightLock.unlock') : t('queue.heightLock.lock')}
+          </button>
+          {lockSaveError ? <span className={styles.lockError} title={lockSaveError}>{lockSaveError}</span> : null}
           <button type="button" onClick={onClearFinished} disabled={!state.loaded || state.loadError}>
             {t('queue.clearFinished')}
           </button>
-          {/* 收起/展开：原型队列头最后那颗 toggle-btn。只改界面，不写配置。 */}
+          {/* 收起/展开：原型队列头最后那颗 toggle-btn。它会改高度，锁定时整颗禁用，避免点了没反应。 */}
           <button
             type="button"
             className={styles.toggleBtn}
             aria-expanded={!queueCollapsed}
-            title={queueCollapsed ? t('queue.expand') : t('queue.collapse')}
-            aria-label={queueCollapsed ? t('queue.expand') : t('queue.collapse')}
+            disabled={heightLocked}
+            title={collapseLabel}
+            aria-label={collapseLabel}
             onClick={toggleQueue}
           >
             {queueCollapsed ? '▴' : '▾'}

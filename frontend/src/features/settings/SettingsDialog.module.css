@@ -323,7 +323,7 @@
 /* 关于屏逐条抄唯一原型：.about-hero(470) .about-logo-lg(471) .about-hero-info(472–474)
    .about-links(475) .btn.ghost(57–58)；版本行抄原型 1105–1110 的内联样式（行内边距 4px 0、值用等宽字体）。
    .aboutMark 的渐变和顶栏 .logo 是同一对色值（原型 25 与 471 行），品牌标识不跟主题走：
-   六套主题都没覆盖它，所以这里继续写死，两边由 internal/app/about_parity_test.go 盯着必须一模一样。 */
+   各套主题都没覆盖它，所以这里继续写死，两边由 internal/app/about_parity_test.go 盯着必须一模一样。 */
 .aboutHero {
   display: flex;
   align-items: center;

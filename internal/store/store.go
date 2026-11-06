@@ -252,6 +252,34 @@ func (s *Store) Prune() error {
 	return nil
 }
 
+// ClearAll 把候选底账整份清空：逐轮候选、轮底账、按 IP 去重的地址池一起删。
+// 一次事务走完，任何一步失败都整体回滚，不留「轮没了、地址池还在」的半截状态。
+// 返回真删掉的轮数与地址行数，界面按这两个数字报回执，不自己猜清了多少。
+func (s *Store) ClearAll() (int64, int64, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, fmt.Errorf("store: 开始清空底账失败: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`DELETE FROM detect_candidates`); err != nil {
+		return 0, 0, fmt.Errorf("store: 清空逐轮候选失败: %w", err)
+	}
+	roundRes, err := tx.Exec(`DELETE FROM detect_rounds`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("store: 清空轮底账失败: %w", err)
+	}
+	ipRes, err := tx.Exec(`DELETE FROM candidate_ips`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("store: 清空地址池失败: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, fmt.Errorf("store: 提交清空底账失败: %w", err)
+	}
+	rounds, _ := roundRes.RowsAffected()
+	addresses, _ := ipRes.RowsAffected()
+	return rounds, addresses, nil
+}
+
 // Rounds 按时间倒序取最近 limit 轮。limit 不大于 0 就取上限以内全部。
 func (s *Store) Rounds(limit int) ([]RoundRow, error) {
 	q := `SELECT id, task_round, item_id, scope_id, strategy_id, started_at, finished_at,

@@ -18,10 +18,27 @@ import (
 type roundBudgets struct {
 	mu   sync.Mutex
 	byID map[string]*int64
+	// profileByID 记这一轮用户选定的检测档位。只影响本轮：不写回配置，也不改下一轮。
+	// 任务真正开跑时执行器按 RoundID 取它，中途改设置也不会串档。
+	profileByID map[string]string
 }
 
 func newRoundBudgets() *roundBudgets {
-	return &roundBudgets{byID: make(map[string]*int64)}
+	return &roundBudgets{byID: make(map[string]*int64), profileByID: make(map[string]string)}
+}
+
+// setProfile 给这一轮记下本次检测用的档位；空串表示按设置里的档位走。
+func (r *roundBudgets) setProfile(roundID, profile string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.profileByID[roundID] = profile
+}
+
+// profileOf 取这一轮选定的档位；没记过给空串，调用方照旧读配置。
+func (r *roundBudgets) profileOf(roundID string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.profileByID[roundID]
 }
 
 // put 给已经开好的轮登记预算。budget 就是这一轮允许启动的候选探测总数。

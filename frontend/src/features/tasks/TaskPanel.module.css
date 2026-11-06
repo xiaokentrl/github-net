@@ -61,6 +61,50 @@
   background: var(--on-primary);
 }
 
+/* 锁上之后这条分隔条只是不可拖：不再给主色 hover，鼠标也明确显示禁用。 */
+.rowResizerLocked,
+.rowResizerLocked:hover {
+  background: var(--border);
+  cursor: not-allowed;
+}
+
+.rowResizerLocked::before,
+.rowResizerLocked:hover::before {
+  background: var(--border-strong);
+}
+
+/* 队列标题栏那颗高度锁：名字写全，锁上后主色底，一眼看出当前锁没锁。
+   选择器带 .head button，压过上面那条通用的 .head button 配色。 */
+.head button.heightLockBtn {
+  border-color: var(--border-strong);
+  background: var(--ctl);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.head button.heightLockBtn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.head button.heightLockBtnLocked,
+.head button.heightLockBtnLocked:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* 锁定没存进去时不能只是按钮不变：原因就摆在按钮旁边。 */
+.lockError {
+  max-width: 190px;
+  overflow: hidden;
+  color: var(--red);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .head {
   display: flex;
   align-items: center;

@@ -76,6 +76,15 @@ func (s *detectResultStore) clearApplied() {
 	}
 }
 
+// clear 把全部项目最近一轮的结论整份丢掉。
+// 「清理全部 IP 缓存」用：底账、地址池和内存这一份都是同一批检测产出，
+// 只清前两处、界面还摆着旧候选，列表看起来就像没跟着变。
+func (s *detectResultStore) clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.byItem = make(map[string]detectResultRecord)
+}
+
 // roundFinishedAt 给一个项目最近一轮的探测定格时间；没有记录给零值。
 // 调用方（应用前的时效判定）把零值按「不新鲜」处理：说不清什么时候测出来的结论，
 // 一律要现场复验一遍才准写进系统 Hosts。
