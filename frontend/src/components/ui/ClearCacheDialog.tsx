@@ -27,6 +27,55 @@ function statusLabel(status: string): string {
   return t(STATUS_KEY[status] ?? 'detect.candidate.unknown')
 }
 
+// 还原预览按「点下去会变成什么」分成三种具体结果，不让新用户自己对着两列猜。
+// after 为空＝应用前本来没有这条，整条删掉；after 和 before 相同＝还被别的项目用着，不变；
+// 其余＝现在指向的 IP 会被换回应用前那个。
+type HostsRow = NonNullable<HostsRestorePreview['rows']>[number]
+type HostsGroupKind = 'restore' | 'remove' | 'keep'
+type HostsGroup = { kind: HostsGroupKind; rows: HostsRow[] }
+
+const HOSTS_GROUP_KEY: Record<HostsGroupKind, { title: string; hint: string; sum: string }> = {
+  restore: {
+    title: 'toolbar.clearCache.hosts.groupRestore',
+    hint: 'toolbar.clearCache.hosts.groupRestoreHint',
+    sum: 'toolbar.clearCache.hosts.sumRestore',
+  },
+  remove: {
+    title: 'toolbar.clearCache.hosts.groupRemove',
+    hint: 'toolbar.clearCache.hosts.groupRemoveHint',
+    sum: 'toolbar.clearCache.hosts.sumRemove',
+  },
+  keep: {
+    title: 'toolbar.clearCache.hosts.groupKeep',
+    hint: 'toolbar.clearCache.hosts.groupKeepHint',
+    sum: 'toolbar.clearCache.hosts.sumKeep',
+  },
+}
+
+function hostsGroups(rows: HostsRow[]): HostsGroup[] {
+  const by: Record<HostsGroupKind, HostsRow[]> = { restore: [], remove: [], keep: [] }
+  for (const r of rows) {
+    if (!r.after) by.remove.push(r)
+    else if (r.after === r.before) by.keep.push(r)
+    else by.restore.push(r)
+  }
+  return (['restore', 'remove', 'keep'] as const)
+    .map((kind) => ({ kind, rows: by[kind] }))
+    .filter((g) => g.rows.length > 0)
+}
+
+// 三种结果各自的颜色类，写死映射而不是拼字符串，样式表改类名时类型检查能抓到。
+const HOSTS_SUM_CLASS: Record<HostsGroupKind, string> = {
+  restore: styles.restoreSumRestore,
+  remove: styles.restoreSumRemove,
+  keep: styles.restoreSumKeep,
+}
+const HOSTS_CARD_CLASS: Record<HostsGroupKind, string> = {
+  restore: styles.restoreCardRestore,
+  remove: styles.restoreCardRemove,
+  keep: styles.restoreCardKeep,
+}
+
 // 上次检测：按距今多久说人话。时间没带或读到未来时间都按「刚刚」，读不懂给「—」。
 function formatAgo(iso?: string): string {
   if (!iso) return '—'
@@ -151,6 +200,7 @@ export function ClearCacheDialog({
 
   const pickedCount = [sources, allIP, hostsOn].filter(Boolean).length
   const activeError = activePanel ? previewErrors[activePanel] : undefined
+  const hostsRows = hostsPreview?.rows ?? []
   const detailExpand = t('toolbar.clearCache.detailExpand')
 
   // 详情面板共用的两条提示：预览读失败、重新检测失败。都摆在面板里，不靠会消失的提示。
@@ -424,33 +474,56 @@ export function ClearCacheDialog({
                     items: hostsPreview?.items ?? 0,
                   })}</span>
                 </div>
-                {(hostsPreview?.rows ?? []).length === 0 ? (
+                {hostsRows.length === 0 ? (
                   <p className={styles.emptyRow}>{t('toolbar.clearCache.hosts.previewEmpty')}</p>
                 ) : (
-                  <table className={styles.tbl}>
-                    <thead>
-                      <tr>
-                        <th>{t('toolbar.clearCache.hosts.colDomain')}</th>
-                        <th>{t('toolbar.clearCache.hosts.colBefore')}</th>
-                        <th>{t('toolbar.clearCache.hosts.colAfter')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(hostsPreview?.rows ?? []).map((r) => (
-                        <tr key={r.hostname}>
-                          <td className={styles.mono}>{r.hostname}</td>
-                          <td className={`${styles.mono} ${styles.hostIp}`}>{r.before}</td>
-                          <td>
-                            {r.after ? (
-                              <span className={styles.mono}>{r.after}</span>
-                            ) : (
-                              <span className={styles.hostTag}>{t('toolbar.clearCache.hosts.removed')}</span>
-                            )}
-                          </td>
-                        </tr>
+                  <>
+                    <p className={styles.restoreIntro}>{t('toolbar.clearCache.hosts.intro', { count: hostsRows.length })}</p>
+                    <div className={styles.restoreSummary}>
+                      {hostsGroups(hostsRows).map((g) => (
+                        <span key={g.kind} className={`${styles.restoreSum} ${HOSTS_SUM_CLASS[g.kind]}`}>
+                          {t(HOSTS_GROUP_KEY[g.kind].sum, { count: g.rows.length })}
+                        </span>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                    {hostsGroups(hostsRows).map((g) => (
+                      <section key={g.kind} className={styles.restoreGroup}>
+                        <div className={styles.restoreGroupHead}>
+                          <h4>{t(HOSTS_GROUP_KEY[g.kind].title)}</h4>
+                          <span className={styles.restoreGroupCount}>{t('toolbar.clearCache.unitMappings', { count: g.rows.length })}</span>
+                        </div>
+                        <p className={styles.restoreGroupHint}>{t(HOSTS_GROUP_KEY[g.kind].hint)}</p>
+                        <div className={styles.restoreCards}>
+                          {g.rows.map((r) => (
+                            <div key={r.hostname} className={`${styles.restoreCard} ${HOSTS_CARD_CLASS[g.kind]}`}>
+                              <div className={styles.restoreDomain}>{r.hostname}</div>
+                              <div className={styles.restoreFlow}>
+                                <div className={styles.restoreSide}>
+                                  <span className={styles.restoreSideLabel}>{t('toolbar.clearCache.hosts.now')}</span>
+                                  <span className={styles.restoreLine}>
+                                    <span className={styles.mono}>{r.before}</span> <span className={styles.restoreLineHost}>{r.hostname}</span>
+                                  </span>
+                                </div>
+                                <svg className={styles.restoreArrow} viewBox="0 0 20 12" fill="none" aria-hidden="true">
+                                  <path d="M1 6h16m-5-4 5 4-5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                                <div className={styles.restoreSide}>
+                                  <span className={styles.restoreSideLabel}>{t('toolbar.clearCache.hosts.then')}</span>
+                                  {r.after ? (
+                                    <span className={styles.restoreLine}>
+                                      <span className={`${styles.mono} ${styles.restoreAfterIp}`}>{r.after}</span> <span className={styles.restoreLineHost}>{r.hostname}</span>
+                                    </span>
+                                  ) : (
+                                    <span className={styles.restoreAfterNone}>{t('toolbar.clearCache.hosts.thenRemove')}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                  </>
                 )}
                 <p className={styles.detailNote}>{t('toolbar.clearCache.hosts.note')}</p>
               </div>
