@@ -1,0 +1,223 @@
+/* 检测弹框：① 还原（绿）、② 检测与写入（蓝），两张表的主色与列结构都不同。 */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.block {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.blockRestore { border-color: var(--green, #16a34a); }
+.blockDetect { border-color: var(--primary, #2563eb); }
+
+/* 主功能卡片头：序号 + 功能名 + 计数 + 一句说明，跟这张表的主按钮同色。 */
+.cardHead {
+  padding: 9px 11px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.headRestore {
+  background: var(--green-soft, #e8f7ee);
+  border-bottom-color: var(--green, #16a34a);
+}
+.headDetect {
+  background: var(--primary-soft, #eaf0fe);
+  border-bottom-color: var(--primary, #2563eb);
+}
+.headLine { display: flex; align-items: center; gap: 7px; }
+.headStep { font-size: 14px; line-height: 1; color: var(--text-2); }
+.headTitle { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--text); }
+.headRestore .headTitle { color: var(--green, #16a34a); }
+.headDetect .headTitle { color: var(--primary, #2563eb); }
+.headCount {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--ctl, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.headDesc {
+  margin: 5px 0 0 21px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.tbl {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: 11.5px;
+}
+/* ① 还原（四列）：二级菜单 | 当前写入 IP | 这条 IP 通不通 | 操作 */
+.cMenu { width: 17%; }
+.cData { width: 45%; }
+.cNet { width: 17%; }
+.cAction { width: 21%; }
+/* ② 检测与写入（五列）：多一列「上次检测」，说明结论新旧 */
+.cMenu2 { width: 15%; }
+.cData2 { width: 35%; }
+.cNet2 { width: 15%; }
+.cLast { width: 15%; }
+.cAction2 { width: 20%; }
+
+.tbl th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--band, #f6f7f9);
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+.tbl td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  color: var(--text);
+}
+.tbl tbody tr:last-child td { border-bottom: none; }
+.centered { text-align: center; }
+
+.tbl td.groupCell {
+  vertical-align: middle;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--band, #f7f8fa);
+  word-break: break-all;
+}
+/* 候选逐条列出后行数多，第二张表的合并格贴顶才看得见。选择器带 .tbl td 压过上面的 middle。 */
+.tbl td.groupCellTop { vertical-align: top; }
+.groupArrow { margin-right: 4px; color: var(--text-3); }
+
+/* 同一域名的多条候选之间不画线，换域名才画一条，逐条列也不至于糊成一片。 */
+.tbl tbody tr.rowStart td { border-top: 1px solid var(--border-strong); }
+
+.dataCell { line-height: 1.5; }
+
+/* 网络状态：只照后端定格上色，通/不通/没结论三档，不自己推断。 */
+.netCell { text-align: center; white-space: nowrap; }
+.netTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 3px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.netOk { background: var(--green-soft, #e8f7ee); color: var(--green, #16a34a); }
+.netBad { background: var(--red-soft, #fdecec); color: var(--red, #dc2626); }
+.netIdle { background: var(--band, #f2f3f5); color: var(--text-3); }
+.netLatency {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 400;
+  opacity: .8;
+}
+.domain {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  word-break: break-all;
+}
+.arrow { margin: 0 4px; color: var(--text-3); }
+.ip {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--text-2);
+  word-break: break-all;
+}
+.dim { color: var(--text-3); opacity: .65; }
+.lastCell {
+  text-align: center;
+  color: var(--text-3);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+/* 操作列：整表合并成格，竖排两颗真动作按钮。 */
+.tbl td.actionCell {
+  vertical-align: middle;
+  background: var(--band, #f7f8fa);
+}
+.tbl td.actionCellTop { vertical-align: top; }
+.actionStack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.actionBtn {
+  width: 100%;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--ctl, #fff);
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.actionBtn:hover:not(:disabled) {
+  background: var(--primary-soft, #eaf0fe);
+  border-color: var(--primary, #2563eb);
+  color: var(--primary, #2563eb);
+}
+/* 主按钮放大并按主功能上色：① 绿（还原），② 蓝（检测全部）；写入是描边蓝。 */
+.btnHero { padding: 8px 10px; font-size: 12px; font-weight: 600; }
+.btnRestore { background: var(--green, #16a34a); border-color: var(--green, #16a34a); color: #fff; }
+.btnDetect { background: var(--primary, #2563eb); border-color: var(--primary, #2563eb); color: #fff; }
+.btnWrite {
+  background: var(--primary-soft, #eaf0fe);
+  border-color: var(--primary, #2563eb);
+  color: var(--primary, #2563eb);
+}
+.btnHero:hover:not(:disabled) { filter: brightness(.94); }
+.btnRestore:hover:not(:disabled) { background: var(--green, #16a34a); color: #fff; }
+.btnDetect:hover:not(:disabled), .btnWrite:hover:not(:disabled) {
+  background: var(--primary, #2563eb);
+  color: #fff;
+}
+.actionBtn:disabled {
+  opacity: .55;
+  cursor: default;
+  background: var(--band, #f2f3f5);
+  border-color: var(--border-strong);
+  color: var(--text-3);
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-3);
+  font-size: 11.5px;
+  padding: 14px 8px;
+}
+.alert {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--red, #dc2626);
+  background: var(--red-soft, #fdecec);
+  border: 1px solid var(--red, #dc2626);
+  border-radius: 8px;
+  padding: 7px 10px;
+}

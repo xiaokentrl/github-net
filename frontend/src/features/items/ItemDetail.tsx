@@ -10,6 +10,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import uiStyles from '../../components/ui/ui.module.css'
 import { pickBestCandidate } from '../detect/candidateChoice'
+import { DetectTables } from './DetectTables'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
 import { ensureLastResults, isTerminalTask, useTaskQueue } from '../tasks/taskStore'
 import { addressUsable, projectState, toneForCandidate, toneForItem, type Tone } from '../tasks/statusTone'
@@ -133,9 +134,30 @@ export function ItemDetail({
   const boxRunning = (task: typeof boxDetectTask) => task?.status === 'waiting' || task?.status === 'running'
   const boxDetectRunning = boxRunning(boxDetectTask)
   const boxRestoreRunning = boxRunning(boxRestoreTask)
+  // 写入 Hosts 的任务在跑时，第二张表的「写入可用IP」要跟着灰掉，不能重复发。
+  const boxApplyRunning = restoreBox
+    ? state.tasks.some((tk) => tk.itemId === restoreBox.itemId && tk.kind === 'apply' && (tk.status === 'waiting' || tk.status === 'running'))
+    : false
   const boxRestoreSettled = boxRestoreTask !== undefined && !boxRestoreRunning && isTerminalTask(boxRestoreTask.status)
   const boxHosts = restoreBox ? hostsOf.get(restoreBox.itemId) : undefined
-  const boxEntries = (boxHosts?.entries ?? []).filter((entry) => entry.written)
+  // 检测弹框两张表都只列这一个二级菜单的真实数据：域名以目录为准，逐条状态取后端读回来的 Hosts。
+  const boxItem = restoreBox ? (category?.items ?? []).find((it) => it.id === restoreBox.itemId) : undefined
+  const boxAllEntries = boxHosts?.entries ?? []
+  // 目录里的域名为准，再把 Hosts 中实际出现、目录没列的域名补上（用户自填项就是这种）。
+  const boxHostnames = Array.from(new Set([
+    ...(boxItem?.hostnames ?? []),
+    ...boxAllEntries.map((entry) => entry.hostname),
+  ]))
+  // 可还原条数与第一张表同一口径：本项目写进 Hosts 的映射（written + 有地址）。
+  // 网络通不通是旁边「网络状态」那一列的事，不拿它来筛掉可还原的 IP。
+  const boxRestorableCount = boxAllEntries.filter((entry) => entry.written && entry.ip).length
+  // 这一项的任务状态一变就当刷新信号：检测/还原/写入落定后，缓存表跟着重拉。
+  const boxRefreshKey = restoreBox
+    ? state.tasks
+        .filter((tk) => tk.itemId === restoreBox.itemId)
+        .map((tk) => `${tk.id}:${tk.status}`)
+        .join('|')
+    : ''
   const boxLive = restoreBox ? state.live[restoreBox.itemId] : undefined
   // 框里就看 store 那一份：它有两路喂——进详情页时的补读（后端留着的上一轮），和检测事件。
   // 检测跑动中这一项会被清空，正好不拿旧数据糊人；列表和框读同一份，两边不会各说一套。
@@ -153,8 +175,6 @@ export function ItemDetail({
   // 框里摊得开检测数据吗（有域名行）。摊得开才允许点「立刻还原」——跑检测时数据被清空，那颗自然跟着灰。
   const boxHasData = (boxResult?.hosts?.length ?? 0) > 0
   const boxConfirmReady = boxHasData
-  // 框停在哪一屏：这一项有还原任务就是回执屏，否则就是检测屏。
-  const boxStage: 'detect' | 'restoring' = boxRestoreTask ? 'restoring' : 'detect'
 
   // 点行内「还原」＝只开框，不排任务：用户没点「立刻还原」之前，列表和队列一格都不该被这一步改动。
   // 框里要看的检测数据在这屏加载时就补读进 store 了（见上面的 ensureLastResults），这里不再单独发请求。
@@ -598,84 +618,43 @@ export function ItemDetail({
 
       {restoreBox ? (
         <Dialog
-          title={t('detail.box.title', { name: restoreBox.name })}
+          title={t('detail.detectBox.title', { name: restoreBox.name, count: boxRestorableCount })}
           onClose={() => setRestoreBox(null)}
+          width={760}
           footer={
-            boxStage === 'detect' ? (
-              <>
-                <button type="button" className={uiStyles.btn} disabled={boxDetectRunning} onClick={() => onDetect(restoreBox.itemId)}>
-                  {boxDetectRunning ? t('detail.box.detecting') : t('detail.box.redetect')}
-                </button>
-                <button
-                  type="button"
-                  className={`${uiStyles.btn} ${uiStyles.primary}`}
-                  disabled={!boxConfirmReady || boxEntries.length === 0 || boxRestoreRunning || boxRestoreSettled}
-                  onClick={() => onRestore(restoreBox.itemId)}
-                >
-                  {t('detail.box.restoreNow')}
-                </button>
-                <button type="button" className={uiStyles.btn} onClick={() => setRestoreBox(null)}>
-                  {t('detail.box.abandon')}
-                </button>
-              </>
-            ) : (
-              <button type="button" className={uiStyles.btn} onClick={() => setRestoreBox(null)}>
-                {t('detail.box.close')}
-              </button>
-            )
+            <button type="button" className={uiStyles.btn} onClick={() => setRestoreBox(null)}>
+              {t('detail.detectBox.close')}
+            </button>
           }
         >
-          {/* 待还原清单两屏常驻：无论停在哪一屏，用户都看得见要退的是哪几条 */}
-          {boxEntries.length > 0 ? (
-            <>
-              <p className={styles.boxStage}>{t('detail.box.summary', { count: boxEntries.length })}</p>
-              <ul className={styles.boxLines}>
-                {boxEntries.map((entry) => (
-                  <li key={entry.hostname} className={styles.boxLine}>
-                    <span>{entry.hostname}</span>
-                    <span className={styles.cellMono}>{entry.ip}</span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            <p className={styles.boxStage}>{t('detail.box.none')}</p>
-          )}
+          {/* 上面一张只列支持还原的 IP 并逐条复测网络状态，下面一张是全部域名由「检测全部」刷新。
+              四颗按钮都接真动作，动作归到各自那张表的操作列。 */}
+          <DetectTables
+            name={restoreBox.name}
+            hostnames={boxHostnames}
+            entries={boxAllEntries}
+            actions={{
+              restoreIp: () => onRestore(restoreBox.itemId),
+              detectAll: () => boxItem ? onDetectAll([boxItem]) : undefined,
+              writeIp: () => onApply(restoreBox.itemId),
+            }}
+            busy={{
+              detect: boxDetectRunning,
+              restore: boxRestoreRunning,
+              apply: boxApplyRunning,
+              restoreSettled: boxRestoreSettled,
+            }}
+            ready={{
+              canDetectAll: boxItem !== undefined,
+              hasDetectResult: boxConfirmReady,
+            }}
+            refreshKey={boxRefreshKey}
+          />
 
+          {/* 原有检测/还原的进度与回执留着，不能因为换布局就把反馈丢了。 */}
           <div className={styles.boxDetect}>
             <p className={styles.boxStage}>{boxDetectText || t('detail.box.noResult')}</p>
-            {boxResult?.hosts && boxResult.hosts.length > 0 ? (
-              <ul className={`${styles.boxLines} ${(boxResult.available ?? 0) > 0 ? styles.boxLinesOk : ''}`.trim()}>
-                {boxResult.hosts.map((host) => {
-                  const best = pickBestCandidate(host.candidates ?? [])
-                  return (
-                    <li key={host.hostname} className={styles.boxLine}>
-                      <span>{host.hostname}</span>
-                      <span className={best ? styles.cellMono : styles.dim}>
-                        {best
-                          ? best.latencyMs > 0
-                            ? `${best.ip} · ${best.latencyMs}ms`
-                            : best.ip
-                          : host.resolved
-                            ? t('queue.detail.noUsableAddress')
-                            : t('queue.detail.resolveFailed')}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : null}
           </div>
-
-          {boxStage === 'detect' ? (
-            <p className={styles.boxHint}>
-              {boxConfirmReady
-                ? t('detail.box.confirmTip')
-                : boxDetectRunning
-                  ? t('detail.box.confirmWaiting')
-                  : t('detail.box.confirmNeedDetect')}
-            </p>
-          ) : null}
 
           {boxRestoreTask ? <p className={styles.boxStage}>{boxRestoreText}</p> : null}
         </Dialog>
