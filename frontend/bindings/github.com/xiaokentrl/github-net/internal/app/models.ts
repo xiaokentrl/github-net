@@ -162,6 +162,7 @@ export enum HostsAccess {
 export interface HostsRestorePreview {
     "rows": HostsRestoreRow[] | null;
     "count": number;
+    "items": number;
 }
 
 /**
@@ -235,19 +236,25 @@ export enum HostsStatus {
 
 /**
  * IPCacheClearResult 是「清理全部 IP 缓存」的回执，只报真删掉的行数。
+ * LedgerAttached 说明这次落盘底账接没接上：没接上时只清掉了内存结论，
+ * 回执不能说成「清掉 0 轮 0 条」那样像本来就空。
  */
 export interface IPCacheClearResult {
     "rounds": number;
     "addresses": number;
+    "ledgerAttached": boolean;
 }
 
 /**
- * IPCachePreview 是「清理全部 IP 缓存」的预览：报数量、也给明细，界面据此让用户看清要清的是什么。
+ * IPCachePreview 是「清理全部 IP 缓存」的预览：把真正会被清掉的四处都报出来，
+ * 界面据此让用户看清要清的是什么，不漏报、也不用别的数顶替域名数。
  */
 export interface IPCachePreview {
     "rounds": number;
     "addresses": number;
     "domains": number;
+    "candidateRows": number;
+    "memoryResults": number;
     "entries": PoolEntryView[] | null;
 }
 
@@ -287,6 +294,16 @@ export interface RuntimeInfo {
     "arch": string;
     "startedAt": string;
     "statusSequence": number;
+}
+
+/**
+ * SourceCachePreview 是「清理已选缓存源」预览里的一行：源名字，以及今天是否已经下载过。
+ * Downloaded 为 true 才会被「立即清理」真删掉；false 的今天本来就没有文件，点了也不会动它。
+ * 预览列全部 N 份、执行只删其中一部分，这个口径差由这一列说清。
+ */
+export interface SourceCachePreview {
+    "name": string;
+    "downloaded": boolean;
 }
 
 /**

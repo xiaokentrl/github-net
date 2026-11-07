@@ -217,6 +217,33 @@
   border-radius: 8px;
 }
 
+/* 预览读失败 / 重新检测失败：摆在详情面板里，不能悄悄降级成 0 项。 */
+.alert {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--red, #dc2626);
+  background: var(--red-soft, #fdecec);
+  border: 1px solid var(--red, #dc2626);
+  border-radius: 8px;
+  padding: 7px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 真的没有数据时的空态，跟「读不出来」分开说。 */
+.emptyRow {
+  margin: 0;
+  padding: 14px 10px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  text-align: center;
+  background: var(--band, #f7f8fa);
+  border-radius: 8px;
+}
+
+.centered { text-align: center; }
+
 /* ----- 表格通用 ----- */
 .tbl {
   width: 100%;
@@ -261,8 +288,89 @@
   border-radius: 4px;
   white-space: nowrap;
 }
-.status.written { background: var(--green-soft, #e9f7ef); color: var(--green, #0f9d58); }
-.status.unwritten { background: var(--band, #f2f3f5); color: var(--text-3); }
+.status.statusOk { background: var(--green-soft, #e9f7ef); color: var(--green, #0f9d58); }
+.status.statusBad { background: var(--band, #f2f3f5); color: var(--text-3); }
+
+/* 源缓存预览：「今天已下载」标记，只有已下载的那份会被真删。 */
+.flag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.flagYes { background: var(--green-soft, #e8f7ee); color: var(--green, #16a34a); }
+.flagNo { background: var(--band, #f2f3f5); color: var(--text-3); }
+
+/* IP 详情：二级菜单 | 可写 Hosts | 上次检测 | 操作 四列 */
+.ipTable { min-width: 420px; table-layout: fixed; }
+.cGroup { width: 19%; }
+.cHost { width: 49%; }
+.cLast { width: 18%; }
+.cAct { width: 14%; }
+
+/* 二级菜单：分组 rowspan 后整组上下居中。.tbl td 的 top 特异性更高，加前缀压过去。 */
+.tbl td.groupCell { vertical-align: middle; }
+.groupCell {
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.hostCell { line-height: 1.4; }
+.hostLine1 { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.hostDomain {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--text);
+  word-break: break-all;
+}
+.hostLine2 {
+  margin-top: 2px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--text-3);
+  word-break: break-all;
+}
+.hostLineEmpty { color: var(--text-3); opacity: .65; }
+
+.lastCol {
+  text-align: center;
+  color: var(--text-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.actCol { text-align: center; }
+.btnDetect {
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--ctl);
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.btnDetect:hover { filter: brightness(.96); }
+.btnDetect:disabled { opacity: .6; cursor: default; }
+/* 检测按钮：候选可用（测通了）绿，否则红，只看状态、不看是否正在检测。 */
+.btnDetect.btnDetectOk {
+  background: var(--green-soft, #e8f7ee);
+  border-color: var(--green, #16a34a);
+  color: var(--green, #16a34a);
+}
+.btnDetect.btnDetectBad {
+  background: var(--red-soft, #fdecec);
+  border-color: var(--red, #dc2626);
+  color: var(--red, #dc2626);
+}
 
 /* Hosts 对比：恢复前用删除线（将被改），恢复后为空标「移除」琥珀色。 */
 .hostIp {

@@ -22,6 +22,7 @@ import {
   PreviewIPCache,
   PreviewRestoreHosts,
   PreviewSourcesCache,
+  ReprobeIP,
   RestoreAllHosts,
   RestoreItems,
   SaveSettings,
@@ -38,11 +39,12 @@ import type {
   IPCachePreview,
   ItemsSnapshot,
   PoolEntryView,
+  SourceCachePreview,
   SourcesCacheResult,
   StrategySnapshot,
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 // 预览相关的两个返回类型由组件直接使用，从 bindings 透出，组件只认这一层。
-export type { HostsRestorePreview, IPCachePreview } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+export type { HostsRestorePreview, IPCachePreview, PoolEntryView, SourceCachePreview } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
@@ -180,19 +182,26 @@ export function clearAllIPCache(): Promise<IPCacheClearResult> {
 // 三项都只读：勾了哪一项才拉哪一项，让用户先看清楚要清／还原的是什么再点「立即清理」。
 // 后端同名命令只算不删、不写盘；绑定由 wails 生成，函数名与 Go 方法一致。
 
-// 已选缓存源：勾中项目涉及的公共源名字。wails 对切片返回类型带 null，这里统一兜底成空数组。
-export function previewSourcesCache(itemIds: string[]): Promise<string[]> {
-  return PreviewSourcesCache(itemIds).then((names) => names ?? [])
+// 已选缓存源：勾中项目涉及的公共源，以及每份今天是否已下载（只有已下载的才会被真删）。
+// wails 对切片返回类型带 null，这里统一兜底成空数组。
+export function previewSourcesCache(itemIds: string[]): Promise<SourceCachePreview[]> {
+  return PreviewSourcesCache(itemIds).then((rows) => rows ?? [])
 }
 
-// 全部 IP 缓存：轮数、地址数、域名数，以及候选池明细（域名 → 当前 IP）。
+// 全部 IP 缓存：轮数、地址数、去重域名数、逐轮候选数、内存结论数，以及候选池明细。
 export function previewIPCache(): Promise<IPCachePreview> {
   return PreviewIPCache()
 }
 
-// 清除已写入的 Hosts：每个受管理域名恢复前／后的 IP 对比。
+// 清除已写入的 Hosts：每个受管理域名恢复前／后的 IP 对比，以及涉及的项目数。
 export function previewRestoreHosts(): Promise<HostsRestorePreview> {
   return PreviewRestoreHosts()
+}
+
+// 单条复测：现场重探候选池里的一条地址，后端把结论刷回那一行并返回刷新后的整行。
+// 同步等结果，不进任务队列；失败直接 reject，界面按错误码显示原因。
+export function reprobeIP(hostname: string, ip: string): Promise<PoolEntryView> {
+  return ReprobeIP(hostname, ip)
 }
 
 export function getTasks(): Promise<Snapshot> {

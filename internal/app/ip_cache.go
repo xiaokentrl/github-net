@@ -9,17 +9,23 @@ package app
 // 这一条是用户主动点的「全清」，不看时间，一行不留。
 
 // IPCacheClearResult 是「清理全部 IP 缓存」的回执，只报真删掉的行数。
+// LedgerAttached 说明这次落盘底账接没接上：没接上时只清掉了内存结论，
+// 回执不能说成「清掉 0 轮 0 条」那样像本来就空。
 type IPCacheClearResult struct {
-	Rounds    int `json:"rounds"`
-	Addresses int `json:"addresses"`
+	Rounds         int  `json:"rounds"`
+	Addresses      int  `json:"addresses"`
+	LedgerAttached bool `json:"ledgerAttached"`
 }
 
-// IPCachePreview 是「清理全部 IP 缓存」的预览：报数量、也给明细，界面据此让用户看清要清的是什么。
+// IPCachePreview 是「清理全部 IP 缓存」的预览：把真正会被清掉的四处都报出来，
+// 界面据此让用户看清要清的是什么，不漏报、也不用别的数顶替域名数。
 type IPCachePreview struct {
-	Rounds    int             `json:"rounds"`
-	Addresses int             `json:"addresses"`
-	Domains   int             `json:"domains"`
-	Entries   []PoolEntryView `json:"entries"`
+	Rounds        int             `json:"rounds"`
+	Addresses     int             `json:"addresses"`
+	Domains       int             `json:"domains"`
+	CandidateRows int             `json:"candidateRows"`
+	MemoryResults int             `json:"memoryResults"`
+	Entries       []PoolEntryView `json:"entries"`
 }
 
 // ClearAllIPCache 清掉全部检测缓存。底账没打开（库没接上）时仍要清内存这一份：
@@ -34,7 +40,7 @@ func (s *Service) ClearAllIPCache() (IPCacheClearResult, error) {
 		if s.detectResults != nil {
 			s.detectResults.clear()
 		}
-		return IPCacheClearResult{Rounds: int(rounds), Addresses: int(addresses)}, nil
+		return IPCacheClearResult{Rounds: int(rounds), Addresses: int(addresses), LedgerAttached: true}, nil
 	}
 	if s.detectResults != nil {
 		s.detectResults.clear()
@@ -42,8 +48,10 @@ func (s *Service) ClearAllIPCache() (IPCacheClearResult, error) {
 	return IPCacheClearResult{}, nil
 }
 
-// PreviewIPCache 只读回「全部 IP 缓存」现在有什么：轮底账数、地址池行数、候选池明细。
-// 不改任何东西，界面在用户勾选「清理全部 IP 缓存」时调用，让他先看清楚再决定。
+// PreviewIPCache 只读回「全部 IP 缓存」现在有什么，不改任何东西。
+// Domains 是去重后的域名数（一条域名可能有多条地址），不是地址行数；
+// CandidateRows 是逐轮候选记录数，MemoryResults 是内存里最近一轮结论的项目数——
+// 这两处执行时也会一起清掉，预览必须说全。
 func (s *Service) PreviewIPCache() (IPCachePreview, error) {
 	out := IPCachePreview{}
 	if s.candidateStore != nil {
@@ -51,14 +59,26 @@ func (s *Service) PreviewIPCache() (IPCachePreview, error) {
 		if err != nil {
 			return out, ToPublicError(err)
 		}
+		candidates, err := s.candidateStore.CountCandidateRows()
+		if err != nil {
+			return out, ToPublicError(err)
+		}
 		out.Rounds = int(rounds)
 		out.Addresses = int(addresses)
+		out.CandidateRows = int(candidates)
+	}
+	if s.detectResults != nil {
+		out.MemoryResults = s.detectResults.count()
 	}
 	pool, err := s.GetCandidatePool()
 	if err != nil {
 		return out, err
 	}
 	out.Entries = pool
-	out.Domains = len(pool)
+	seen := make(map[string]bool, len(pool))
+	for _, e := range pool {
+		seen[e.Hostname] = true
+	}
+	out.Domains = len(seen)
 	return out, nil
 }

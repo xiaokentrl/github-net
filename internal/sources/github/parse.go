@@ -145,6 +145,25 @@ func (f *Fetcher) load(ctx context.Context, src Source, cache *FileCache) (map[s
 	return data, nil
 }
 
+// CachedToday 只读报出这些源里今天已经下过、落盘还在的源 ID。
+// 预览用它标「点了立即清理会不会真删」：今天没下过的源本来就没文件，不在返回里。
+// 判据复用 FileCache.Load（同样认当天日期和源 ID），不另写一套。
+func (f *Fetcher) CachedToday(srcs []Source) []string {
+	f.mu.Lock()
+	cache := f.cache
+	f.mu.Unlock()
+	out := make([]string, 0, len(srcs))
+	if !cache.Enabled() {
+		return out
+	}
+	for _, src := range srcs {
+		if _, ok := cache.Load(src); ok {
+			out = append(out, src.ID)
+		}
+	}
+	return out
+}
+
 // ClearCache 丢掉这些源的内存和落盘两份，下一轮检测就会重新下载（拍板：清理后才重新下载）。
 // 返回真删掉落盘文件的源 ID——今天还没下载过的不在这个数里。
 func (f *Fetcher) ClearCache(srcs []Source) ([]string, error) {

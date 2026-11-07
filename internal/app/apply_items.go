@@ -316,6 +316,7 @@ func (s *Service) RestoreAllHosts() (int, error) {
 type HostsRestorePreview struct {
 	Rows  []HostsRestoreRow `json:"rows"`
 	Count int               `json:"count"`
+	Items int               `json:"items"`
 }
 
 // HostsRestoreRow 是预览里的一行：某个当前由工具管理的域名，还原前后分别指向哪个 IP。
@@ -340,7 +341,7 @@ func (s *Service) PreviewRestoreHosts() (HostsRestorePreview, error) {
 	for _, r := range preview.Rows {
 		rows = append(rows, HostsRestoreRow{Hostname: r.Hostname, Before: r.Before, After: r.After})
 	}
-	return HostsRestorePreview{Rows: rows, Count: preview.Count}, nil
+	return HostsRestorePreview{Rows: rows, Count: preview.Count, Items: preview.Items}, nil
 }
 
 // OpenHosts 请系统用默认编辑器打开 Hosts 文件。打开动作由后端执行，

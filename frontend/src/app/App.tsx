@@ -313,6 +313,20 @@ export function App() {
     return map
   }, [snapshot])
 
+  // 二级菜单在目录里的先后顺序。清理弹框的 IP 缓存分组照这个排，不按候选池延迟。
+  const menuOrder = useMemo(() => {
+    const names: string[] = []
+    const seen = new Set<string>()
+    for (const cat of snapshot?.categories ?? []) {
+      for (const item of cat.items ?? []) {
+        if (!item.name || seen.has(item.name)) continue
+        seen.add(item.name)
+        names.push(item.name)
+      }
+    }
+    return names
+  }, [snapshot])
+
   // 树上那一行的状态字和色点要跟着队列走：正在检测、正在写 Hosts、正在还原的项目，原型是整行变色。
   // 队列只有 taskStore 这一份，TaskPanel 和树读的是同一个快照，不存在两份真相。
   const queue = useTaskQueue()
@@ -720,38 +734,44 @@ export function App() {
     queueExpandRef.current?.()
     setClearAsk([...checked])
   }, [])
-  const runClearSelected = useCallback((choice: ClearCacheChoice, restoreAllNow: () => Promise<void>, restoreBusy: boolean) => {
+  const runClearSelected = useCallback(async (choice: ClearCacheChoice, restoreAllNow: (skipCatalogRefresh?: boolean) => Promise<void>, restoreBusy: boolean) => {
     const ids = clearAsk ?? []
     const doSources = choice.sources && ids.length > 0
     const doAllIP = choice.allIP
+    // 弹框在队列忙时已经把这项禁用并取消勾选；这里再挡一道，真遇到「开框后队列转忙」也明说跳过，不装作做过。
+    if (choice.hosts && restoreBusy) pushNotice('warning', t('toolbar.clearCache.hosts.busy'))
     const doHosts = choice.hosts && !restoreBusy
     if (!doSources && !doAllIP && !doHosts) return
     setClearAsk(null)
     setClearBusy(true)
-    const jobs: Promise<void>[] = []
-    if (doSources) {
-      jobs.push(clearSourcesCache(ids)
-        .then((res) => {
-          const notice = cacheNoticeOf(res)
+    try {
+      // 串行，不并发：清前端结果（allIP）必须在还原后重拉结果（hosts）之前完成，
+      // 否则两条谁后跑谁覆盖结果 store，列表会停在任一边的旧样子。
+      // 目录也只在整批结束后重读一次，还原那条不再自己重复读。
+      if (doSources) {
+        try {
+          const notice = cacheNoticeOf(await clearSourcesCache(ids))
           pushNotice(notice.kind, notice.text)
-        })
-        .catch((err: unknown) => { pushNotice('error', getErrorMessage(err)) }))
-    }
-    if (doAllIP) {
-      jobs.push(clearAllIPCache()
-        .then((res) => {
+        } catch (err: unknown) {
+          pushNotice('error', getErrorMessage(err))
+        }
+      }
+      if (doAllIP) {
+        try {
+          const res = await clearAllIPCache()
           clearResults()
-          pushNotice('success', t('toolbar.clearCache.allIP.done', { rounds: res.rounds, addresses: res.addresses }))
-        })
-        .catch((err: unknown) => { pushNotice('error', getErrorMessage(err)) }))
+          pushNotice('success', res.ledgerAttached
+            ? t('toolbar.clearCache.allIP.done', { rounds: res.rounds, addresses: res.addresses })
+            : t('toolbar.clearCache.doneWithoutLedger'))
+        } catch (err: unknown) {
+          pushNotice('error', getErrorMessage(err))
+        }
+      }
+      if (doHosts) await restoreAllNow(true)
+      loadCatalog()
+    } finally {
+      setClearBusy(false)
     }
-    if (doHosts) {
-      // 复用工具栏「还原 Hosts」那一份实现：回执、任务快照、结果重拉、目录重读都在里面。
-      jobs.push(restoreAllNow())
-    }
-    Promise.all(jobs)
-      .then(() => loadCatalog())
-      .finally(() => setClearBusy(false))
   }, [clearAsk, loadCatalog])
 
   // 单项检测（方法下拉旁那颗、还原框的「重新检测」）不弹档位框，沿用设置里的档位。
@@ -1076,6 +1096,7 @@ export function App() {
       {clearAsk ? (
         <ClearCacheDialog
           sourceIds={clearAsk}
+          menuOrder={menuOrder}
           hostsDisabled={restoreBusy}
           onCancel={() => setClearAsk(null)}
           onConfirm={(choice) => runClearSelected(choice, restoreAllNow, restoreBusy)}

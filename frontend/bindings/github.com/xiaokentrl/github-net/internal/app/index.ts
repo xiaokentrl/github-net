@@ -27,6 +27,7 @@ export type {
     ItemsSnapshot,
     PoolEntryView,
     RuntimeInfo,
+    SourceCachePreview,
     SourcesCacheResult,
     StrategyOption,
     StrategySnapshot,

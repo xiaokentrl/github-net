@@ -85,6 +85,14 @@ func (s *detectResultStore) clear() {
 	s.byItem = make(map[string]detectResultRecord)
 }
 
+// count 报内存里记着几个项目的最近一轮结论。「清理全部 IP 缓存」会把这份一起丢掉，
+// 预览按这个数如实说，别让用户以为只清了库里那几张表。
+func (s *detectResultStore) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.byItem)
+}
+
 // roundFinishedAt 给一个项目最近一轮的探测定格时间；没有记录给零值。
 // 调用方（应用前的时效判定）把零值按「不新鲜」处理：说不清什么时候测出来的结论，
 // 一律要现场复验一遍才准写进系统 Hosts。

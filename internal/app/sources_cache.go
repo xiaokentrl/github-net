@@ -19,6 +19,8 @@ type sourcesClearer interface {
 	ClearCache(srcs []github.Source) ([]string, error)
 	CacheEnabled() bool
 	PruneCache() error
+	// CachedToday 只读报出这些源里今天已经有落盘缓存的 ID，给预览标「会不会真删」。
+	CachedToday(srcs []github.Source) []string
 }
 
 func (s *Service) sources() sourcesClearer {
@@ -37,6 +39,14 @@ type SourcesCacheResult struct {
 	Items   int      `json:"items"`
 	Sources []string `json:"sources"`
 	Cleared []string `json:"cleared"`
+}
+
+// SourceCachePreview 是「清理已选缓存源」预览里的一行：源名字，以及今天是否已经下载过。
+// Downloaded 为 true 才会被「立即清理」真删掉；false 的今天本来就没有文件，点了也不会动它。
+// 预览列全部 N 份、执行只删其中一部分，这个口径差由这一列说清。
+type SourceCachePreview struct {
+	Name       string `json:"name"`
+	Downloaded bool   `json:"downloaded"`
 }
 
 // involvedSources 把勾中的项目归并到它们所在的加速范围，再收集这些范围用到的公共源（去重）。
@@ -108,21 +118,36 @@ func (s *Service) ClearSourcesCache(itemIDs []string) (SourcesCacheResult, error
 		return SourcesCacheResult{}, NewError(CodeInternal, "源缓存目录没接上，这次清理没有生效", nil)
 	}
 	removed, err := clearer.ClearCache(sources)
-	if err != nil {
-		return SourcesCacheResult{}, NewError(CodeInternal, "有几份源缓存没能删掉，稍后再试一次", err)
-	}
 	result.Cleared = sourceNamesByID(sources, removed)
+	if err != nil {
+		// 逐份删文件没法整笔回滚：已经删掉的那几份不会退回，必须连同失败一起说清楚，
+		// 不能只丢一句「稍后再试」让用户以为一个字都没动。
+		msg := "有几份源缓存没能删掉，稍后再试一次"
+		if len(result.Cleared) > 0 {
+			msg += "；已经删掉的 " + strings.Join(result.Cleared, "、") + " 不会退回"
+		}
+		return SourcesCacheResult{}, NewError(CodeInternal, msg, err)
+	}
 	return result, nil
 }
 
-// PreviewSourcesCache 只读回「清理已选缓存源」会动到哪几份公共源的名字，不删任何文件。
-// 界面在用户勾选那一项时调用，让他先看清楚要清的是哪几份源再决定。
-func (s *Service) PreviewSourcesCache(itemIDs []string) ([]string, error) {
+// PreviewSourcesCache 只读回「清理已选缓存源」会涉及哪几份公共源，以及每份今天是否已经下载过。
+// 不删任何文件。今天没下载过的那份本来就没有可清的文件，预览里要标出来，
+// 免得界面列了 N 份、执行只删掉 M 份时看着像漏了一半。
+func (s *Service) PreviewSourcesCache(itemIDs []string) ([]SourceCachePreview, error) {
 	sources, _, err := s.involvedSources(itemIDs)
 	if err != nil {
 		return nil, err
 	}
-	return sourceNames(sources), nil
+	cached := make(map[string]bool, len(sources))
+	for _, id := range s.sources().CachedToday(sources) {
+		cached[id] = true
+	}
+	out := make([]SourceCachePreview, 0, len(sources))
+	for _, src := range sources {
+		out = append(out, SourceCachePreview{Name: src.Name, Downloaded: cached[src.ID]})
+	}
+	return out, nil
 }
 
 func sourceNames(srcs []github.Source) []string {

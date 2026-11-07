@@ -16,9 +16,12 @@ type RestorePreviewRow struct {
 }
 
 // RestorePreview 是「清除已写入的 Hosts」预览的全部内容。
+// Count 是受管理域名条数（Rows 的行数），Items 是涉及的项目数——
+// 执行那边按项目逐个还原，回执报的是项目数，两个口径都给出来界面才对得上。
 type RestorePreview struct {
 	Rows  []RestorePreviewRow `json:"rows"`
 	Count int                 `json:"count"`
+	Items int                 `json:"items"`
 }
 
 // PreviewRestore 纯算「全量还原之后」每个受管理域名的前后对比，一个字节都不写盘。
@@ -30,7 +33,7 @@ func PreviewRestore(meta Recovery, content string) (RestorePreview, error) {
 	if status, reason := Check(content, meta); status == CheckConflict {
 		return RestorePreview{}, fmt.Errorf("%w：%s", ErrConflict, reason)
 	}
-	_, newContent, _, err := RestoreAll(meta, content)
+	_, newContent, restored, err := RestoreAll(meta, content)
 	if err != nil {
 		return RestorePreview{}, err
 	}
@@ -45,7 +48,7 @@ func PreviewRestore(meta Recovery, content string) (RestorePreview, error) {
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Hostname < rows[j].Hostname })
-	return RestorePreview{Rows: rows, Count: len(rows)}, nil
+	return RestorePreview{Rows: rows, Count: len(rows), Items: len(restored)}, nil
 }
 
 // hostIPMap 把管理区段压成「域名 → IP」的映射（一条记录可能带多个域名，共享同一个 IP）。

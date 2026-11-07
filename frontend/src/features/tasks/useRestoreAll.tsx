@@ -29,7 +29,8 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
 
   // 返回 Promise：清理弹框把「清除已写入的 Hosts」和其它清理项一起排进同一批任务时，
   // 要能等这一笔还原落定再统一刷新，逻辑仍只有这一份。
-  const runRestoreAll = useCallback(() => {
+  // skipCatalogRefresh 给清理弹框用：它自己会在整批结束后重读一次目录，这里不重复读。
+  const runRestoreAll = useCallback((skipCatalogRefresh = false) => {
     setAskOpen(false)
     return restoreAllHosts()
       .then((count) => {
@@ -41,7 +42,7 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
       .then(() => getTasks().then(applyTaskSnapshot))
       // 「当前写入 IP」的权威在后端检测结果里，还原后整批重拉一遍。
       .then(() => refreshAllResults())
-      .then(() => onRestored?.())
+      .then(() => { if (!skipCatalogRefresh) onRestored?.() })
       .catch(onError)
   }, [onError, onRestored])
 
@@ -54,7 +55,7 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
           <button type="button" className={uiStyles.btn} onClick={() => setAskOpen(false)}>
             {t('queue.restoreAll.ask.cancel')}
           </button>
-          <button type="button" className={`${uiStyles.btn} ${uiStyles.primary}`} onClick={runRestoreAll}>
+          <button type="button" className={`${uiStyles.btn} ${uiStyles.primary}`} onClick={() => { void runRestoreAll() }}>
             {t('queue.restoreAll.ask.action')}
           </button>
         </>

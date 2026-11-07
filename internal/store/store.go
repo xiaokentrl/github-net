@@ -293,6 +293,16 @@ func (s *Store) CountAll() (int64, int64, error) {
 	return rounds, addresses, nil
 }
 
+// CountCandidateRows 数逐轮候选记录数（detect_candidates）。
+// 「清理全部 IP 缓存」会整表删掉它，预览要如实报出来，不能只报轮数和地址数。
+func (s *Store) CountCandidateRows() (int64, error) {
+	var rows int64
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM detect_candidates`).Scan(&rows); err != nil {
+		return 0, fmt.Errorf("store: 数逐轮候选失败: %w", err)
+	}
+	return rows, nil
+}
+
 // Rounds 按时间倒序取最近 limit 轮。limit 不大于 0 就取上限以内全部。
 func (s *Store) Rounds(limit int) ([]RoundRow, error) {
 	q := `SELECT id, task_round, item_id, scope_id, strategy_id, started_at, finished_at,

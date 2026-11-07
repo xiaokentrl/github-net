@@ -204,8 +204,10 @@ export function Ping(token: string): $CancellablePromise<string> {
 }
 
 /**
- * PreviewIPCache 只读回「全部 IP 缓存」现在有什么：轮底账数、地址池行数、候选池明细。
- * 不改任何东西，界面在用户勾选「清理全部 IP 缓存」时调用，让他先看清楚再决定。
+ * PreviewIPCache 只读回「全部 IP 缓存」现在有什么，不改任何东西。
+ * Domains 是去重后的域名数（一条域名可能有多条地址），不是地址行数；
+ * CandidateRows 是逐轮候选记录数，MemoryResults 是内存里最近一轮结论的项目数——
+ * 这两处执行时也会一起清掉，预览必须说全。
  */
 export function PreviewIPCache(): $CancellablePromise<$models.IPCachePreview> {
     return $Call.ByID(3662049171);
@@ -221,11 +223,24 @@ export function PreviewRestoreHosts(): $CancellablePromise<$models.HostsRestoreP
 }
 
 /**
- * PreviewSourcesCache 只读回「清理已选缓存源」会动到哪几份公共源的名字，不删任何文件。
- * 界面在用户勾选那一项时调用，让他先看清楚要清的是哪几份源再决定。
+ * PreviewSourcesCache 只读回「清理已选缓存源」会涉及哪几份公共源，以及每份今天是否已经下载过。
+ * 不删任何文件。今天没下载过的那份本来就没有可清的文件，预览里要标出来，
+ * 免得界面列了 N 份、执行只删掉 M 份时看着像漏了一半。
  */
-export function PreviewSourcesCache(itemIDs: string[] | null): $CancellablePromise<string[] | null> {
+export function PreviewSourcesCache(itemIDs: string[] | null): $CancellablePromise<$models.SourceCachePreview[] | null> {
     return $Call.ByID(1636145306, itemIDs);
+}
+
+/**
+ * 清理预览里那颗「检测」：现场重探一条候选池里的地址，把结论刷回那一行，再回给界面。
+ * 判据与检测、应用前复验共用 accelerator.Verdict / detector.ProbeHTTPS，不另起一套标准。
+ * 只改候选池这一行（状态、延迟、测量时间），不碰系统 Hosts、不进任务队列、不清任何缓存。
+ * 
+ * 探测预算跟单次探测一致（2 秒），外面再留 1 秒余量；界面是同步等这一条，不能挂住不动。
+ * 并发也走全进程同一道闸，用户连点几十条不会把同时活动的外部请求数翻倍。
+ */
+export function ReprobeIP(hostname: string, ip: string): $CancellablePromise<$models.PoolEntryView> {
+    return $Call.ByID(705874594, hostname, ip);
 }
 
 /**

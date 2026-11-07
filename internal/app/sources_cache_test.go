@@ -15,22 +15,25 @@ import (
 // fakeSources 记下「清理已选缓存」这一步收到什么清单、按用例需要返回失败或删除结果。
 // 它不落盘：这条命令的单测不许碰本机真实配置目录。
 type fakeSources struct {
-	enabled    bool
-	calls      [][]github.Source
-	removed    []string
-	failWith   error
-	pruneCalls int
+	enabled     bool
+	calls       [][]github.Source
+	removed     []string
+	failWith    error
+	pruneCalls  int
+	cachedToday []string
 }
 
 func (f *fakeSources) ClearCache(srcs []github.Source) ([]string, error) {
 	f.calls = append(f.calls, srcs)
-	if f.failWith != nil {
-		return nil, f.failWith
-	}
-	return f.removed, nil
+	// 真实的 FileCache 是「删掉几份、另外几份失败」一起返回；假件照这个形状，
+	// 才能验「部分失败」时界面看得到已经删掉的那几份。
+	return f.removed, f.failWith
 }
 
 func (f *fakeSources) CacheEnabled() bool { return f.enabled }
+
+// 预览用：假件默认当作「今天都还没下载过」，需要时用例自己塞 cachedToday。
+func (f *fakeSources) CachedToday(_ []github.Source) []string { return f.cachedToday }
 
 // PruneCache 记下启动清理有没有走到公共源这一层（启动时只走一次，界内界外由 github 包自己的用例验）。
 func (f *fakeSources) PruneCache() error {
