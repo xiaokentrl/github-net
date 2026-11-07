@@ -27,6 +27,7 @@ type Caller interface {
 	RestoreItem(itemID string) error
 	RestoreAll() (restored int, err error)
 	State() (hosts.Written, error)
+	Preview() (hosts.RestorePreview, error)
 }
 
 // Client 是 Caller 的真实现：连固定端点、一问一答、答完即关。
@@ -92,6 +93,19 @@ func (c *Client) State() (hosts.Written, error) {
 		return hosts.Written{}, nil
 	}
 	return *resp.Written, nil
+}
+
+// Preview 只读问一次「全量还原之后每个受管理域名的前后对比」。服务答「没写过」时返回零值，
+// 不是错误；连不上或服务拒了才报错，调用方据此区分「确实没得还原」和「问不着」。
+func (c *Client) Preview() (hosts.RestorePreview, error) {
+	resp, err := c.call(Request{Op: OpHostsPreview})
+	if err != nil {
+		return hosts.RestorePreview{}, err
+	}
+	if resp.Preview == nil {
+		return hosts.RestorePreview{}, nil
+	}
+	return *resp.Preview, nil
 }
 
 // call 发一帧、收一帧；把网络层错误归类成上面三类失败，业务拒绝带服务侧的可展示消息。

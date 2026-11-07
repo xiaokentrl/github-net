@@ -156,6 +156,24 @@ export enum HostsAccess {
 };
 
 /**
+ * HostsRestorePreview 是「清除已写入的 Hosts」预览里的前后对比，给前端展示用。
+ * 行里 Before 是当前生效的 IP，After 是还原后的 IP；After 为空表示这条映射将被移除（应用前本来没有）。
+ */
+export interface HostsRestorePreview {
+    "rows": HostsRestoreRow[] | null;
+    "count": number;
+}
+
+/**
+ * HostsRestoreRow 是预览里的一行：某个当前由工具管理的域名，还原前后分别指向哪个 IP。
+ */
+export interface HostsRestoreRow {
+    "hostname": string;
+    "before": string;
+    "after": string;
+}
+
+/**
  * HostsState 是某个项目的 Hosts 状态快照。
  * Revision 单调递增，前端只接受更高的值；Message 只在冲突和读取失败时给出可展示原因。
  * Entries 是逐条主机名的落点：只有区段判读得懂、且和写入记录对得上时才给——
@@ -221,6 +239,16 @@ export enum HostsStatus {
 export interface IPCacheClearResult {
     "rounds": number;
     "addresses": number;
+}
+
+/**
+ * IPCachePreview 是「清理全部 IP 缓存」的预览：报数量、也给明细，界面据此让用户看清要清的是什么。
+ */
+export interface IPCachePreview {
+    "rounds": number;
+    "addresses": number;
+    "domains": number;
+    "entries": PoolEntryView[] | null;
 }
 
 /**

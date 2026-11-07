@@ -100,6 +100,12 @@ func (s *Server) callHandler(req Request) (resp *Response) {
 			return &Response{Code: CodeApplyFailed, Message: err.Error()}
 		}
 		return &Response{OK: true, Written: &written}
+	case OpHostsPreview:
+		preview, err := s.handler.Preview()
+		if err != nil {
+			return &Response{Code: CodeApplyFailed, Message: err.Error()}
+		}
+		return &Response{OK: true, Preview: &preview}
 	}
 	return &Response{Code: CodeBadOp, Message: "不认识的操作"}
 }

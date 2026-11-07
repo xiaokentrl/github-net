@@ -311,6 +311,38 @@ func (s *Service) RestoreAllHosts() (int, error) {
 	return n, nil
 }
 
+// HostsRestorePreview 是「清除已写入的 Hosts」预览里的前后对比，给前端展示用。
+// 行里 Before 是当前生效的 IP，After 是还原后的 IP；After 为空表示这条映射将被移除（应用前本来没有）。
+type HostsRestorePreview struct {
+	Rows  []HostsRestoreRow `json:"rows"`
+	Count int               `json:"count"`
+}
+
+// HostsRestoreRow 是预览里的一行：某个当前由工具管理的域名，还原前后分别指向哪个 IP。
+type HostsRestoreRow struct {
+	Hostname string `json:"hostname"`
+	Before   string `json:"before"`
+	After    string `json:"after"`
+}
+
+// PreviewRestoreHosts 只读算「清除已写入的 Hosts」之后每个受管理域名的前后对比。
+// 不写盘、不进队列；界面在用户勾选那一项时调用，让他先看清楚恢复前和恢复后的差别。
+// 真正的还原仍是 RestoreAllHosts 那一份；这里只把结果翻译成前端要的形状。
+func (s *Service) PreviewRestoreHosts() (HostsRestorePreview, error) {
+	if s.priv == nil {
+		return HostsRestorePreview{}, NewError(CodeHelperUnavailable, "特权辅助服务没在运行，无法预览还原", nil)
+	}
+	preview, err := s.priv.Preview()
+	if err != nil {
+		return HostsRestorePreview{}, privilegePublicError(err)
+	}
+	rows := make([]HostsRestoreRow, 0, len(preview.Rows))
+	for _, r := range preview.Rows {
+		rows = append(rows, HostsRestoreRow{Hostname: r.Hostname, Before: r.Before, After: r.After})
+	}
+	return HostsRestorePreview{Rows: rows, Count: preview.Count}, nil
+}
+
 // OpenHosts 请系统用默认编辑器打开 Hosts 文件。打开动作由后端执行，
 // 前端不碰进程；拿不到可展示失败，不静默。
 func (s *Service) OpenHosts() error {

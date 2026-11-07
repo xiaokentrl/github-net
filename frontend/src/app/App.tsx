@@ -1075,7 +1075,7 @@ export function App() {
       {restoreAllConfirm}
       {clearAsk ? (
         <ClearCacheDialog
-          sourceCount={clearAsk.length}
+          sourceIds={clearAsk}
           hostsDisabled={restoreBusy}
           onCancel={() => setClearAsk(null)}
           onConfirm={(choice) => runClearSelected(choice, restoreAllNow, restoreBusy)}

@@ -14,6 +14,14 @@ type IPCacheClearResult struct {
 	Addresses int `json:"addresses"`
 }
 
+// IPCachePreview 是「清理全部 IP 缓存」的预览：报数量、也给明细，界面据此让用户看清要清的是什么。
+type IPCachePreview struct {
+	Rounds    int             `json:"rounds"`
+	Addresses int             `json:"addresses"`
+	Domains   int             `json:"domains"`
+	Entries   []PoolEntryView `json:"entries"`
+}
+
 // ClearAllIPCache 清掉全部检测缓存。底账没打开（库没接上）时仍要清内存这一份：
 // 界面手上那份旧结论一样是缓存，留着就是「清完了却还看得到」。
 func (s *Service) ClearAllIPCache() (IPCacheClearResult, error) {
@@ -32,4 +40,25 @@ func (s *Service) ClearAllIPCache() (IPCacheClearResult, error) {
 		s.detectResults.clear()
 	}
 	return IPCacheClearResult{}, nil
+}
+
+// PreviewIPCache 只读回「全部 IP 缓存」现在有什么：轮底账数、地址池行数、候选池明细。
+// 不改任何东西，界面在用户勾选「清理全部 IP 缓存」时调用，让他先看清楚再决定。
+func (s *Service) PreviewIPCache() (IPCachePreview, error) {
+	out := IPCachePreview{}
+	if s.candidateStore != nil {
+		rounds, addresses, err := s.candidateStore.CountAll()
+		if err != nil {
+			return out, ToPublicError(err)
+		}
+		out.Rounds = int(rounds)
+		out.Addresses = int(addresses)
+	}
+	pool, err := s.GetCandidatePool()
+	if err != nil {
+		return out, err
+	}
+	out.Entries = pool
+	out.Domains = len(pool)
+	return out, nil
 }

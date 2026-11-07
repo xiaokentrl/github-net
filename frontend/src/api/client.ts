@@ -19,6 +19,9 @@ import {
   CheckForUpdates,
   DownloadUpdate,
   OpenHosts,
+  PreviewIPCache,
+  PreviewRestoreHosts,
+  PreviewSourcesCache,
   RestoreAllHosts,
   RestoreItems,
   SaveSettings,
@@ -26,7 +29,20 @@ import {
   SetLastDetectProfile,
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/service'
 import type { Patch } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
-import type { AppStatus, DetectBudgetPreview, DetectResultView, IPCacheClearResult, ItemsSnapshot, PoolEntryView, SourcesCacheResult, StrategySnapshot } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type {
+  AppStatus,
+  DetectBudgetPreview,
+  DetectResultView,
+  HostsRestorePreview,
+  IPCacheClearResult,
+  IPCachePreview,
+  ItemsSnapshot,
+  PoolEntryView,
+  SourcesCacheResult,
+  StrategySnapshot,
+} from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+// 预览相关的两个返回类型由组件直接使用，从 bindings 透出，组件只认这一层。
+export type { HostsRestorePreview, IPCachePreview } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
@@ -133,7 +149,6 @@ export function selectStrategy(scopeId: string, strategyId: string, expectedRevi
 // 发起检测：后端整批校验（项目在目录里、范围有可用方法、方法适用），不合格整批拒绝。
 // strategyId 给空按范围默认（配置里存的 → 出厂默认「全部公共源」）；给了就整批用它。
 // profile 是本次检测档位：空串沿用设置里的档位；指定值只在这一轮生效，不写回配置。
-// 已在队列里的项目返回同一条任务，不会重复排队。
 export function detectItems(itemIds: string[], strategyId = '', profile = ''): Promise<Task[] | null> {
   return DetectItems(itemIds, strategyId, profile)
 }
@@ -159,6 +174,25 @@ export function clearSourcesCache(itemIds: string[]): Promise<SourcesCacheResult
 // 回执的 rounds / addresses 是真删掉的行数；配置、已生效的 Hosts 和还原依据不动。
 export function clearAllIPCache(): Promise<IPCacheClearResult> {
   return ClearAllIPCache()
+}
+
+// ===== 清理弹框预览 =====
+// 三项都只读：勾了哪一项才拉哪一项，让用户先看清楚要清／还原的是什么再点「立即清理」。
+// 后端同名命令只算不删、不写盘；绑定由 wails 生成，函数名与 Go 方法一致。
+
+// 已选缓存源：勾中项目涉及的公共源名字。wails 对切片返回类型带 null，这里统一兜底成空数组。
+export function previewSourcesCache(itemIds: string[]): Promise<string[]> {
+  return PreviewSourcesCache(itemIds).then((names) => names ?? [])
+}
+
+// 全部 IP 缓存：轮数、地址数、域名数，以及候选池明细（域名 → 当前 IP）。
+export function previewIPCache(): Promise<IPCachePreview> {
+  return PreviewIPCache()
+}
+
+// 清除已写入的 Hosts：每个受管理域名恢复前／后的 IP 对比。
+export function previewRestoreHosts(): Promise<HostsRestorePreview> {
+  return PreviewRestoreHosts()
 }
 
 export function getTasks(): Promise<Snapshot> {

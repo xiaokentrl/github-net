@@ -58,6 +58,13 @@ func (f *fakePriv) State() (hosts.Written, error) {
 	return f.written, nil
 }
 
+func (f *fakePriv) Preview() (hosts.RestorePreview, error) {
+	if f.err != nil {
+		return hosts.RestorePreview{}, f.err
+	}
+	return hosts.RestorePreview{}, nil
+}
+
 // newApplyService 建一个入口+执行器都齐的服务：队列执行器是分发台
 // （检测走可按住的假执行器，应用/恢复走注入的假特权客户端），结果存储由用例预填。
 // 挑地址和写盘前复验都接真方法（Service 自己的那两个），用例只换 s.applyProbe 这个假探测器。

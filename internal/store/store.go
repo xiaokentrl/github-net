@@ -280,6 +280,19 @@ func (s *Store) ClearAll() (int64, int64, error) {
 	return rounds, addresses, nil
 }
 
+// CountAll 只数不清：返回候选底账里的轮数（detect_rounds）和地址池行数（candidate_ips）。
+// 预览「全部 IP 缓存」要看数量，照着这个数就行；库没接上时调用方已按 nil 挡过。
+func (s *Store) CountAll() (int64, int64, error) {
+	var rounds, addresses int64
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM detect_rounds`).Scan(&rounds); err != nil {
+		return 0, 0, fmt.Errorf("store: 数轮数失败: %w", err)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM candidate_ips`).Scan(&addresses); err != nil {
+		return 0, 0, fmt.Errorf("store: 数地址数失败: %w", err)
+	}
+	return rounds, addresses, nil
+}
+
 // Rounds 按时间倒序取最近 limit 轮。limit 不大于 0 就取上限以内全部。
 func (s *Store) Rounds(limit int) ([]RoundRow, error) {
 	q := `SELECT id, task_round, item_id, scope_id, strategy_id, started_at, finished_at,

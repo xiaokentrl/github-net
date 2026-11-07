@@ -39,14 +39,13 @@ type SourcesCacheResult struct {
 	Cleared []string `json:"cleared"`
 }
 
-// ClearSourcesCache 清掉勾中项目所涉及的那几份公共源的当天缓存。
-// 粒度按「勾了哪个菜单就清那个菜单的源」：项目 → 所在加速范围 → 这个范围用哪几份源，去重后一起清。
-// 校验和检测入口同口径——整批先看，一项对不上就整批拒绝、一份都不清，不留「清了一半」的状态。
-func (s *Service) ClearSourcesCache(itemIDs []string) (SourcesCacheResult, error) {
+// involvedSources 把勾中的项目归并到它们所在的加速范围，再收集这些范围用到的公共源（去重）。
+// 只算「要清哪几份源」，不碰磁盘、不删文件；清理和预览共用同一份口径。
+// 返回去重后的源列表和去重后的项目数；项目在目录里查不到就整批报错。
+func (s *Service) involvedSources(itemIDs []string) ([]github.Source, int, error) {
 	if s.productCatalogErr != nil {
-		return SourcesCacheResult{}, ToPublicError(s.productCatalogErr)
+		return nil, 0, ToPublicError(s.productCatalogErr)
 	}
-
 	seen := make(map[string]bool, len(itemIDs))
 	ids := make([]string, 0, len(itemIDs))
 	for _, raw := range itemIDs {
@@ -58,24 +57,20 @@ func (s *Service) ClearSourcesCache(itemIDs []string) (SourcesCacheResult, error
 		ids = append(ids, id)
 	}
 	if len(ids) == 0 {
-		return SourcesCacheResult{}, NewError(CodeInvalidItemID, "没有勾中任何项目，这次没有要清的缓存", nil)
+		return nil, 0, nil
 	}
-
-	// 每个项目归到它所在的加速范围；范围去重，顺序按勾进来的先后。
 	scopes := make([]string, 0, len(ids))
 	inScope := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		_, scopeID, ok := s.findItem(id)
 		if !ok {
-			return SourcesCacheResult{}, NewError(CodeInvalidItemID, "产品目录里没有这个项目，刷新界面后再试", nil)
+			return nil, 0, NewError(CodeInvalidItemID, "产品目录里没有这个项目，刷新界面后再试", nil)
 		}
 		if !inScope[scopeID] {
 			inScope[scopeID] = true
 			scopes = append(scopes, scopeID)
 		}
 	}
-
-	// 范围 → 这个范围的候选来自哪几份源，去重后就是这次要清的清单。
 	sources := make([]github.Source, 0, len(scopes)*3)
 	seenSource := make(map[string]bool, len(scopes)*3)
 	for _, scopeID := range scopes {
@@ -87,8 +82,21 @@ func (s *Service) ClearSourcesCache(itemIDs []string) (SourcesCacheResult, error
 			sources = append(sources, src)
 		}
 	}
+	return sources, len(ids), nil
+}
 
-	result := SourcesCacheResult{Items: len(ids), Sources: sourceNames(sources), Cleared: []string{}}
+// ClearSourcesCache 清掉勾中项目所涉及的那几份公共源的当天缓存。
+// 粒度按「勾了哪个菜单就清那个菜单的源」：项目 → 所在加速范围 → 这个范围用哪几份源，去重后一起清。
+// 校验和检测入口同口径——整批先看，一项对不上就整批拒绝、一份都不清，不留「清了一半」的状态。
+func (s *Service) ClearSourcesCache(itemIDs []string) (SourcesCacheResult, error) {
+	sources, itemCount, err := s.involvedSources(itemIDs)
+	if err != nil {
+		return SourcesCacheResult{}, err
+	}
+	if itemCount == 0 {
+		return SourcesCacheResult{}, NewError(CodeInvalidItemID, "没有勾中任何项目，这次没有要清的缓存", nil)
+	}
+	result := SourcesCacheResult{Items: itemCount, Sources: sourceNames(sources), Cleared: []string{}}
 	if len(sources) == 0 {
 		// 勾中的菜单都不用公共源（比如只有 Steam 那几项）：这不是失败，如实回「没得清」。
 		return result, nil
@@ -105,6 +113,16 @@ func (s *Service) ClearSourcesCache(itemIDs []string) (SourcesCacheResult, error
 	}
 	result.Cleared = sourceNamesByID(sources, removed)
 	return result, nil
+}
+
+// PreviewSourcesCache 只读回「清理已选缓存源」会动到哪几份公共源的名字，不删任何文件。
+// 界面在用户勾选那一项时调用，让他先看清楚要清的是哪几份源再决定。
+func (s *Service) PreviewSourcesCache(itemIDs []string) ([]string, error) {
+	sources, _, err := s.involvedSources(itemIDs)
+	if err != nil {
+		return nil, err
+	}
+	return sourceNames(sources), nil
 }
 
 func sourceNames(srcs []github.Source) []string {

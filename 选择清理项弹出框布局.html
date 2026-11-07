@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>清理与还原 · 弹框</title>
+<style>
+  :root{
+    --text:      #1a1d21;
+    --text-2:    #5b6169;
+    --text-3:    #9097a0;
+    --line:      #e9ebee;
+    --line-2:    #dfe2e6;
+    --brand:     #2563eb;
+    --brand-bg:  #f6f9ff;
+    --brand-bd:  #c3d5fb;
+    --ok:        #0f9d58;
+    --ok-bg:     #e9f7ef;
+    --warn:      #b45309;
+    --warn-bg:   #fdf3e3;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background:#eef0f3;
+    display:grid; place-items:center;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sr-only{
+    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+  }
+  [hidden]{ display:none !important; }
+
+  /* ---------- 遮罩 ---------- */
+  .overlay{
+    position:fixed; inset:0;
+    background: rgba(16,20,26,.42);
+    display:grid; place-items:center;
+    padding:20px;
+  }
+
+  /* ---------- 弹框 ---------- */
+  .dialog{
+    width: min(820px, 100%);
+    height: min(620px, 88vh);
+    background:#fff;
+    border-radius:16px;
+    display:flex; flex-direction:column;
+    overflow:hidden;
+    box-shadow: 0 18px 48px -14px rgba(16,24,40,.26);
+  }
+
+  /* ---------- 头部：标题居中 ---------- */
+  .dialog-head{
+    position:relative;
+    flex:none;
+    padding:18px 44px 14px;
+    text-align:center;
+  }
+  .dialog-head h2{
+    margin:0 0 5px; font-size:16.5px; font-weight:650; letter-spacing:.2px;
+  }
+  .dialog-head p{
+    margin:0; font-size:12.5px; line-height:1.55; color: var(--text-2);
+  }
+  .btn-close{
+    position:absolute; top:14px; right:16px;
+    width:28px; height:28px; border:none; border-radius:8px;
+    background:transparent; color: var(--text-3);
+    display:grid; place-items:center; cursor:pointer;
+    transition: background .15s, color .15s;
+  }
+  .btn-close:hover{ background:#f2f3f5; color:#4b5563; }
+
+  /* ---------- 主体：左列表 + 右详情 ---------- */
+  .dialog-main{
+    flex:1; min-height:0;
+    display:flex;
+    overflow:hidden;
+  }
+
+  /* ----- 左侧卡片列 ----- */
+  .opt-list{
+    width: 288px; flex:none;
+    padding: 0 0 14px 20px;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+  }
+  .opt-list::-webkit-scrollbar{ width:6px; }
+  .opt-list::-webkit-scrollbar-thumb{ background:#dcdfe4; border-radius:3px; }
+
+  .opt{
+    border:1px solid var(--line);
+    border-radius:11px;
+    background:#fff;
+    margin-bottom:9px;
+    transition: border-color .16s, background .16s;
+  }
+  .opt:hover{ border-color: var(--line-2); }
+  .opt:has(.opt-check:checked){
+    border-color: var(--brand-bd);
+    background: var(--brand-bg);
+  }
+  .opt.is-active{ border-color: var(--brand); }
+
+  .opt-head{
+    display:flex; align-items:flex-start; gap:10px;
+    padding:12px 11px 12px 13px;
+  }
+
+  .cb{
+    flex:none; width:17px; height:17px; margin-top:1px;
+    border-radius:5px;
+    border:1.5px solid var(--line-2);
+    background:#fff;
+    display:grid; place-items:center;
+    cursor:pointer;
+    transition: background .16s, border-color .16s;
+  }
+  .cb svg{ width:11px; height:11px; color:#fff; opacity:0; transition:opacity .12s; }
+  .opt:has(.opt-check:checked) .cb{
+    background: var(--brand); border-color: var(--brand);
+  }
+  .opt:has(.opt-check:checked) .cb svg{ opacity:1; }
+  .opt:has(.opt-check:focus-visible) .cb{
+    outline:2px solid var(--brand); outline-offset:2px;
+  }
+
+  .opt-info{ flex:1; min-width:0; cursor:pointer; }
+  .opt-title{
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+    font-size:13px; font-weight:600; line-height:18px;
+  }
+  .opt-desc{
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden;
+    margin-top:3px;
+    font-size:11.5px; line-height:1.55; color: var(--text-2);
+  }
+
+  .tag{
+    font-size:10.5px; font-weight:500; line-height:1;
+    padding:3px 6px; border-radius:5px;
+    background:#f1f2f4; color:#6b7280;
+    transition: background .16s, color .16s;
+  }
+  .opt:has(.opt-check:checked) .tag{
+    background:#e4edff; color: var(--brand);
+  }
+
+  /* 「详情」按钮 */
+  .opt-expand{
+    flex:none;
+    display:inline-flex; align-items:center; gap:1px;
+    height:25px; margin-top:-1px;
+    padding:0 7px 0 8px;
+    border:none; border-radius:7px;
+    background:#f4f5f7; color:#6b7280;
+    font-family:inherit; font-size:11.5px; font-weight:500;
+    cursor:pointer; white-space:nowrap;
+    transition: background .15s, color .15s;
+  }
+  .opt-expand svg{ width:11px; height:11px; margin-top:.5px; }
+  .opt-expand:hover{ background:#e9ebee; color:#374151; }
+  .opt.is-active .opt-expand{
+    background:#e4edff; color: var(--brand);
+  }
+
+  /* ----- 右侧详情面板 ----- */
+  .detail-panel{
+    flex:1; min-width:0;
+    display:flex; flex-direction:column;
+    border-left:1px solid var(--line);
+    overflow:hidden;
+  }
+
+  .detail-empty{
+    flex:1;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    gap:10px;
+    color: var(--text-3);
+    padding:20px;
+  }
+  .detail-empty .empty-icon{
+    width:40px; height:40px; border-radius:11px;
+    background:#f4f5f7;
+    display:grid; place-items:center;
+    color:#b6bcc4;
+  }
+  .detail-empty p{ margin:0; font-size:12.5px; }
+
+  .detail-body{
+    flex:1; overflow-y:auto; overflow-x:auto;
+    padding: 13px 16px 16px;
+    overscroll-behavior:contain;
+  }
+  .detail-body::-webkit-scrollbar{ width:7px; height:7px; }
+  .detail-body::-webkit-scrollbar-thumb{
+    background:#dcdfe4; border-radius:4px;
+    border:2px solid #fff;
+  }
+
+  .detail-head{
+    display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+    margin-bottom:10px;
+  }
+  .detail-head h3{
+    margin:0; font-size:13.5px; font-weight:650; line-height:1.4;
+  }
+  .detail-sub{
+    font-size:11.5px; color: var(--text-3);
+  }
+  .detail-note{
+    margin:10px 0 0;
+    font-size:11.5px; line-height:1.65; color: var(--text-2);
+    padding:8px 10px;
+    background:#f7f8fa;
+    border-radius:8px;
+  }
+
+  /* ---------- 表格通用 ---------- */
+  .tbl{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    table-layout:fixed;
+    font-size:11.5px;
+  }
+  .tbl th{
+    text-align:left;
+    font-weight:600;
+    font-size:10.5px;
+    letter-spacing:.2px;
+    color:#9097a0;
+    background:#f6f7f9;
+    padding:6px 8px;
+    white-space:nowrap;
+  }
+  .tbl th:first-child{ border-radius:7px 0 0 7px; }
+  .tbl th:last-child{ border-radius:0 7px 7px 0; }
+  .tbl td{
+    padding:6px 8px;
+    border-bottom:1px solid #f1f2f4;
+    vertical-align:top;
+    color:#3f454d;
+  }
+  .tbl tbody tr:last-child td{ border-bottom:none; }
+  .tbl tbody tr:hover td{ background:#fafbfc; }
+  .tbl .mono{
+    font-family: var(--mono);
+    font-size:11px;
+    word-break:break-all;
+    line-height:1.45;
+  }
+
+  /* ---------- IP 分组表格（四列） ---------- */
+  .ip-table{ min-width: 420px; }
+  .ip-table col.c-group{ width: 19%; }
+  .ip-table col.c-host{ width: 49%; }
+  .ip-table col.c-last{ width: 18%; }
+  .ip-table col.c-act{ width: 14%; }
+
+  .group-cell{
+    font-size:11px; font-weight:600; color:#4b5563;
+    white-space:nowrap;
+    padding-top:8px !important;
+  }
+  .group-arrow{
+    display:inline-block;
+    margin-right:3px;
+    font-size:9px;
+    color:#b0b6be;
+  }
+
+  .host-cell{ line-height:1.4; }
+  .host-line1{
+    display:flex; align-items:center; gap:5px; flex-wrap:wrap;
+  }
+  .host-domain{
+    font-family: var(--mono);
+    font-size:10.5px; color:#374151;
+    word-break:break-all;
+  }
+  .host-line2{
+    margin-top:2px;
+    font-family: var(--mono);
+    font-size:10px; color:#9aa1aa;
+    word-break:break-all;
+  }
+  .host-line2.is-empty{ color:#c6cbd1; }
+
+  .status{
+    flex:none;
+    font-size:9.5px; font-weight:500; line-height:1;
+    padding:2px 5px; border-radius:4px;
+    white-space:nowrap;
+  }
+  .status.written{ background: var(--ok-bg); color: var(--ok); }
+  .status.unwritten{ background:#f2f3f5; color:#9097a0; }
+
+  .col-dash{
+    text-align:center;
+    color:#c6cbd1;
+    font-family:var(--mono);
+    font-size:11px;
+    padding-top:9px !important;
+  }
+  .col-action{ text-align:center; padding-top:7px !important; }
+
+  .btn-detect{
+    font-family:inherit;
+    font-size:10.5px; font-weight:500;
+    padding:3px 9px;
+    border:1px solid var(--line-2);
+    border-radius:5px;
+    background:#fff;
+    color:#4b5563;
+    cursor:pointer;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .btn-detect:hover{
+    background: var(--brand-bg);
+    border-color: var(--brand-bd);
+    color: var(--brand);
+  }
+  .btn-detect:disabled{ opacity:.6; cursor:default; }
+
+  /* Hosts 对比列宽 */
+  .hosts-table col.c-domain{ width: 46%; }
+  .hosts-table col.c-before{ width: 33%; }
+  .hosts-table col.c-after{ width: 21%; }
+  .host-ip{
+    color:#9aa1aa;
+    text-decoration: line-through;
+    text-decoration-color:#d4d8dd;
+  }
+  .host-tag{
+    display:inline-block;
+    font-size:10.5px; line-height:1;
+    padding:3px 6px; border-radius:5px;
+    background:#f2f3f5; color:#6b7280;
+    white-space:nowrap;
+  }
+
+  /* ---------- 底部 ---------- */
+  .dialog-foot{
+    flex:none;
+    display:flex; align-items:center; gap:12px;
+    padding:12px 20px 16px;
+    border-top:1px solid var(--line);
+  }
+  .hint{
+    font-size:12px; color: var(--text-3);
+    transition: color .15s;
+  }
+  .hint.is-active{ color: var(--brand); }
+  .actions{ margin-left:auto; display:flex; gap:9px; }
+
+  .btn{
+    font-family:inherit;
+    font-size:13px; font-weight:500;
+    padding:8px 16px; border-radius:8px;
+    border:1px solid transparent;
+    cursor:pointer;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .btn.ghost{
+    background:#fff; border-color: var(--line-2); color:#4b5563;
+  }
+  .btn.ghost:hover{ background:#f7f8fa; border-color:#cfd4da; }
+  .btn.primary{ background: var(--brand); color:#fff; }
+  .btn.primary:hover{ background:#1d4fd8; }
+  .btn.primary:disabled{
+    background:#e6e8ec; color:#a8aeb6; cursor:not-allowed;
+  }
+
+  /* ---------- 响应式 ---------- */
+  @media (max-width: 760px){
+    .dialog{ height: min(720px, 92vh); }
+    .dialog-main{ flex-direction:column; }
+    .opt-list{
+      width:100%;
+      padding: 0 16px 6px;
+      flex:none;
+      max-height: 44%;
+    }
+    .detail-panel{
+      border-left:none;
+      border-top:1px solid var(--line);
+      min-height:0;
+    }
+    .detail-body{ padding: 12px 16px 16px; }
+    .dialog-foot{ padding:12px 16px 14px; flex-wrap:wrap; }
+    .actions{ width:100%; }
+    .actions .btn{ flex:1; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="overlay">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+
+    <!-- 头部：标题居中 -->
+    <div class="dialog-head">
+      <h2 id="dlgTitle">清理与还原</h2>
+      <p>勾选要清理或还原的内容，三项可任意组合；默认都不选。</p>
+      <button class="btn-close" aria-label="关闭">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+          <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- 主体：左列表 + 右详情 -->
+    <div class="dialog-main">
+
+      <!-- 左侧卡片列 -->
+      <div class="opt-list">
+
+        <!-- ① 清理已选缓存源 -->
+        <section class="opt" data-key="cache">
+          <input class="opt-check sr-only" type="checkbox" id="opt-cache">
+          <div class="opt-head">
+            <label class="cb" for="opt-cache" aria-label="清理已选缓存源">
+              <svg viewBox="0 0 16 16" fill="none">
+                <path d="M3.4 8.4l3 3 6.2-7" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </label>
+            <label class="opt-info" for="opt-cache">
+              <span class="opt-title">
+                清理已选缓存源
+                <span class="tag">3 份</span>
+              </span>
+              <span class="opt-desc">
+                清掉勾中的 6 项涉及的公共源当天缓存，下一轮检测会重新下载。
+              </span>
+            </label>
+            <button class="opt-expand" aria-label="在右侧查看缓存源详情">
+              详情
+              <svg viewBox="0 0 16 16" fill="none">
+                <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.8"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </section>
+
+        <!-- ② 清理全部 IP 缓存 -->
+        <section class="opt" data-key="ip">
+          <input class="opt-check sr-only" type="checkbox" id="opt-ip">
+          <div class="opt-head">
+            <label class="cb" for="opt-ip" aria-label="清理全部 IP 缓存">
+              <svg viewBox="0 0 16 16" fill="none">
+                <path d="M3.4 8.4l3 3 6.2-7" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </label>
+            <label class="opt-info" for="opt-ip">
+              <span class="opt-title">
+                清理全部 IP 缓存
+                <span class="tag">16 条</span>
+              </span>
+              <span class="opt-desc">
+                清掉所有检测轮底账、候选记录和地址池，配置与已生效 Hosts 不动。
+              </span>
+            </label>
+            <button class="opt-expand" aria-label="在右侧查看 IP 缓存详情">
+              详情
+              <svg viewBox="0 0 16 16" fill="none">
+                <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.8"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </section>
+
+        <!-- ③ 清除 Hosts -->
+        <section class="opt" data-key="hosts">
+          <input class="opt-check sr-only" type="checkbox" id="opt-hosts">
+          <div class="opt-head">
+            <label class="cb" for="opt-hosts" aria-label="清除已写入的 Hosts">
+              <svg viewBox="0 0 16 16" fill="none">
+                <path d="M3.4 8.4l3 3 6.2-7" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </label>
+            <label class="opt-info" for="opt-hosts">
+              <span class="opt-title">
+                清除 Hosts，恢复原 IP
+                <span class="tag">8 个域名</span>
+              </span>
+              <span class="opt-desc">
+                把本工具写进系统 Hosts 的域名全部退回应用前状态。
+              </span>
+            </label>
+            <button class="opt-expand" aria-label="在右侧查看 Hosts 对比详情">
+              详情
+              <svg viewBox="0 0 16 16" fill="none">
+                <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.8"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- 右侧详情面板 -->
+      <div class="detail-panel">
+
+        <!-- 空状态 -->
+        <div class="detail-empty" id="detailEmpty">
+          <div class="empty-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <rect x="3.5" y="4.5" width="17" height="15" rx="2"
+                    stroke="currentColor" stroke-width="1.5"/>
+              <path d="M14 4.5v15" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <p>点击左侧「详情」在右侧查看</p>
+        </div>
+
+        <!-- 缓存源详情 -->
+        <div class="detail-body" data-panel="cache" hidden>
+          <div class="detail-head">
+            <h3>清理已选缓存源</h3>
+            <span class="detail-sub">涉及 3 份缓存源</span>
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th style="width:40px">#</th>
+                <th>缓存源</th>
+              </tr>
+            </thead>
+            <tbody id="cacheBody"></tbody>
+          </table>
+          <p class="detail-note">
+            清掉勾中的 6 项涉及的公共源当天缓存，下一轮检测会重新下载；已经测出的 IP 结论不动。
+          </p>
+        </div>
+
+        <!-- IP 缓存详情：四列（已删除「检测最优 IP」「可用候选」） -->
+        <div class="detail-body" data-panel="ip" hidden>
+          <div class="detail-head">
+            <h3>清理全部 IP 缓存</h3>
+            <span class="detail-sub">6 轮底账 · 16 条地址 · 8 个域名</span>
+          </div>
+          <table class="tbl ip-table">
+            <colgroup>
+              <col class="c-group">
+              <col class="c-host">
+              <col class="c-last">
+              <col class="c-act">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>二级菜单</th>
+                <th>可写 Hosts</th>
+                <th style="text-align:center">上次检测</th>
+                <th style="text-align:center">操作</th>
+              </tr>
+            </thead>
+            <tbody id="ipTableBody"></tbody>
+          </table>
+          <p class="detail-note">
+            清掉所有检测轮底账、候选记录和地址池。列表里的「检测最优 IP／可用候选／上次检测」会一起清空；配置、已生效的 Hosts 和还原依据不动。
+          </p>
+        </div>
+
+        <!-- Hosts 对比详情 -->
+        <div class="detail-body" data-panel="hosts" hidden>
+          <div class="detail-head">
+            <h3>清除 Hosts，恢复原来的 IP</h3>
+            <span class="detail-sub">8 个域名</span>
+          </div>
+          <table class="tbl hosts-table">
+            <colgroup>
+              <col class="c-domain">
+              <col class="c-before">
+              <col class="c-after">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>域名</th>
+                <th>恢复前</th>
+                <th>恢复后</th>
+              </tr>
+            </thead>
+            <tbody id="hostBody"></tbody>
+          </table>
+          <p class="detail-note">
+            把本工具写进系统 Hosts 的域名全部退回应用前状态；你自己写的 Hosts 内容不动，检测结论也不清。
+          </p>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 底部 -->
+    <div class="dialog-foot">
+      <span class="hint" id="hint">尚未选择任何项</span>
+      <div class="actions">
+        <button class="btn ghost" id="btnCancel">先不清理</button>
+        <button class="btn primary" id="btnConfirm" disabled>立即清理</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ================= 数据 ================= */
+const CACHE_SOURCES = [
+  'GitCDN 公共源',
+  'HelloGitHub 公共源',
+  'GitLab 公共源（ineo6）',
+];
+
+/* 按二级菜单分组的 Hosts / IP 数据 */
+const IP_TABLE_GROUPS = [
+  {
+    name: '主站与 API',
+    hosts: [
+      { status: 'written',   domain: 'github.com',            ip: '20.205.243.166' },
+      { status: 'written',   domain: 'api.github.com',        ip: '172.182.252.137' },
+      { status: 'unwritten', domain: 'gist.github.com',       ip: '—' },
+    ],
+  },
+  {
+    name: 'Raw 文件',
+    hosts: [
+      { status: 'written', domain: 'raw.githubusercontent.com', ip: '185.199.110.133' },
+    ],
+  },
+  {
+    name: 'Release 资产',
+    hosts: [
+      { status: 'written', domain: 'objects.githubusercontent.com', ip: '185.199.111.133' },
+    ],
+  },
+  {
+    name: '图片与头像',
+    hosts: [
+      { status: 'written', domain: 'avatars.githubusercontent.com',      ip: '185.199.109.133' },
+      { status: 'written', domain: 'user-images.githubusercontent.com',  ip: '185.199.110.133' },
+    ],
+  },
+  {
+    name: '静态资源 CDN',
+    hosts: [
+      { status: 'written',   domain: 'github.githubassets.com',           ip: '185.199.109.215' },
+      { status: 'unwritten', domain: 'github.global.ssl.fastly.net',      ip: '—' },
+    ],
+  },
+  {
+    name: 'Actions',
+    hosts: [
+      { status: 'written', domain: 'pipelines.actions.githubusercontent.com', ip: '13.107.42.16' },
+    ],
+  },
+];
+
+const HOST_ROWS = [
+  ['api.github.com',                     '172.182.252.137'],
+  ['avatars.githubusercontent.com',      '185.199.109.133'],
+  ['github.com',                         '20.205.243.166'],
+  ['github.githubassets.com',            '185.199.109.215'],
+  ['objects.githubusercontent.com',      '185.199.111.133'],
+  ['pipelines.actions.githubusercontent.com', '13.107.42.16'],
+  ['raw.githubusercontent.com',          '185.199.110.133'],
+  ['user-images.githubusercontent.com',  '185.199.110.133'],
+];
+
+/* ================= 渲染 ================= */
+
+/* 缓存源表格 */
+document.getElementById('cacheBody').innerHTML = CACHE_SOURCES.map((name, i) => `
+  <tr>
+    <td class="mono" style="color:#a8aeb6">${i + 1}</td>
+    <td>${name}</td>
+  </tr>
+`).join('');
+
+/* IP 缓存表格：四列，按二级菜单合并单元格 */
+document.getElementById('ipTableBody').innerHTML = IP_TABLE_GROUPS.map(group => {
+  return group.hosts.map((h, i) => {
+    const groupCell = i === 0
+      ? `<td class="group-cell" rowspan="${group.hosts.length}">
+           <span class="group-arrow">▸</span>${group.name}
+         </td>`
+      : '';
+    const statusText = h.status === 'written' ? '已写' : '未写';
+    const statusCls  = h.status === 'written' ? 'written' : 'unwritten';
+    const ipEmpty    = h.ip === '—';
+    return `<tr>
+      ${groupCell}
+      <td class="host-cell">
+        <div class="host-line1">
+          <span class="status ${statusCls}">${statusText}</span>
+          <span class="host-domain">${h.domain}</span>
+        </div>
+        <div class="host-line2 ${ipEmpty ? 'is-empty' : ''}">→ ${h.ip}</div>
+      </td>
+      <td class="col-dash">—</td>
+      <td class="col-action"><button class="btn-detect" type="button">检测</button></td>
+    </tr>`;
+  }).join('');
+}).join('');
+
+/* Hosts 对比表格 */
+document.getElementById('hostBody').innerHTML = HOST_ROWS.map(([domain, ip]) => `
+  <tr>
+    <td class="mono" title="${domain}">${domain}</td>
+    <td class="mono host-ip">${ip}</td>
+    <td><span class="host-tag" title="原无映射">移除</span></td>
+  </tr>
+`).join('');
+
+/* ================= 交互 ================= */
+const opts       = [...document.querySelectorAll('.opt')];
+const panels     = [...document.querySelectorAll('.detail-body')];
+const empty      = document.getElementById('detailEmpty');
+const hint       = document.getElementById('hint');
+const btnOk      = document.getElementById('btnConfirm');
+const btnCancel  = document.getElementById('btnCancel');
+
+let activeKey = null;
+
+function renderPanel() {
+  opts.forEach(o => o.classList.toggle('is-active', o.dataset.key === activeKey));
+  panels.forEach(p => { p.hidden = p.dataset.panel !== activeKey; });
+  empty.hidden = activeKey !== null;
+}
+
+/* 点击「详情」：在右侧展开 / 收起该卡片详情 */
+document.querySelectorAll('.opt-expand').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const key = btn.closest('.opt').dataset.key;
+    activeKey = (activeKey === key) ? null : key;
+    renderPanel();
+  });
+});
+
+/* 表格内「检测」按钮：占位交互 */
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.btn-detect');
+  if (!btn) return;
+  btn.textContent = '检测中';
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = '检测';
+    btn.disabled = false;
+  }, 900);
+});
+
+/* 勾选状态与底部按钮 */
+function updateFooter() {
+  const n = opts.filter(o => o.querySelector('.opt-check').checked).length;
+  hint.textContent = n ? `已选择 ${n} 项` : '尚未选择任何项';
+  hint.classList.toggle('is-active', n > 0);
+  btnOk.disabled = n === 0;
+}
+
+opts.forEach(card => {
+  card.querySelector('.opt-check')
+      .addEventListener('change', updateFooter);
+});
+updateFooter();
+
+/* 关闭类操作 */
+function close() {
+  document.querySelector('.overlay').style.display = 'none';
+}
+document.querySelector('.btn-close').addEventListener('click', close);
+btnCancel.addEventListener('click', close);
+btnOk.addEventListener('click', () => {
+  const picked = opts
+    .filter(o => o.querySelector('.opt-check').checked)
+    .map(o => o.dataset.key);
+  console.log('执行清理：', picked);
+  close();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') close();
+});
+</script>
+</body>
+</html>

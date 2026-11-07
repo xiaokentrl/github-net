@@ -204,6 +204,31 @@ export function Ping(token: string): $CancellablePromise<string> {
 }
 
 /**
+ * PreviewIPCache 只读回「全部 IP 缓存」现在有什么：轮底账数、地址池行数、候选池明细。
+ * 不改任何东西，界面在用户勾选「清理全部 IP 缓存」时调用，让他先看清楚再决定。
+ */
+export function PreviewIPCache(): $CancellablePromise<$models.IPCachePreview> {
+    return $Call.ByID(3662049171);
+}
+
+/**
+ * PreviewRestoreHosts 只读算「清除已写入的 Hosts」之后每个受管理域名的前后对比。
+ * 不写盘、不进队列；界面在用户勾选那一项时调用，让他先看清楚恢复前和恢复后的差别。
+ * 真正的还原仍是 RestoreAllHosts 那一份；这里只把结果翻译成前端要的形状。
+ */
+export function PreviewRestoreHosts(): $CancellablePromise<$models.HostsRestorePreview> {
+    return $Call.ByID(2628185047);
+}
+
+/**
+ * PreviewSourcesCache 只读回「清理已选缓存源」会动到哪几份公共源的名字，不删任何文件。
+ * 界面在用户勾选那一项时调用，让他先看清楚要清的是哪几份源再决定。
+ */
+export function PreviewSourcesCache(itemIDs: string[] | null): $CancellablePromise<string[] | null> {
+    return $Call.ByID(1636145306, itemIDs);
+}
+
+/**
  * RestoreAllHosts 把全部还由工具管理的项目一次退回应用前状态，返回实际还原的项目数。
  * 这是服务侧一笔原子操作、没有进度可言，所以不进队列：单独一条命令直接完成，
  * 失败原样上抛给界面（错误码区分「服务没在跑」和「服务拒了」）。
