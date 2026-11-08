@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 
 	appsvc "github.com/xiaokentrl/github-net/internal/app"
+	"github.com/xiaokentrl/github-net/internal/config"
 	"github.com/xiaokentrl/github-net/internal/event"
 	"github.com/xiaokentrl/github-net/internal/task"
 )
@@ -30,6 +33,13 @@ const (
 	appID      = "io.github.xiaokentrl.githubnet"
 )
 
+// windowGeometryPath 给窗口几何落盘文件的路径：与用户配置同目录的 window.json。
+// 单独一个文件不走 config 的 revision 语义——拖窗口不该和设置保存抢版本号。
+func windowGeometryPath(store *config.Store) (string, error) {
+	dir := filepath.Dir(store.Path())
+	return filepath.Join(dir, "window.json"), nil
+}
+
 // trayThemes 是托盘「主题」子菜单的六套配色（id 与前端 themes.ts、config 校验同一份口径；
 // 显示名跟着前端 themes.ts 的中文名，改名字两边一起改）。
 var trayThemes = []struct{ id, name string }{
@@ -42,6 +52,13 @@ var trayThemes = []struct{ id, name string }{
 }
 
 func main() {
+	// 统一走 XWayland（拍板 2026-11-09）：Wayland 原生会话禁止应用自摆 toplevel 位置，
+	// 收托盘、召回、重启后全靠合成器摆位，窗口位置永远保不住；X11 后端下
+	// position/move 全部生效，几何落盘与恢复才真正工作。Ubuntu 桌面必带 XWayland。
+	// 用户显式设了 GDK_BACKEND 就尊重用户的选择，不覆盖。
+	if os.Getenv("GDK_BACKEND") == "" {
+		_ = os.Setenv("GDK_BACKEND", "x11")
+	}
 	emitter := &event.StatusEmitter{}
 	ctx, cancel := context.WithCancel(context.Background())
 	windowFocusRequests := make(chan struct{}, 1)
@@ -107,10 +124,31 @@ func main() {
 		close(windowReady)
 	})
 
+	// 窗口几何落盘与恢复（拍板 2026-11-09）：收托盘/退出前把位置、尺寸、最大化记进
+	// window.json（与配置同目录），下次建窗时恢复。尺寸和最大化全平台有效；
+	// 位置只有 X11 能恢复——Wayland 协议禁止应用自摆 toplevel 位置，合成器说了算。
+	type windowGeometry struct {
+		X, Y      int
+		Width     int
+		Height    int
+		Maximised bool
+	}
+	geo := windowGeometry{Width: 1280, Height: 800}
+	if geoPath, err := windowGeometryPath(service.SettingsStore()); err == nil {
+		if data, err := os.ReadFile(geoPath); err == nil {
+			_ = json.Unmarshal(data, &geo)
+		}
+	}
+	// 兜底：记到的是坏值（如窗口还没显示过、多屏切换后的怪数）就回默认尺寸。
+	if geo.Width < 400 || geo.Height < 300 {
+		geo.Width, geo.Height = 1280, 800
+		geo.X, geo.Y, geo.Maximised = 0, 0, false
+	}
+
 	window := platformApp.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            appName,
-		Width:            1280,
-		Height:           800,
+		Width:            geo.Width,
+		Height:           geo.Height,
 		BackgroundColour: application.NewRGB(247, 248, 250),
 		URL:              "/",
 		// 启动后最小化：窗口直接以隐藏方式创建，托盘里照样能唤回。
@@ -119,6 +157,14 @@ func main() {
 		// 拖动和四边缩放由 Wails 运行时接：顶栏标 --wails-draggable:drag，缩放条自动加在窗口边缘。
 		Frameless: true,
 	})
+	// 恢复最大化状态：Wayland 上尺寸由 default size 生效，最大化状态这里补。
+	if geo.Maximised {
+		window.Maximise()
+	}
+	// 位置恢复只对 X11 有效（Wayland 上 SetPosition 是空操作）；0,0 视为「没记到位置」。
+	if geo.X != 0 || geo.Y != 0 {
+		window.SetPosition(geo.X, geo.Y)
+	}
 
 	// 关窗到托盘：两条关窗路都要走同一套判断——
 	// 系统发来的 delete-event（窗口管理器快捷键）走 Linux.WindowDeleteEvent；
@@ -129,6 +175,19 @@ func main() {
 		cfg, err := service.GetSettings()
 		return err == nil && cfg.Startup.CloseToTray
 	}
+	// saveWindowGeometry 在窗口即将离开眼前（收托盘、退出）时记下几何。
+	// 放这几个时机而不是拖动时逐次写：拖动高频写盘没必要，这几个点必然是「关闭前的样子」。
+	saveWindowGeometry := func() {
+		w, h := window.Size()
+		x, y := window.Position()
+		data, err := json.Marshal(windowGeometry{X: x, Y: y, Width: w, Height: h, Maximised: window.IsMaximised()})
+		if err != nil {
+			return
+		}
+		if path, err := windowGeometryPath(service.SettingsStore()); err == nil {
+			_ = os.WriteFile(path, data, 0o600)
+		}
+	}
 	// 收进托盘用 Minimise 不用 Hide（拍板 2026-11-09）：Wayland 禁止应用自摆 toplevel 位置，
 	// Hide 再 Show 会由合成器重新摆位（窗口跳回中间）；最小化不销毁窗口映射，
 	// 合成器记得原位置，唤回时原位恢复。X11 上两种方式都保位置，统一走最小化。
@@ -137,6 +196,7 @@ func main() {
 			return
 		}
 		e.Cancel()
+		saveWindowGeometry()
 		window.Minimise()
 	})
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
@@ -144,6 +204,7 @@ func main() {
 			return
 		}
 		e.Cancel()
+		saveWindowGeometry()
 		window.Minimise()
 	})
 
@@ -175,6 +236,9 @@ func main() {
 	// 不用默认的 ToggleWindow——它会藏窗口还会按托盘位置重新定位；
 	// 只 Restore+Show+Focus，点多少次窗口都不动位置。右键菜单照旧。
 	tray.OnClick(requestWindowFocus)
+	// 双击显式走同一条唤回：有些宿主把双击拆成两次单击，幂等操作点几遍都一样；
+	// 也防宿主给了独立双击回调却落到默认行为上。
+	tray.OnDoubleClick(requestWindowFocus)
 
 	// 托盘菜单：显示/隐藏/退出 + 「主题」子菜单（六套，当前项勾选）。
 	// 切主题走配置服务保存并向前端发 settings:changed；菜单整体重建让勾选跟到新主题上。
@@ -182,7 +246,10 @@ func main() {
 	buildTrayMenu = func() *application.Menu {
 		menu := application.NewMenu()
 		menu.Add("显示主窗口").OnClick(func(*application.Context) { requestWindowFocus() })
-		menu.Add("最小化到托盘").OnClick(func(*application.Context) { window.Minimise() })
+		menu.Add("最小化到托盘").OnClick(func(*application.Context) {
+			saveWindowGeometry()
+			window.Minimise()
+		})
 		menu.AddSeparator()
 		themeMenu := menu.AddSubmenu("主题")
 		current := ""
@@ -203,7 +270,10 @@ func main() {
 			})
 		}
 		menu.AddSeparator()
-		menu.Add("退出").OnClick(func(*application.Context) { platformApp.Quit() })
+		menu.Add("退出").OnClick(func(*application.Context) {
+			saveWindowGeometry()
+			platformApp.Quit()
+		})
 		return menu
 	}
 	tray.SetMenu(buildTrayMenu())
@@ -270,6 +340,9 @@ func main() {
 		platformApp.Logger.Info("已收到运行时状态事件", "name", e.Name)
 	})
 	cleanup = func() {
+		// 退出前记一次窗口几何：不是从托盘收起而是真退出的路（关窗退出/退出菜单之外的
+		// 信号、崩溃前 由 OnShutdown 触发的），也要拿到「关闭前的样子」。窗口此刻未销毁。
+		saveWindowGeometry()
 		cancel()
 		appsvc.ShutdownTaskQueue(service)
 		unsubscribeTaskProgress()
