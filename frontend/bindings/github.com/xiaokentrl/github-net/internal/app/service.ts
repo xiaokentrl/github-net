@@ -233,7 +233,7 @@ export function PreviewRestoreHostsItem(itemID: string): $CancellablePromise<$mo
 
 /**
  * PreviewRestoreHostsItems 只读算「把这几个二级菜单按给定顺序一起还原」之后的前后对比，
- * 给「还原本菜单」弹框用。执行侧是同一批 itemIDs 按目录顺序排队、串行逐条还原，
+ * 给「还原本菜单」弹框用。执行侧与预览同一批 itemIDs、同一调用方顺序排队（uniqueKnownItems 保序不排序）、串行逐条还原，
  * 共享域名的最终 IP 由最后释放的那个项目决定，所以必须一次联合算完，
  * 不能拿 N 份单项目预览去合并。
  */
