@@ -3,15 +3,6 @@
    卡头那排小钮是 .candidate-actions（第 298–300 行）。
    按钮本身一律走 components/ui 那一份配方，这里不再画按钮。 */
 
-/* 卡头那排小钮：靠右、挤不下就折行（原型 .candidate-actions 第 298–300 行）。 */
-.candidateActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-
 .blockFailed {
   color: var(--red);
   font-family: inherit;

@@ -20,6 +20,7 @@
   "toolbar.invertChecked": "反選",
   "toolbar.fold": "摺疊",
   "toolbar.foldTitle": "摺疊 / 展開所有類別",
+  "toolbar.expand": "展開",
   "toolbar.mode.label": "寫入模式",
   "toolbar.mode.hosts": "模式：Hosts",
   "toolbar.mode.proxy": "系統代理（未啟用）",

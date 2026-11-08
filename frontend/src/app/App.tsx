@@ -432,6 +432,13 @@ export function App() {
     return ids.length > 0 && ids.every((id) => checkedIds.has(id))
   }, [snapshot, checkedIds])
 
+  // 「折叠」按钮同一条规矩：全部展开时显示「折叠」，只要有一类收着就显示「展开」——
+  // 按钮写结果，点之前就知道这一下会做什么。
+  const allExpanded = useMemo(() => {
+    const categories = snapshot?.categories ?? []
+    return categories.length > 0 && categories.every((cat) => expanded.has(cat.id))
+  }, [snapshot, expanded])
+
   const counts = useMemo(() => {
     const categories = snapshot?.categories ?? []
     const hostnames = new Set<string>()
@@ -1000,6 +1007,7 @@ export function App() {
         sidebarTools={
           <SidebarTools
             allChecked={allChecked}
+            allExpanded={allExpanded}
             busy={save.kind === 'pending'}
             onCheckAll={checkAll}
             onInvertChecked={invertChecked}

@@ -28,7 +28,7 @@
   height: var(--node-h);
   /* 行高、左右内边距、字号、缩进、勾选框、色点全由 AppShell 按侧栏档位（紧促/标准/宽松）
      写成一组变量，整档联动；这里的兜底值就是标准档，AppShell 三档都写满，不靠兜底。 */
-  padding: 0 var(--tree-pad-x, 10px);
+  padding: 0 var(--tree-pad-x, 8px);
   font-size: var(--tree-font, 12.5px);
   border: 0;
   background: transparent;

@@ -20,6 +20,7 @@
   "toolbar.invertChecked": "反选",
   "toolbar.fold": "折叠",
   "toolbar.foldTitle": "折叠 / 展开所有类目",
+  "toolbar.expand": "展开",
   "toolbar.mode.label": "写入模式",
   "toolbar.mode.hosts": "模式：Hosts",
   "toolbar.mode.proxy": "系统代理（未启用）",
