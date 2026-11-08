@@ -61,6 +61,8 @@ tasks:
       # 特权辅助服务是纯 Go、无 CGO：主程序编完顺手编它，deb/rpm 的 contents 要用。
       - go build -trimpath -ldflags="-w -s" -o {{.BIN_DIR}}/github-net-helper ./cmd/github-net-helper
     vars:
+      # 发版只带 production：wails 的 WebView 调试器（右键「检查元素」）在 production 下
+      # 编译成空函数，天然关闭——调试走 dev 模式（wails3 task dev / DEV=true 构建）。
       BUILD_FLAGS: '{{if eq .DEV "true"}}{{if or .EXTRA_TAGS (eq .OBFUSCATED "true")}}-tags {{if eq .OBFUSCATED "true"}}wails_obfuscated{{if .EXTRA_TAGS}},{{end}}{{end}}{{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production{{if eq .OBFUSCATED "true"}},wails_obfuscated{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s"{{end}}'
       DEFAULT_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}'
       OUTPUT: '{{ .OUTPUT | default .DEFAULT_OUTPUT }}'
