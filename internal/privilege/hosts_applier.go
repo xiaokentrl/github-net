@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -181,7 +182,18 @@ func (a *HostsApplier) persist(before, newMeta hosts.Recovery, newContent string
 		_ = os.Remove(a.metaPath())
 		_ = os.Remove(a.backupPath())
 	}
+	flushDNSCache()
 	return nil
+}
+
+// flushDNSCache 尽力刷新系统级 DNS 缓存：systemd-resolved（resolvectl flush-caches）
+// 和 nscd（nscd -i hosts）。两个都没装、没权限或失败都无所谓——Ubuntu 基线上的
+// systemd-resolved 自己盯着 /etc/hosts，文件一变立刻生效，这一步是给装了
+// nscd 的机器兜底（nscd 的 hosts 缓存默认能挂一小时）。helper 本来就是 root，
+// 这两条在这里跑最合适，也不动协议。
+func flushDNSCache() {
+	_ = exec.Command("resolvectl", "flush-caches").Run()
+	_ = exec.Command("nscd", "-i", "hosts").Run()
 }
 
 // backupOnce 只在第一次写入时把原文留底；之后的写入原地更新元数据，不再动这份备份。
