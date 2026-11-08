@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -27,6 +28,10 @@ type browserFamily struct {
 
 var browserFamilies = []browserFamily{
 	{"firefox", "Firefox", false},
+	{"zen", "Zen", false},
+	{"librewolf", "LibreWolf", false},
+	{"waterfox", "Waterfox", false},
+	{"floorp", "Floorp", false},
 	{"chromium", "Chromium", true},
 	{"google-chrome", "Chrome", true},
 	{"chrome", "Chrome", true},
@@ -68,10 +73,17 @@ const browserWaitTimeout = 8 * time.Second
 
 // 浏览器自带的辅助进程（崩溃收集、沙箱占位）会撞上家族前缀，明确排除——
 // 它们的父进程正常时是浏览器主进程，但主进程先死时会变孤儿被误判成启动器。
-var browserHelperRejects = []string{"crashpad", "sandbox", "helper", "renderer"}
+var browserHelperRejects = []string{"crashpad", "sandbox", "helper", "renderer", "chromedriver", "chrome-headless"}
 
 // familyOf 按可执行名前缀认家族；认不出再看 flatpak 的应用 ID。认不出返回空串。
 func familyOf(exeBase string, args []string) (string, bool) {
+	// Chromium 系子进程（gpu/utility/renderer）主进程从不带 --type=：
+	// 主进程先死时它们会变孤儿，靠这一条把它们挡在「主进程」判定之外。
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--type=") {
+			return "", false
+		}
+	}
 	for _, reject := range browserHelperRejects {
 		if strings.Contains(exeBase, reject) {
 			return "", false
@@ -171,57 +183,48 @@ func RestartBrowsers() (int, []string) {
 	return restartBrowsers(browserList())
 }
 
-// restartBrowsers 是核心：主进程判定 → 同家族全体 SIGTERM → 等退场 → 按原命令行拉起。
-// 每个家族只拉起一份；全家没退干净就跳过，报告里少了它用户能看出来。
+// restartBrowsers 是核心：同家族全体 SIGTERM → 逐个主进程等退场 → 按原命令行各拉一份。
+// 主进程判定：父进程不属于同家族。同家族可以有多个主进程（不同 profile 的多实例），
+// 每个实例各按各的命令行拉起；回执按家族去重，用户看到的还是「重启了哪几个浏览器」。
 func restartBrowsers(procs []browserProc) (int, []string) {
-	// 同家族 pid 集合：主进程判定的依据（父进程也是同家族 → 自己是辅助/子进程）。
 	byFamily := map[string][]browserProc{}
 	for _, p := range procs {
 		byFamily[p.Family] = append(byFamily[p.Family], p)
 	}
-	// 主进程：父进程不属于同家族的那一个。每家只留 pid 最小的（最早起来的那个），
-	// 它的命令行才是用户当初怎么启动的——snap/flatpak 的包装也在这一层。
-	type launcher struct {
-		proc browserProc
-		pids []int
-	}
-	mains := map[string]launcher{}
-	for family, ps := range byFamily {
+	// 主进程：父进程不属于同家族的那些。snap/flatpak 的包装也在这一层。
+	var launchers []browserProc
+	for _, ps := range byFamily {
 		famPids := map[int]bool{}
 		for _, p := range ps {
 			famPids[p.Pid] = true
 		}
-		var main *browserProc
 		for _, p := range ps {
 			if famPids[p.Ppid] {
 				continue // 父进程也是同家族：自己是子进程
 			}
-			if main == nil || p.Pid < main.Pid {
-				snapshot := p
-				main = &snapshot
-			}
+			launchers = append(launchers, p)
 		}
-		if main == nil {
-			continue
-		}
-		pids := make([]int, 0, len(ps))
+	}
+	// 按 pid 排序：多实例时先拉早起的那个，顺序稳定可复现。
+	sort.Slice(launchers, func(i, j int) bool { return launchers[i].Pid < launchers[j].Pid })
+
+	// 整家族一起收 SIGTERM：主进程们各自落盘退场，信号只发这一轮扫到的 pid。
+	for family, ps := range byFamily {
+		_ = family
 		for _, p := range ps {
-			pids = append(pids, p.Pid)
+			_ = browserSignal(p.Pid)
 		}
-		mains[family] = launcher{proc: *main, pids: pids}
 	}
 
 	restarted := 0
-	families := make([]string, 0, len(mains))
-	for family, l := range mains {
-		for _, pid := range l.pids {
-			_ = browserSignal(pid)
-		}
-		if !browserWaitGone(l.proc.Pid, browserWaitTimeout) {
+	familiesSeen := map[string]bool{}
+	var families []string
+	for _, l := range launchers {
+		if !browserWaitGone(l.Pid, browserWaitTimeout) {
 			continue // 没退干净：不拉起、不强杀，用户自己关了再开
 		}
-		args := append([]string{}, l.proc.Args[1:]...)
-		if l.proc.ChromeLike {
+		args := append([]string{}, l.Args[1:]...)
+		if l.ChromeLike {
 			hasRestore := false
 			for _, a := range args {
 				if a == "--restore-last-session" {
@@ -233,20 +236,24 @@ func restartBrowsers(procs []browserProc) (int, []string) {
 				args = append(args, "--restore-last-session")
 			}
 		}
-		if err := browserLaunch(l.proc.Exe, args); err != nil {
+		if err := browserLaunch(l.Exe, args); err != nil {
 			continue
 		}
 		restarted++
-		families = append(families, family)
+		if !familiesSeen[l.Family] {
+			familiesSeen[l.Family] = true
+			families = append(families, l.Family)
+		}
 	}
 	return restarted, families
 }
 
-// waitPidGone 轮询 /proc/<pid> 直到消失或超时。读不到＝已经退了；读得到＝还在。
+// waitPidGone 轮询直到进程退场或超时。zombie（State: Z）不算活着——
+// 本应用自己拉起的浏览器若没人收尸，/proc 目录会挂着，按活着等就死等了。
 func waitPidGone(pid int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for {
-		if _, err := os.Stat(fmt.Sprintf("/proc/%d", pid)); err != nil {
+		if !pidAlive(pid) {
 			return true
 		}
 		if time.Now().After(deadline) {
@@ -256,13 +263,33 @@ func waitPidGone(pid int, timeout time.Duration) bool {
 	}
 }
 
+// pidAlive 读 /proc/<pid>/status 的 State 行：读不到＝已退；Z（zombie）＝已退等收尸。
+func pidAlive(pid int) bool {
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "State:") {
+			fields := strings.Fields(line)
+			return len(fields) >= 2 && fields[1] != "Z"
+		}
+	}
+	return false
+}
+
 // launchDetached 按原命令行把浏览器拉起来：新会话脱离本进程，输出全部丢弃——
-// 浏览器是自己活自己的，应用退出不能带走它。
+// 浏览器是自己活自己的，应用退出不能带走它。Start 出来的孩子由 goroutine 收尸，
+// 不然 zombie 的 /proc 目录挂着，下一轮 waitPidGone 会被它骗住。
 func launchDetached(exe string, args []string) error {
 	cmd := exec.Command(exe, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Dir = userHomeOrEmpty()
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
 }
 
 // userHomeOrEmpty 拿用户主目录当浏览器的工作目录；拿不到就用空串（进程继承当前目录）。
@@ -273,6 +300,10 @@ func userHomeOrEmpty() string {
 	}
 	return home
 }
+
+// browserRestartAfterApplyDebounce 是两次浏览器重启之间的最小间隔：
+// 并发两轮应用各自落定时，后到的看到刚重启过就不再动，免得把刚拉起的又杀一遍。
+const browserRestartAfterApplyDebounce = 30 * time.Second
 
 // browserRestartEnabled 读开关：配置层没接上（目录加载失败）一律当作关闭——
 // 动用户正开着的浏览器必须拿到明确的授权，拿不到授权就不动。
@@ -304,6 +335,16 @@ func (s *Service) restartBrowsersAfterApply(roundID string) {
 	if written == 0 {
 		return
 	}
+	// 去重去抖的临界区：另一轮 30 秒内刚重启过（或正重启）就让位，
+	// 不然第二轮会把第一轮刚拉起的浏览器再杀一遍再拉一遍。
+	s.browserMu.Lock()
+	if time.Since(s.browserLastRestart) < browserRestartAfterApplyDebounce {
+		s.browserMu.Unlock()
+		return
+	}
+	s.browserLastRestart = time.Now()
+	s.browserMu.Unlock()
+
 	restarted, families := RestartBrowsers()
 	if s.emit != nil {
 		s.emit(event.BrowserRestartedName, map[string]any{"restarted": restarted, "families": families})

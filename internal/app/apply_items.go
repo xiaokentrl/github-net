@@ -55,7 +55,11 @@ func (s *Service) ApplyItems(itemIDs []string) ([]task.Task, error) {
 	// 应用落定后自动重启浏览器（拍板 2026-11-08）：开关开着才动；
 	// 那一轮里至少一条真写成功（StatusDone）才重启，全跳过/全失败一个浏览器都不动。
 	if s.browserRestartEnabled() {
-		go s.restartBrowsersAfterApply(roundID)
+		s.browserWG.Add(1)
+		go func() {
+			defer s.browserWG.Done()
+			s.restartBrowsersAfterApply(roundID)
+		}()
 	}
 	return tasks, nil
 }
@@ -369,7 +373,7 @@ func (s *Service) PreviewRestoreHostsItem(itemID string) (HostsRestorePreview, e
 }
 
 // PreviewRestoreHostsItems 只读算「把这几个二级菜单按给定顺序一起还原」之后的前后对比，
-// 给「还原本菜单」弹框用。执行侧是同一批 itemIDs 按目录顺序排队、串行逐条还原，
+// 给「还原本菜单」弹框用。执行侧与预览同一批 itemIDs、同一调用方顺序排队（uniqueKnownItems 保序不排序）、串行逐条还原，
 // 共享域名的最终 IP 由最后释放的那个项目决定，所以必须一次联合算完，
 // 不能拿 N 份单项目预览去合并。
 func (s *Service) PreviewRestoreHostsItems(itemIDs []string) (HostsRestorePreview, error) {

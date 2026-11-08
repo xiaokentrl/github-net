@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/xiaokentrl/github-net/internal/config"
 	"github.com/xiaokentrl/github-net/internal/event"
@@ -262,7 +263,21 @@ func waitFailure(err error) (reason string, detail string) {
 // quit 传「结束整个进程」那个动作（真退出，不是收进托盘，也不是只关窗口）；
 // emit 是事件总线，给 nil 就只留最近一份结论、不往前端推。
 func StartStartupAutomation(ctx context.Context, s *Service, quit func(), emit func(name string, payload any)) {
-	runStartupAutomation(ctx, newAutomationDeps(s, quit, emit))
+	// 自动化「应用完自动退出」和「应用后重启浏览器」都盯着同一轮：退出前先等
+	// 重启 goroutine 收场（限时 30 秒，等不到也照退，浏览器不至于被白杀）。
+	guardedQuit := func() {
+		done := make(chan struct{})
+		go func() {
+			s.browserWG.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+		}
+		quit()
+	}
+	runStartupAutomation(ctx, newAutomationDeps(s, guardedQuit, emit))
 }
 
 // newAutomationDeps 把链接到真实世界：开关和项目清单从配置现读，
