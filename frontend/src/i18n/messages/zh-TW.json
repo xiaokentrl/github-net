@@ -105,7 +105,7 @@
   "settings.tray.sub": "視窗關閉行為與啟動後最小化",
   "settings.tray.title": "系統匣與視窗",
   "settings.tray.closeTitle": "關閉視窗時",
-  "settings.tray.closeDesc": "開啟後點視窗的關閉按鈕是把視窗收進系統匣，應用繼續在背景執行；關閉後從系統匣選單結束。",
+  "settings.tray.closeDesc": "開啟後點視窗的關閉按鈕是把視窗最小化，應用繼續在背景跑；從系統匣選單或左鍵點系統匣圖示喚回時視窗回到原位置。桌面沒有系統匣宿主（如部分 GNOME 預設配置）時圖示不會出現，再次啟動應用即可喚回。",
   "settings.tray.closeToggle": "關閉視窗時最小化到系統匣",
   "settings.tray.startMinTitle": "啟動時",
   "settings.tray.startMinDesc": "開啟後應用啟動直接進系統匣，不彈出主視窗；要從系統匣選單喚回。",

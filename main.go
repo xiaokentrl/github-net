@@ -129,19 +129,22 @@ func main() {
 		cfg, err := service.GetSettings()
 		return err == nil && cfg.Startup.CloseToTray
 	}
+	// 收进托盘用 Minimise 不用 Hide（拍板 2026-11-09）：Wayland 禁止应用自摆 toplevel 位置，
+	// Hide 再 Show 会由合成器重新摆位（窗口跳回中间）；最小化不销毁窗口映射，
+	// 合成器记得原位置，唤回时原位恢复。X11 上两种方式都保位置，统一走最小化。
 	window.RegisterHook(events.Linux.WindowDeleteEvent, func(e *application.WindowEvent) {
 		if !shouldHideOnClose() {
 			return
 		}
 		e.Cancel()
-		window.Hide()
+		window.Minimise()
 	})
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		if !shouldHideOnClose() {
 			return
 		}
 		e.Cancel()
-		window.Hide()
+		window.Minimise()
 	})
 
 	go func() {
@@ -155,6 +158,8 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-windowFocusRequests:
+				// 最小化收进托盘的窗口：Show 里的 gtk_window_present 会反最小化并原位恢复；
+				// Restore 在 Linux 上是空实现，真正干活的是这条。
 				window.Restore()
 				window.Show()
 				window.Focus()
@@ -166,6 +171,10 @@ func main() {
 
 	tray := platformApp.SystemTray.New()
 	tray.SetIcon(trayIcon)
+	// 左键单击 = 幂等唤回主窗口（拍板 2026-11-09，对照托盘方案第 8 问）：
+	// 不用默认的 ToggleWindow——它会藏窗口还会按托盘位置重新定位；
+	// 只 Restore+Show+Focus，点多少次窗口都不动位置。右键菜单照旧。
+	tray.OnClick(requestWindowFocus)
 
 	// 托盘菜单：显示/隐藏/退出 + 「主题」子菜单（六套，当前项勾选）。
 	// 切主题走配置服务保存并向前端发 settings:changed；菜单整体重建让勾选跟到新主题上。
@@ -173,7 +182,7 @@ func main() {
 	buildTrayMenu = func() *application.Menu {
 		menu := application.NewMenu()
 		menu.Add("显示主窗口").OnClick(func(*application.Context) { requestWindowFocus() })
-		menu.Add("最小化到托盘").OnClick(func(*application.Context) { window.Hide() })
+		menu.Add("最小化到托盘").OnClick(func(*application.Context) { window.Minimise() })
 		menu.AddSeparator()
 		themeMenu := menu.AddSubmenu("主题")
 		current := ""

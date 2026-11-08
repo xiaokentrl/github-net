@@ -105,7 +105,7 @@
   "settings.tray.sub": "窗口关闭行为与启动后最小化",
   "settings.tray.title": "托盘与窗口",
   "settings.tray.closeTitle": "关闭窗口时",
-  "settings.tray.closeDesc": "打开后点窗口的关闭按钮是把窗口收进托盘，应用继续在后台跑；关闭后从托盘菜单退出。",
+  "settings.tray.closeDesc": "打开后点窗口的关闭按钮是把窗口最小化，应用继续在后台跑；从托盘菜单或左键单击托盘图标唤回时窗口回到原位置。桌面没有托盘宿主（如部分 GNOME 默认配置）时图标不会出现，再次启动应用即可唤回。",
   "settings.tray.closeToggle": "关闭窗口时最小化到托盘",
   "settings.tray.startMinTitle": "启动时",
   "settings.tray.startMinDesc": "打开后应用启动直接进托盘，不弹出主窗口；要从托盘菜单唤回。",
