@@ -1,0 +1,39 @@
+# 0.1.3 相对 0.1.0 的净变化；一条一行，格式「分类|语言|内容」
+added|zh|新增「应用后重启浏览器」：应用写完 Hosts 自动温和重启正在运行的浏览器，Chrome 系自动还原关闭前的窗口，设置中心可开关
+added|en|Add "restart browsers after apply": once Hosts is written, running browsers are gracefully restarted so Chrome restores its pre-close windows; toggle in Settings
+added|zh|Hosts 写盘成功后尽力刷新系统 DNS 缓存（resolvectl/nscd），装了 nscd 的机器新映射立即生效
+added|en|Best-effort system DNS cache flush after writing Hosts (resolvectl/nscd), so new mappings apply immediately on machines running nscd
+added|zh|窗口位置与尺寸记忆：收托盘和退出前自动保存，下次启动恢复尺寸与最大化状态
+added|en|Window geometry memory: position and size are saved before tray-minimising or quitting; size and maximised state are restored on next launch
+added|zh|托盘图标左键单击/双击直接唤回主窗口（原来只有右键菜单）
+added|en|Tray icon left click/double click now brings the main window back (previously only the right-click menu)
+added|zh|设置中心弹框支持拖动，双击标题回居中
+added|en|The settings dialog is now draggable; double-click its header to re-centre
+added|zh|详情页拆成两张表：还原表带逐条前后对照与结果标签，检测表带全部候选与实测状态
+added|en|The item dialog now has two tables: a restore table with per-mapping before/after comparison and result tags, and a detect table listing every candidate with live status
+added|zh|清理弹框改为两栏：勾选与预览分离，Hosts 还原前后对照逐条可见
+added|en|The cleanup dialog switched to a two-pane layout: choices on the left, live preview on the right, including a per-mapping Hosts restore comparison
+added|zh|目录树与详情列表支持方向键导航；队列面板高度可锁定
+added|en|Arrow-key navigation in the category tree and item list; the queue panel height can be locked
+
+fixed|zh|应用只写当场验通的地址：超过 10 分钟的旧结论先现场复验，一条不通就一个字不写
+fixed|en|Apply now writes only verified addresses: conclusions older than 10 minutes are re-verified on the spot, and if one fails nothing is written
+fixed|zh|收进托盘改用最小化并统一走 XWayland：召回、最小化恢复、重启后窗口位置不再丢失
+fixed|en|Tray-minimise now uses window minimizing and the app runs under XWayland, so the window no longer loses its position on recall, unminimise or restart
+fixed|zh|浏览器重启链路加固：自动化退出竞态、僵尸进程收尸、并发去抖、多实例识别、辅助进程排除
+fixed|en|Hardened the browser restart chain: automation quit race, zombie reaping, concurrent restart debouncing, multi-instance handling and helper-process exclusion
+fixed|zh|交互缺口六项：预览读不出来时不给执行全量还原、清理弹框加载中不给勾、折叠按钮写明结果等
+fixed|en|Six interaction gaps: full restore is blocked while the preview cannot be read, cleanup checkboxes are disabled while previews load, the fold button now states its outcome, and more
+fixed|zh|原生确认框全部换成公共弹框：标题点明哪件事几项，两颗按钮直接写结果
+fixed|en|All native confirm dialogs replaced by the common dialog: titles state what and how many, and both buttons state their outcome
+
+updated|zh|主菜单宽度按真实内容重设三档（216/224/232），行高、字号、缩进整档联动，菜单名不再截断
+updated|en|Sidebar width re-Set from real content into three steps (216/224/232) with per-step row height, font and indent; menu names are no longer truncated
+updated|zh|任务队列只保留「清空已完成」：暂停/取消/重试整组删除，状态从九档简化为八档
+updated|en|The task queue keeps only "clear finished": pause/cancel/retry were removed and task states simplified from nine to eight
+updated|zh|任何缓存最多保留 3 天，超期启动时自动清
+updated|en|All caches are kept for at most 3 days and stale ones are cleared at startup
+updated|zh|应用统一走 XWayland 保证窗口位置一致恢复；分数缩放下画面可能轻微发虚
+updated|en|The app now runs under XWayland so window positions restore consistently; fractional scaling may look slightly soft
+updated|zh|发版不再携带右键调试功能；死代码清扫约 350 行
+updated|en|Releases no longer carry the right-click debug facilities; about 350 lines of dead code were removed

@@ -1,61 +1,61 @@
 ## English
 
-### github-net 0.1.0 Stable
+### github-net 0.1.3 Stable (0.1.2 → 0.1.3)
 
 **Added**
 
-1. Add the product catalog: 11 categories and 52 projects (GitHub, AI dev tools, JetBrains, Steam, game platforms, specific games, public CDNs, Microsoft / Xbox, Coursera, ad blocking, custom subscription sources), with the category tree and detail pages reading real backend data
-2. Add live detection: candidates come from the system DNS resolver, each one probed for reachability and HTTPS certificate validity, grouped by hostname in the UI; the address currently in effect is listed too and marked "in use"
-3. Add Hosts apply and restore: a least-privileged helper service runs in the background, backing up before writing, replacing atomically, verifying afterwards and rolling back on failure, per item or all at once
-4. Add the task queue panel: detection, apply and restore run through a queue with pause, cancel, retry-failed and restore-all, and both the list width and the panel height are draggable
-5. Add acceleration methods: GitHub scope defaults to "all public sources" (aggregating GitCDN, HelloGitHub and GitLab), plus "auto-find usable IPs" and "use stored IPs" which re-verifies cached addresses without refetching sources
-6. Add a local SQLite ledger: every detection round is recorded, and the candidate pool caches the latest usable addresses per hostname plus IP
-7. Add network and traffic settings: low / standard / full profiles plus a per-run candidate probe limit (default 126, up to 1008), with the real per-round budget enforced by the backend
-8. Add startup automation: auto-detect the selected top-level menus after boot, optionally auto-apply when detection finishes and quit the program once the apply queue settles
-9. Add appearance and preferences: six themes, four zoom steps (90% / 100% / 110% / 125%), Simplified and Traditional Chinese
-10. Add the tray and a frameless window: closing the window can minimize to the tray, the app can start at login, and the title bar carries minimize / maximize / close
-11. Add update check and install: shows the latest stable release and package size, then verifies both the SHA256 digest and the Ed25519 signature after download and only hands the package over to the system installer when both pass; never downloads on its own and never installs silently
-12. Add the eight-pane settings center (layout, UI zoom, appearance, network & traffic, tray, start at login, update check, about) with per-control immediate saving and an authoritative reload whenever a write fails
-13. Add a Linux x64 deb package containing the app, the privileged helper service and its systemd unit
+1. Add "restart browsers after apply": once Hosts is written, running browsers are gracefully restarted so Chrome restores its pre-close windows; toggle in Settings
+2. Best-effort system DNS cache flush after writing Hosts (resolvectl/nscd), so new mappings apply immediately on machines running nscd
+3. Window geometry memory: position and size are saved before tray-minimising or quitting; size and maximised state are restored on next launch
+4. Tray icon left click/double click now brings the main window back (previously only the right-click menu)
+5. The settings dialog is now draggable; double-click its header to re-centre
+6. The item dialog now has two tables: a restore table with per-mapping before/after comparison and result tags, and a detect table listing every candidate with live status
+7. The cleanup dialog switched to a two-pane layout: choices on the left, live preview on the right, including a per-mapping Hosts restore comparison
+8. Arrow-key navigation in the category tree and item list; the queue panel height can be locked
 
 **Fixed**
 
-None
+1. Apply now writes only verified addresses: conclusions older than 10 minutes are re-verified on the spot, and if one fails nothing is written
+2. Tray-minimise now uses window minimizing and the app runs under XWayland, so the window no longer loses its position on recall, unminimise or restart
+3. Hardened the browser restart chain: automation quit race, zombie reaping, concurrent restart debouncing, multi-instance handling and helper-process exclusion
+4. Six interaction gaps: full restore is blocked while the preview cannot be read, cleanup checkboxes are disabled while previews load, the fold button now states its outcome, and more
+5. All native confirm dialogs replaced by the common dialog: titles state what and how many, and both buttons state their outcome
 
 **Updated**
 
-1. Update the shipped defaults: low-traffic profile, Daylight theme, 100% zoom, nothing preselected on start, focus following on for detection and apply, 240px sidebar and the compact queue height
-2. Update Hosts writing: the managed block is separated by blank lines that are removed again on restore
-3. Update the config location to ~/.config/github-net/config.json, migrating the old file automatically on startup
-4. Update the upgrade path: the package post-install script enables the service at boot and then restarts it, so an upgrade always runs the new binary
+1. Sidebar width re-Set from real content into three steps (216/224/232) with per-step row height, font and indent; menu names are no longer truncated
+2. The task queue keeps only "clear finished": pause/cancel/retry were removed and task states simplified from nine to eight
+3. All caches are kept for at most 3 days and stale ones are cleared at startup
+4. The app now runs under XWayland so window positions restore consistently; fractional scaling may look slightly soft
+5. Releases no longer carry the right-click debug facilities; about 350 lines of dead code were removed
 
 ## 中文
 
-### 0.1.0 稳定版
+### 0.1.3 稳定版（0.1.2 → 0.1.3）
 
 **新增**
 
-1. 新增产品目录：11 个类目、52 个项目（GitHub、AI 开发工具、JetBrains、Steam、游戏平台、特定游戏专项、公共 CDN、微软 / Xbox、Coursera、去广告与屏蔽、自定义订阅源），分类树和详情页都读后端真实数据
-2. 新增真实检测：走系统 DNS 取候选地址，逐个探测连通性和 HTTPS 证书，结果按主机名分组显示；正在生效的地址也列进候选并标「当前生效」
-3. 新增 Hosts 应用与还原：受限的特权辅助服务常驻后台，写入前备份、原子替换、写后校验，失败自动回滚，可按项还原也可全部还原
-4. 新增任务队列面板：检测、应用、恢复排队执行，支持暂停、取消、重试失败项和全部还原，任务列表宽度与面板高度都能拖动
-5. 新增加速方法：GitHub 范围默认使用「全部公共源」（GitCDN、HelloGitHub、GitLab 三源汇总），另有「自动查找可用 IP」和「使用已有储存」——后者直接复验缓存里的可用地址，不重新拉源
-6. 新增本机 SQLite 底账：每轮检测整笔记账，候选池按「域名 + IP」缓存最近一轮的可用地址
-7. 新增网络与流量设置：省流／标准／完整三档，外加每轮候选探测上限（默认 126，最多可填 1008），一轮实际发多少次探测由后端统一收口
-8. 新增启动自动化：按勾中的主菜单在开机后自动检测，可选检测完成后自动应用、应用队列跑完后自动退出程序
-9. 新增外观与偏好：六套主题、界面缩放四档（90%／100%／110%／125%）、简体中文与繁体中文
-10. 新增托盘与无边框窗口：关窗可最小化到托盘、登录系统后自动启动，标题栏内是最小化／最大化／关闭三颗按钮
-11. 新增更新检查与安装：显示最新稳定版和包大小，下载后同时校验 SHA256 摘要与 Ed25519 签名，两项都过才交给系统安装；不自动下载、不静默安装
-12. 新增设置中心八页（布局、界面缩放、外观、网络与流量、托盘、开机自启、检测升级、关于我们），改一处即时保存，保存失败回读后端权威快照
-13. 新增 Linux x64 的 deb 安装包，包内含主程序、特权辅助服务和 systemd 单元
+1. 新增「应用后重启浏览器」：应用写完 Hosts 自动温和重启正在运行的浏览器，Chrome 系自动还原关闭前的窗口，设置中心可开关
+2. Hosts 写盘成功后尽力刷新系统 DNS 缓存（resolvectl/nscd），装了 nscd 的机器新映射立即生效
+3. 窗口位置与尺寸记忆：收托盘和退出前自动保存，下次启动恢复尺寸与最大化状态
+4. 托盘图标左键单击/双击直接唤回主窗口（原来只有右键菜单）
+5. 设置中心弹框支持拖动，双击标题回居中
+6. 详情页拆成两张表：还原表带逐条前后对照与结果标签，检测表带全部候选与实测状态
+7. 清理弹框改为两栏：勾选与预览分离，Hosts 还原前后对照逐条可见
+8. 目录树与详情列表支持方向键导航；队列面板高度可锁定
 
 **修复**
 
-无
+1. 应用只写当场验通的地址：超过 10 分钟的旧结论先现场复验，一条不通就一个字不写
+2. 收进托盘改用最小化并统一走 XWayland：召回、最小化恢复、重启后窗口位置不再丢失
+3. 浏览器重启链路加固：自动化退出竞态、僵尸进程收尸、并发去抖、多实例识别、辅助进程排除
+4. 交互缺口六项：预览读不出来时不给执行全量还原、清理弹框加载中不给勾、折叠按钮写明结果等
+5. 原生确认框全部换成公共弹框：标题点明哪件事几项，两颗按钮直接写结果
 
 **更新**
 
-1. 更新出厂默认：省流档、晨光白主题、缩放 100%、启动后不预选任何项目、检测与应用的焦点跟随打开、侧栏宽 240px、队列面板取小档
-2. 更新 Hosts 写法：托管区段前后各空一行与原有内容分隔，还原时一并收走
-3. 更新配置文件位置：改存到 ~/.config/github-net/config.json，旧位置的文件在开档时自动搬家
-4. 更新升级安装：安装包后置脚本先设开机自启、再重启辅助服务，升级后运行的一定是新二进制
+1. 主菜单宽度按真实内容重设三档（216/224/232），行高、字号、缩进整档联动，菜单名不再截断
+2. 任务队列只保留「清空已完成」：暂停/取消/重试整组删除，状态从九档简化为八档
+3. 任何缓存最多保留 3 天，超期启动时自动清
+4. 应用统一走 XWayland 保证窗口位置一致恢复；分数缩放下画面可能轻微发虚
+5. 发版不再携带右键调试功能；死代码清扫约 350 行
