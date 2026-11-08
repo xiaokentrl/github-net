@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
 import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
-import type { CatalogCategory, CatalogItem, DetectResultView, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import type { CatalogCategory, CatalogItem, DetectResultView, HostsRestorePreview, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
+import { getErrorMessage } from '../../api/errors'
+import { previewRestoreHostsItems } from '../../api/client'
 import { arrowKeys } from '../../hooks/arrowKeys'
 import { Dialog } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -11,6 +13,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import uiStyles from '../../components/ui/ui.module.css'
 import { pickBestCandidate } from '../detect/candidateChoice'
 import { DetectTables } from './DetectTables'
+import { RestorePreviewCards } from './RestorePreviewCards'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
 import { ensureLastResults, isTerminalTask, useTaskQueue } from '../tasks/taskStore'
 import { addressUsable, projectState, toneForCandidate, toneForItem, type Tone } from '../tasks/statusTone'
@@ -116,6 +119,36 @@ export function ItemDetail({
   const [colWidths, setColWidths] = useState<number[] | null>(null)
   // 还原本菜单的公共弹框（拍板 2026-11-03）：确认文案在框里，动作走 onRestoreCategory。
   const [restoreMenuOpen, setRestoreMenuOpen] = useState(false)
+  // 可还原的二级菜单：各自的 Hosts 状态是已应用或部分生效（拍板 2026-11-03）。
+  // 放在早退之前，因为弹框的前后对照要按这批 ID 拉「一起还原」的联合预览。
+  const restorableItems = (category?.items ?? []).filter((it) => {
+    const st = hostsOf.get(it.id)?.status ?? HostsStatus.HostsUnknown
+    return st === HostsStatus.HostsApplied || st === HostsStatus.HostsPartial
+  })
+  const menuIdsKey = restorableItems.map((it) => it.id).join('|')
+  const [menuPreview, setMenuPreview] = useState<HostsRestorePreview | null>(null)
+  const [menuPreviewError, setMenuPreviewError] = useState('')
+  useEffect(() => {
+    if (!restoreMenuOpen || !menuIdsKey) return
+    let live = true
+    const ids = menuIdsKey.split('|')
+    setMenuPreview(null)
+    setMenuPreviewError('')
+    previewRestoreHostsItems(ids)
+      .then((res) => {
+        if (!live) return
+        // 联合预览最多释放本菜单这 N 个项目；更多说明对端还是旧版特权服务，
+        // 把 itemIDs 忽略了、回了全量结果，拿它展示会把结论说错。
+        if (res.items > ids.length) {
+          setMenuPreview(null)
+          setMenuPreviewError(t('detail.detectBox.previewStaleHelper'))
+          return
+        }
+        setMenuPreview(res)
+      })
+      .catch((err: unknown) => { if (live) setMenuPreviewError(getErrorMessage(err)) })
+    return () => { live = false }
+  }, [restoreMenuOpen, menuIdsKey])
   // 行级「还原此项」公共弹框（拍板 2026-11-03，已简化）：点行内「还原」直接进检测那一屏，
   // 框只剩两屏——detect 看数据、restoring 给回执；「立刻还原」要看得见这一项的检测数据才可点。
   // writtenCount 是点开那一刻数出来的待还原条数——还原落定后 entries 会被刷新成空，
@@ -267,27 +300,17 @@ export function ItemDetail({
   if (!item || !category) return <EmptyState message={t('detail.empty')} />
 
   const hostnames = item.hostnames ?? []
-  // 批量按钮的口径是「这一分类里能测的那几项」，不是分类里的全部条目：文案、提示和真正发出去的批次必须同一个数。
-  const batch = detectableItems(category.items ?? [])
   const selfDetectable = !item.userSupplied && hostnames.length > 0
   const result = state.results[item.id]
   const live = state.live[item.id]
 
   const rows = result?.hosts ?? []
-  const candidates = rows.flatMap((host) => host.candidates ?? [])
   // 当前写入 IP 只有一个来源：后端在这轮候选里标了 applied 的那几条。界面不自己认。
   // 一条域名一行摊全（拍板 2026-11-02）：一个地址被几条域名共用就各写一行，
   // 不再收成「N 个域名各有各的写入」那种要人回头数的说法。
   // 当前写入的取数源是 hosts.entries（后端这次读回来的真值）：内存轮的 applied 标记
   // 重启后就没了，用它会出现「同一页面两个当前写入还互相矛盾」。只列已写入的，
   // 未写入的域名在下面那行域名清单里已经有。
-  const canApply = candidates.some((c) => c.status === 'available')
-
-  // 可还原的二级菜单：各自的 Hosts 状态是已应用或部分生效（拍板 2026-11-03）。
-  const restorableItems = (category.items ?? []).filter((it) => {
-    const st = hostsOf.get(it.id)?.status ?? HostsStatus.HostsUnknown
-    return st === HostsStatus.HostsApplied || st === HostsStatus.HostsPartial
-  })
 
   // 候选表只装当前二级菜单自己的 IP（拍板 2026-10-31）：所有候选共用一张表、域名是一列。
   // 排序先分档再比延迟（拍板 2026-11-02）：可用的一律排在不可用／超时／没测的前面，
@@ -522,31 +545,8 @@ export function ItemDetail({
             </span>
           ) : null}
           <div className={detectStyles.candidateActions}>
-            {/* 只留两颗（拍板 2026-10-31）：「检测本菜单」测当前菜单下全部能测的项目
-                （原「检测全部」，和单项检测重复所以合并），「写入本项目」只管当前项目。
-                方法下拉旁那颗「只测此方法」只用选中的方法测当前项目，两颗不再同名。 */}
-            {detectReady && batch.length > 0 ? (
-              <button
-                type="button"
-                className={`${uiStyles.btn} ${uiStyles.small}`}
-                disabled={detecting}
-                onClick={() => onDetectAll(batch)}
-                title={t('detect.allHint', { count: batch.length })}
-              >
-                {detecting ? t('detect.running') : t('detect.start')}
-              </button>
-            ) : null}
-            {detectReady && selfDetectable ? (
-              <button
-                type="button"
-                className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.primary}`}
-                disabled={detecting || !canApply}
-                title={t('hosts.applyTitle')}
-                onClick={() => onApply(item.id)}
-              >
-                {t('hosts.apply')}
-              </button>
-            ) : null}
+            {/* 两颗按钮已删（拍板 2026-11-04）：「检测本菜单」「写入本项目」——检测走方法
+                下拉旁那颗「只测此方法」，应用走表格行内的还原/应用链；这里不再放动作按钮。 */}
             {detecting && live ? <span className={styles.hint}>{t('detect.live', { done: live.done, total: live.total, active: live.active })}</span> : null}
             {!detectReady ? <span className={styles.hint}>{t('detect.notReady')}</span> : null}
             {detectReady && !selfDetectable ? <span className={styles.hint}>{t('detect.unavailable')}</span> : null}
@@ -631,6 +631,7 @@ export function ItemDetail({
               四颗按钮都接真动作，动作归到各自那张表的操作列。 */}
           <DetectTables
             name={restoreBox.name}
+            itemId={restoreBox.itemId}
             hostnames={boxHostnames}
             entries={boxAllEntries}
             actions={{
@@ -664,6 +665,8 @@ export function ItemDetail({
         <Dialog
           title={t('hosts.restoreCategory.title', { name: category.name, count: restorableItems.length })}
           onClose={() => setRestoreMenuOpen(false)}
+          width={720}
+          height={560}
           footer={
             <>
               <button type="button" className={uiStyles.btn} onClick={() => setRestoreMenuOpen(false)}>
@@ -688,6 +691,11 @@ export function ItemDetail({
               names: restorableItems.map((it) => it.name).join('、'),
             })}
           </p>
+          <RestorePreviewCards
+            rows={menuPreview?.rows ?? null}
+            loading={menuPreview === null && menuPreviewError === ''}
+            error={menuPreviewError}
+          />
         </Dialog>
       ) : null}
     </div>
