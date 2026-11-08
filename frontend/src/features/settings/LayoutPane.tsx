@@ -9,9 +9,9 @@ import styles from './SettingsDialog.module.css'
 // 侧栏三档抄原型 :885–901，队列高度三档抄 :971–979，任务列表三档抄 :983–995；
 // 每档都必须在后端范围内，这条由 internal/config/layout_bounds_parity_test.go 扫键名数档数钉住。
 const SIDEBAR_PRESETS = (): SegmentOption[] => [
-  { value: 240, label: t('settings.layout.narrow') },
-  { value: 340, label: t('settings.layout.mid') },
-  { value: 480, label: t('settings.layout.wide') },
+  { value: 216, label: t('settings.layout.narrow') },
+  { value: 224, label: t('settings.layout.mid') },
+  { value: 232, label: t('settings.layout.wide') },
 ]
 
 const QUEUE_PRESETS = (): SegmentOption[] => [

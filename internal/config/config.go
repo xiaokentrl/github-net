@@ -36,7 +36,7 @@ const (
 	MaxCandidateProbesDefault = 126
 	MaxCandidateProbesLimit   = 1008
 	MinCandidateProbes        = 1
-	SidebarWidthMin           = 200
+	SidebarWidthMin           = 160
 	SidebarWidthMax           = 600
 	// QueueHeightMin 取 45（拍板 2026-11-02）：队列收起时那一条也常驻可拖，拖的就是同一个
 	// layout.queueHeight，所以「最薄能拖到哪」必须容纳收起态那一行（队列头 44px + 1px 下边框）。
@@ -181,7 +181,7 @@ func Default() Config {
 		Appearance:  AppearanceConfig{Language: "zh-CN", Theme: "light", Zoom: 1},
 		// 队列高度默认取「小」档（拍板 2026-10-31）：主区先让给项目树，要看队列再拖大。
 		// 提示面板出厂默认关掉（true＝被禁用）；队列高度出厂不锁，零值就是默认值。
-		Layout: LayoutConfig{SidebarWidth: 240, QueueHeight: QueueHeightSmall, QueueListWidth: 220, ToastDisabled: true, QueueHeightLocked: false},
+		Layout: LayoutConfig{SidebarWidth: 224, QueueHeight: QueueHeightSmall, QueueListWidth: 220, ToastDisabled: true, QueueHeightLocked: false},
 		// 两个焦点跟随出厂默认打开（拍板 2026-10-31）：队列跟着正在跑的项目走是这功能的本意。
 		TreeBehavior: TreeBehaviorConfig{DetectFocusFollow: true, ApplyFocusFollow: true},
 	}

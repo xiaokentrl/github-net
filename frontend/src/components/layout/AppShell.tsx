@@ -90,12 +90,20 @@ export function AppShell({
   // 后端没给宽度时不写这几个变量，让 tokens.css 的默认值（标准档）生效。
   // 树的样式只消费变量（CategoryTree.module.css），两边的默认值各留一份会漂——所以这里写满三档、不靠 CSS 兜底。
   if (shownWidth !== null) {
+    // 三档密度是一套连贯的尺度：行高 ≈ 字号 ×2.3，缩进、勾选框、色点、分类间距全部随档联动。
+    // 档边界跟预设逐档对齐（216/224/232），拖到更宽（上限 600）一律按宽松档。
+    // 宽度底线按真实内容算：最长分类名「自定义 / 订阅源」@12px ≈92px，加整行开销
+    // （左右边距 16 + 勾选框 14 + 间隙×2 14 + 三角 14 + 计数徽章 58 + 滚动条 6）＝214，
+    // 留 2px 余量＝紧促档 216；标准/宽松字号放大后各再 +8px（拍板 2026-11-08：内容必须放得下）。
     const density =
-      shownWidth <= 280
-        ? { '--node-h': '26px', '--tree-pad-x': '8px', '--tree-font': '12px' }
-        : shownWidth <= 420
-          ? { '--node-h': '32px', '--tree-pad-x': '12px', '--tree-font': '13px' }
-          : { '--node-h': '38px', '--tree-pad-x': '16px', '--tree-font': '14px' }
+      shownWidth <= 216
+        ? { '--node-h': '26px', '--node-item-h': '24px', '--tree-pad-x': '8px', '--tree-font': '12px',
+            '--tree-indent': '26px', '--tree-check': '13px', '--tree-dot': '6px', '--tree-cat-gap': '3px' }
+        : shownWidth <= 224
+          ? { '--node-h': '30px', '--node-item-h': '27px', '--tree-pad-x': '8px', '--tree-font': '12.5px',
+              '--tree-indent': '34px', '--tree-check': '14px', '--tree-dot': '7px', '--tree-cat-gap': '4px' }
+          : { '--node-h': '34px', '--node-item-h': '31px', '--tree-pad-x': '8px', '--tree-font': '13px',
+              '--tree-indent': '40px', '--tree-check': '15px', '--tree-dot': '8px', '--tree-cat-gap': '5px' }
     Object.assign(appStyle as Record<string, string>, density)
   }
   const sidebarStyle = {} as CSSProperties

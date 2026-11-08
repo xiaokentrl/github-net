@@ -32,7 +32,7 @@ func TestDefaultIsValidAndUnsaved(t *testing.T) {
 		t.Errorf("首次安装必须是省流档、总上限 126，得到 %+v", c.Network)
 	}
 	// 队列三个尺寸各有默认值：左栏 220 是原型定稿的标准宽度；队列高度默认「小」档（拍板 2026-10-31）。
-	if c.Layout.SidebarWidth != 240 || c.Layout.QueueHeight != QueueHeightSmall || c.Layout.QueueListWidth != 220 {
+	if c.Layout.SidebarWidth != 224 || c.Layout.QueueHeight != QueueHeightSmall || c.Layout.QueueListWidth != 220 {
 		t.Errorf("布局默认值不对: %+v", c.Layout)
 	}
 	if !c.Layout.ToastDisabled {
@@ -183,7 +183,7 @@ func TestPatchOnlyTouchesSubmittedFields(t *testing.T) {
 	if got.Appearance.Theme != "oled" {
 		t.Errorf("只改档位的保存把主题冲掉了: %+v", got.Appearance)
 	}
-	if got.Layout.SidebarWidth != 240 || got.Appearance.Zoom != 1 {
+	if got.Layout.SidebarWidth != 224 || got.Appearance.Zoom != 1 {
 		t.Errorf("未提交的字段被改了: %+v", got)
 	}
 }
