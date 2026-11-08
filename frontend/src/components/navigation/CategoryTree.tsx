@@ -26,7 +26,6 @@ export function CategoryTree({
   onRetry,
   onToggle,
   onSelect,
-  onRestoreItems,
 }: {
   categories: CatalogCategory[]
   hostsOf: HostsLookup
@@ -42,7 +41,6 @@ export function CategoryTree({
   checkedIds: ReadonlySet<string>
   onToggleChecked: (itemID: string, checked: boolean) => void
   onManualBrowse?: () => void
-  onRestoreItems: (itemIDs: string[]) => void
 }) {
   // 方向键只在看得见的项目之间走：折叠的分类底下那些行不算，跨分类按树里的展示顺序连成一条。
   const visible = categories.flatMap((category) =>
@@ -82,7 +80,6 @@ export function CategoryTree({
         checkedIds={checkedIds}
         onToggleChecked={onToggleChecked}
         onManualBrowse={onManualBrowse}
-        onRestoreItems={onRestoreItems}
       />
     )
   })

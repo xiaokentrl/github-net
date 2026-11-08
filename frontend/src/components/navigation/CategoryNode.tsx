@@ -1,4 +1,3 @@
-import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { CatalogCategory, CatalogItem, DetectResultView, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
 import type { Tone } from '../../features/tasks/statusTone'
@@ -13,9 +12,6 @@ const DOT_CLASS: Record<Tone, string> = {
   working: styles.dotPending,
 }
 
-// 能还原 = 这个项目的映射确实在本工具的管理区段里（已替换或部分生效），和详情页那枚「还原此项」同一个条件。
-const RESTORABLE = new Set<HostsStatus>([HostsStatus.HostsApplied, HostsStatus.HostsPartial])
-
 // 项目 ID → 后端这次读出来的 Hosts 状态。整条状态都留着：
 // 树上那一行只用行底色和色点，状态词与冲突／读不到的原因收进悬停提示里。
 export type HostsLookup = Map<string, HostsState>
@@ -23,9 +19,8 @@ export type HostsLookup = Map<string, HostsState>
 // 项目 ID → 队列里正在对它做的事；没有这一项就不在 Map 里。
 export type LiveLookup = Map<string, LiveKind>
 
-// 分类行和项目行都是整行可点的容器，行尾那个 ↺ 是容器里的真按钮——
-// 所以行本身用 div + role 而不是 button：button 套 button 是非法结构，键盘焦点也会分裂。
-// 原型同一条规则：整行一个点击区，↺ 自己 stopPropagation（原型第 3527–3539 行）。
+// 分类行和项目行都是整行可点的容器——
+// 行本身用 div + role 而不是 button：原型同一条规则，整行一个点击区。
 export function CategoryNode({
   category,
   items,
@@ -40,7 +35,6 @@ export function CategoryNode({
   onManualBrowse,
   onToggle,
   onSelect,
-  onRestoreItems,
 }: {
   category: CatalogCategory
   items: CatalogItem[]
@@ -56,15 +50,13 @@ export function CategoryNode({
   checkedIds: ReadonlySet<string>
   onToggleChecked: (itemID: string, checked: boolean) => void
   onManualBrowse?: () => void
-  onRestoreItems: (itemIDs: string[]) => void
 }) {
-  // 全量项：搜索时 items 只剩命中行，但分类总数、整行高亮和 ↺ 的范围都按全量算（原型第 2334-2339、2370 行用的都是 cat.items）。
+  // 全量项：搜索时 items 只剩命中行，但分类总数和整行高亮都按全量算（原型第 2334-2339、2370 行用的都是 cat.items）。
   const all = category.items ?? []
   // 分类行只看底下这些项有没有「处理中」或「失败」，颜色跟着统一四档走。
   const states = all.map((item) => itemStatus(hostsOf.get(item.id), liveOf.get(item.id), results[item.id]))
   const hasWorking = states.some((s) => s.tone === 'working')
   const hasFailed = states.some((s) => s.tone === 'failed')
-  const restorable = all.filter((item) => RESTORABLE.has(hostsOf.get(item.id)?.status ?? HostsStatus.$zero))
 
   return (
     <li role="none" className={styles.group}>
@@ -100,22 +92,6 @@ export function CategoryNode({
         <span className={styles.name}>{category.name}</span>
         <span className={`${styles.infoArea} ${styles.infoCount}`}>
           <span className={styles.count}>{all.length}</span>
-        </span>
-        <span className={styles.restoreSlot}>
-          {restorable.length > 0 ? (
-            <button
-              type="button"
-              className={styles.restoreBtn}
-              title={t('tree.restore.category', { name: category.name, count: restorable.length })}
-              aria-label={t('tree.restore.categoryAria', { name: category.name })}
-              onClick={(event) => {
-                event.stopPropagation()
-                onRestoreItems(restorable.map((item) => item.id))
-              }}
-            >
-              ↺
-            </button>
-          ) : null}
         </span>
       </div>
 
@@ -162,22 +138,6 @@ export function CategoryNode({
                     aria-label={t(status.key)}
                   >
                     <span className={`${styles.dot} ${DOT_CLASS[status.tone]}`} aria-hidden="true" />
-                  </span>
-                  <span className={styles.restoreSlot}>
-                    {RESTORABLE.has(hosts?.status ?? HostsStatus.$zero) ? (
-                      <button
-                        type="button"
-                        className={styles.restoreBtn}
-                        title={t('tree.restore.item')}
-                        aria-label={t('tree.restore.itemAria', { name: item.name })}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onRestoreItems([item.id])
-                        }}
-                      >
-                        ↺
-                      </button>
-                    ) : null}
                   </span>
                 </div>
               </li>

@@ -1,10 +1,8 @@
 /* 目录树整块抄唯一正式原型：行与徽章的尺寸、间距、状态色都取自原型的 .node 一族
-   （第 138–171 行）、.caret 与 .caret-slot（第 178–184 行）、.name/.hl 与 .info-area
-   （第 186–191 行）、.count（第 194 行）、.dot 与 .stext（第 196–215 行）、
-   .restore-slot 与 .tree-restore-btn（第 216–225 行）。
-   原型写死的浅灰（悬停底、数量徽章底、未替换那颗粒点、浅色主题的高亮底）换成同名令牌，
-   各套配色一起走；只有一处保留字面：.hl 在晨光白下就是 #fff3a3，原型也只给浅色主题写这一份，
-   其余六套由下面那条 html[data-theme]:not([data-theme='light']) 覆盖成金色（暖黄也被这条自动收进去，原型第 726 行）。 */
+   （第 138–171 行）、.caret（第 178–184 行）、.name 与 .count（第 186–194 行）、
+   .dot（第 196–215 行）。
+   原型写死的浅灰（悬停底、数量徽章底、未替换那颗粒点）换成同名令牌，
+   各套配色一起走。 */
 .tree {
   margin: 0;
   padding: 0;
@@ -28,10 +26,10 @@
   gap: 7px;
   width: 100%;
   height: var(--node-h);
-  /* 行高、左右内边距、字号由 AppShell 按侧栏档位（紧促/标准/宽松）写成变量；
-     这里的兜底值就是标准档，但 AppShell 三档都写满，兜底只给没挂变量的场景。 */
-  padding: 0 var(--tree-pad-x, 12px);
-  font-size: var(--tree-font, 13px);
+  /* 行高、左右内边距、字号、缩进、勾选框、色点全由 AppShell 按侧栏档位（紧促/标准/宽松）
+     写成一组变量，整档联动；这里的兜底值就是标准档，AppShell 三档都写满，不靠兜底。 */
+  padding: 0 var(--tree-pad-x, 10px);
+  font-size: var(--tree-font, 12.5px);
   border: 0;
   background: transparent;
   color: var(--text);
@@ -52,14 +50,14 @@
 }
 
 .cat {
-  margin-top: 4px;
+  margin-top: var(--tree-cat-gap, 4px);
   font-weight: 600;
   color: var(--text);
 }
 
 .item {
   height: var(--node-item-h);
-  padding-left: 34px;
+  padding-left: var(--tree-indent, 34px);
   color: var(--text-2);
 }
 
@@ -80,76 +78,6 @@
   background: var(--primary);
 }
 
-/* 正在检测的这一行：金底金字 + 左缘一条发光金条；选中态那条蓝条在这一行让位（原型第 157–159 行）。 */
-.item.detecting {
-  background: var(--gold-soft);
-  color: var(--gold-text);
-  font-weight: 500;
-}
-
-.item.detecting::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--gold);
-  border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
-}
-
-.item.active.detecting::before {
-  display: none;
-}
-
-/* 正在应用的这一行：同一位置换成主色（原型第 161–163 行）。 */
-.item.applying {
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-weight: 500;
-}
-
-.item.applying::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--primary);
-  border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 8px rgba(37, 99, 235, 0.6);
-}
-
-.item.active.applying::before {
-  display: none;
-}
-
-/* 分类行自己不在跑，但它底下有在跑的项：整行提底色，底边一条来回扫的 2px 光带（原型第 165–171 行）。 */
-.cat.hasDetecting {
-  background: var(--gold-soft-2);
-  color: var(--gold-text);
-}
-
-.cat.hasDetecting::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent 0%, var(--gold) 50%, transparent 100%);
-  background-size: 200% 100%;
-  animation: goldSlide 1.6s linear infinite;
-  pointer-events: none;
-}
-
-.cat.hasApplying {
-  background: var(--primary-soft);
-  color: var(--primary);
-}
-
 /* 项目行/分类行底色跟着统一四档走，状态一变颜色立刻变。 */
 .item.working { background: var(--primary-soft); color: var(--primary); }
 .item.written { background: var(--green-soft); }
@@ -157,28 +85,6 @@
 .item.failed { background: var(--red-soft); color: var(--red); }
 .cat.hasWorking { background: var(--primary-soft); color: var(--primary); }
 .cat.hasFailed { background: var(--red-soft); color: var(--red); }
-
-.cat.hasApplying::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent 0%, var(--primary) 50%, transparent 100%);
-  background-size: 200% 100%;
-  animation: goldSlide 1.6s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes goldSlide {
-  0% {
-    background-position: 100% 0;
-  }
-  100% {
-    background-position: -100% 0;
-  }
-}
 
 .caret {
   display: flex;
@@ -211,17 +117,6 @@
   white-space: nowrap;
 }
 
-/* 搜索命中的那一段照原样留在文字里，只加底色（原型第 187 行）。 */
-.name .hl {
-  border-radius: 2px;
-  background: #fff3a3;
-}
-
-:global(html[data-theme]:not([data-theme='light'])) .name .hl {
-  background: var(--gold);
-  color: var(--bg);
-}
-
 /* 信息区：分类行定宽 58px 放数量徽章（右对齐）；项目行只放色点，收窄到 16px。 */
 .infoArea {
   display: flex;
@@ -252,9 +147,20 @@
 
 .dot {
   flex: none;
-  width: 7px;
-  height: 7px;
+  width: var(--tree-dot, 7px);
+  height: var(--tree-dot, 7px);
   border-radius: 50%;
+}
+
+/* 「还没替换」和「后端没读过」都不是好坏结论，用中性灰点。 */
+.dotUnset {
+  background: #cbd5e1;
+}
+
+/* 正在跑的那一行：主色点带一圈扩散，表示它还活着。 */
+.dotPending {
+  background: var(--primary);
+  animation: pulse 1.1s ease-in-out infinite;
 }
 
 .dotApplied {
@@ -262,32 +168,9 @@
   box-shadow: 0 0 0 3px var(--green-soft);
 }
 
-/* 部分生效、待更新这一档用琥珀色（原型 .dot.stale）。 */
-.dotStale {
-  background: var(--amber);
-  box-shadow: 0 0 0 3px var(--amber-soft);
-}
-
-/* 「还没替换」和「后端没读过」都不是好坏结论，用中性灰点（原型 .dot.unset 是字面色，各套配色都没覆盖它）。 */
-.dotUnset {
-  background: #cbd5e1;
-}
-
 .dotError {
   background: var(--red);
   box-shadow: 0 0 0 3px var(--red-soft);
-}
-
-/* 正在跑的那一行：主色点带一圈扩散，表示它还活着（原型 .dot.pending 第 201 行）。 */
-.dotPending {
-  background: var(--primary);
-  animation: pulse 1.1s ease-in-out infinite;
-}
-
-/* 查出可用候选、还没应用：主色点 + 主色字（原型 .dot.detected）。 */
-.dotDetected {
-  background: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
 @keyframes pulse {
@@ -300,44 +183,10 @@
   }
 }
 
-/* 行尾 20px 空槽：没有可还原项时它是空的，但有项目的行字才不会被挤来挤去。 */
-.restoreSlot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 20px;
-  height: 20px;
-}
-
-.restoreBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-3);
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-}
-
-.restoreBtn:hover {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-
-.restoreBtn:active {
-  transform: translateY(0.5px);
-}
-
 .check {
   flex: none;
+  width: var(--tree-check, 14px);
+  height: var(--tree-check, 14px);
   accent-color: var(--primary);
   cursor: pointer;
 }
