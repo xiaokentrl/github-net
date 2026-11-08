@@ -55,6 +55,20 @@
   line-height: 1.5;
   color: var(--text-2);
 }
+/* ① 卡片头下的三色汇总：变回 / 删掉 / 不变各几条。 */
+.sumRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 7px 0 0 21px;
+}
+.sumChip {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
 
 .tbl {
   width: 100%;
@@ -63,12 +77,13 @@
   table-layout: fixed;
   font-size: 11.5px;
 }
-/* ① 还原（四列）：二级菜单 | 当前写入 IP | 这条 IP 通不通 | 操作 */
-.cMenu { width: 17%; }
-.cData { width: 45%; }
-.cNet { width: 17%; }
-.cAction { width: 21%; }
-/* ② 检测与写入（五列）：多一列「上次检测」，说明结论新旧 */
+/* ① 还原（五列）：二级菜单 | 还原前 | 还原后 | 这条 IP 通不通 | 操作 */
+.cMenu { width: 14%; }
+.cData { width: 27%; }
+.cAfter { width: 22%; }
+.cNet { width: 15%; }
+.cAction { width: 22%; }
+/* ② 检测与写入（五列）：逐一列出候选、网络状态、上次检测 */
 .cMenu2 { width: 15%; }
 .cData2 { width: 35%; }
 .cNet2 { width: 15%; }
@@ -101,14 +116,29 @@
   background: var(--band, #f7f8fa);
   word-break: break-all;
 }
-/* 候选逐条列出后行数多，第二张表的合并格贴顶才看得见。选择器带 .tbl td 压过上面的 middle。 */
-.tbl td.groupCellTop { vertical-align: top; }
 .groupArrow { margin-right: 4px; color: var(--text-3); }
 
 /* 同一域名的多条候选之间不画线，换域名才画一条，逐条列也不至于糊成一片。 */
 .tbl tbody tr.rowStart td { border-top: 1px solid var(--border-strong); }
 
 .dataCell { line-height: 1.5; }
+
+/* 还原后：结果标签 + 目标 IP，三种结果各一色，一眼看得出和左边差在哪。 */
+.afterCell { line-height: 1.5; }
+.restoreTag {
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 3px 5px;
+  border-radius: 4px;
+  margin-right: 5px;
+  white-space: nowrap;
+}
+.tagRestore { background: var(--green-soft, #e8f7ee); color: var(--green, #16a34a); }
+.tagRemove { background: var(--red-soft, #fdecec); color: var(--red, #dc2626); }
+.tagKeep, .tagUnknown { background: var(--band, #f2f3f5); color: var(--text-3); }
+.afterNone { font-size: 10px; color: var(--text-3); }
 
 /* 网络状态：只照后端定格上色，通/不通/没结论三档，不自己推断。 */
 .netCell { text-align: center; white-space: nowrap; }
@@ -153,11 +183,11 @@
 }
 
 /* 操作列：整表合并成格，竖排两颗真动作按钮。 */
+/* 操作列按钮组在合并格里靠下；带 .tbl td 压过基础 middle。 */
 .tbl td.actionCell {
-  vertical-align: middle;
+  vertical-align: bottom;
   background: var(--band, #f7f8fa);
 }
-.tbl td.actionCellTop { vertical-align: top; }
 .actionStack {
   display: flex;
   flex-direction: column;

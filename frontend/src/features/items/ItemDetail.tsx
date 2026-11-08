@@ -75,7 +75,6 @@ export function ItemDetail({
   hosts,
   hostsOf,
   onSelectItem,
-  detectReady,
   detectError,
   hostsError,
   onDetect,
@@ -90,7 +89,6 @@ export function ItemDetail({
   hosts: HostsState | undefined
   hostsOf: Map<string, HostsState>
   onSelectItem: (itemId: string) => void
-  detectReady: boolean
   detectError: string
   hostsError: string
   onDetect: (itemId: string, strategyId?: string) => void
@@ -299,10 +297,7 @@ export function ItemDetail({
   }
   if (!item || !category) return <EmptyState message={t('detail.empty')} />
 
-  const hostnames = item.hostnames ?? []
-  const selfDetectable = !item.userSupplied && hostnames.length > 0
   const result = state.results[item.id]
-  const live = state.live[item.id]
 
   const rows = result?.hosts ?? []
   // 当前写入 IP 只有一个来源：后端在这轮候选里标了 applied 的那几条。界面不自己认。
@@ -531,27 +526,6 @@ export function ItemDetail({
 
       {/* 第二张卡：这一轮查到的候选。按钮全在原型 .candidate-actions 的位置（第 298 行）。 */}
       <div className={styles.card}>
-        <div className={styles.cardHead}>
-          <h3 className={styles.title}>{t('detail.candidates.title')}</h3>
-          <span className={styles.countPill}>{t('detail.candidates.count', { count: listedCandidates.length })}</span>
-          {/* 这一轮的账（可用／探测／DNS）跟在「N 个候选」后面同一行：它说的是这张表的来路，
-              单独占一行摆在表上方会把标题行和表拉散。 */}
-          {result && rows.length > 0 ? (
-            <span className={styles.headMeta}>
-              {t('detect.meta', { available: result.available, probes: result.probesUsed, dns: result.dnsQueries })}
-              {result.truncated ? ` · ${t('detect.truncated')}` : ''}
-              {result.deadlineHit ? ` · ${t('detect.deadlineHit')}` : ''}
-              {result.cancelled ? ` · ${t('detect.cancelledBadge')}` : ''}
-            </span>
-          ) : null}
-          <div className={detectStyles.candidateActions}>
-            {/* 两颗按钮已删（拍板 2026-11-04）：「检测本菜单」「写入本项目」——检测走方法
-                下拉旁那颗「只测此方法」，应用走表格行内的还原/应用链；这里不再放动作按钮。 */}
-            {detecting && live ? <span className={styles.hint}>{t('detect.live', { done: live.done, total: live.total, active: live.active })}</span> : null}
-            {!detectReady ? <span className={styles.hint}>{t('detect.notReady')}</span> : null}
-            {detectReady && !selfDetectable ? <span className={styles.hint}>{t('detect.unavailable')}</span> : null}
-          </div>
-        </div>
 
         {failedHosts.length > 0 ? (
           <p className={styles.hint}>

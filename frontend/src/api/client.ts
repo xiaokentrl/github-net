@@ -21,6 +21,8 @@ import {
   OpenHosts,
   PreviewIPCache,
   PreviewRestoreHosts,
+  PreviewRestoreHostsItem,
+  PreviewRestoreHostsItems,
   PreviewSourcesCache,
   ReprobeIP,
   RestoreAllHosts,
@@ -193,9 +195,21 @@ export function previewIPCache(): Promise<IPCachePreview> {
   return PreviewIPCache()
 }
 
-// 清除已写入的 Hosts：每个受管理域名恢复前／后的 IP 对比，以及涉及的项目数。
+// 清除已写入的 Hosts（全量还原）：每个受管理域名恢复前／后的 IP 对比，以及涉及的项目数。
 export function previewRestoreHosts(): Promise<HostsRestorePreview> {
   return PreviewRestoreHosts()
+}
+
+// 只还原一个二级菜单：这个项目的域名还原前／后分别指向哪个 IP。
+// 与全量预览分开走后端单项目算法：共享域名在其他项目还认领时 IP 不变，两者结论不一样。
+export function previewRestoreHostsItem(itemId: string): Promise<HostsRestorePreview> {
+  return PreviewRestoreHostsItem(itemId)
+}
+
+// 「还原本菜单」：按传入顺序一次还原这 N 个二级菜单后的前后对比。
+// 必须整体算，不能拿 N 份单项目预览去拼——共享域名一起释放后的结果和单独释放不同。
+export function previewRestoreHostsItems(itemIds: string[]): Promise<HostsRestorePreview> {
+  return PreviewRestoreHostsItems(itemIds)
 }
 
 // 单条复测：现场重探候选池里的一条地址，后端把结论刷回那一行并返回刷新后的整行。

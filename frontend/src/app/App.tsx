@@ -1013,7 +1013,6 @@ export function App() {
               setSelectedId(itemId)
               focusManualRef.current = true
             }}
-            detectReady={status?.dnsDetectionReady ?? false}
             detectError={detectError}
             hostsError={hostsError}
             onDetect={startDetect}
