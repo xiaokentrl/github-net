@@ -3,7 +3,7 @@ import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import { applyItems, clearAllIPCache, clearSourcesCache, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, getTasks, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
-import { subscribeAutomationStatus, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
+import { subscribeAutomationStatus, subscribeBrowserRestarted, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
 import { automationText } from '../components/layout/StatusBar'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
@@ -268,6 +268,15 @@ export function App() {
       applyConfig(config)
     })
 
+    // 应用后自动重启浏览器的回执：重启了几家说几家，一家没跑就明说跳过了。
+    const unsubscribeBrowser = subscribeBrowserRestarted((payload) => {
+      if (payload.restarted > 0) {
+        pushNotice('success', t('browser.restart.done', { names: payload.families.join('、') }))
+        return
+      }
+      pushNotice('info', t('browser.restart.none'))
+    })
+
     // 启动自动化每一步推来的结论：后到的一份覆盖前一份，界面只显示手上这最新一句。
     // 同一结论同时递一条进右下角面板（拍板 2026-11-03）：阶段或原因码变了才推一条，
     // 进行中的重复进度不打扰；关键收尾（跑完/跳过/失败/不退出）在面板里留底。
@@ -295,6 +304,7 @@ export function App() {
       unsubscribeUpdate()
       unsubscribeSettings()
       unsubscribeAutomation()
+      unsubscribeBrowser()
     }
   }, [loadStatus, loadSettings, loadCatalog, loadAutomation, applyConfig])
 
@@ -513,6 +523,14 @@ export function App() {
     (value: number) => {
       if (!settings || settings.network.maxCandidateProbesPerRun === value) return
       submit({ maxCandidateProbesPerRun: value }, t('settings.subject.budget'), 'budget')
+    },
+    [settings, submit],
+  )
+
+  const changeRestartBrowser = useCallback(
+    (enabled: boolean) => {
+      if (!settings || settings.browser?.restartAfterApply === enabled) return
+      submit({ restartBrowserAfterApply: enabled }, t('settings.subject.browser'), 'restartBrowser')
     },
     [settings, submit],
   )
@@ -1088,6 +1106,7 @@ export function App() {
           onClose={() => setDialogOpen(false)}
           onProfile={changeProfile}
           onBudget={changeBudget}
+          onRestartBrowser={changeRestartBrowser}
           onSidebarWidth={changeSidebarWidth}
           onQueueHeight={changeQueueHeight}
           onQueueListWidth={changeQueueListWidth}

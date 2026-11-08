@@ -55,6 +55,10 @@ type Service struct {
 	settings    *config.Store
 	settingsErr error
 
+	// emit 是事件投递出口（装配层传入的 Wails 事件总线），
+	// 应用后自动重启浏览器的回执从它走；nil＝只做不报。
+	emit func(name string, payload any)
+
 	// hostsPath 是系统 Hosts 的路径，每次读目录都现读一遍，不缓存结果。
 	// hostsReads 是「第几次读」的计数，只用来给前端一个能比大小的 revision。
 	hostsPath  string
@@ -126,6 +130,10 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	if sequence == nil {
 		sequence = func() int64 { return 0 }
 	}
+	var emit func(name string, payload any)
+	if taskEmit != nil {
+		emit = taskEmit
+	}
 	c, err := catalog.Load()
 	results := newDetectResultStore()
 	rounds := newRoundBudgets()
@@ -163,6 +171,7 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 		version:        version,
 		startedAt:      time.Now(),
 		sequence:       sequence,
+		emit:           emit,
 		productCatalog: c,
 		// 加载失败时 c 是 nil，先把错误留下，读接口再负责翻译成人能看懂的错误码。
 		productCatalogErr: err,

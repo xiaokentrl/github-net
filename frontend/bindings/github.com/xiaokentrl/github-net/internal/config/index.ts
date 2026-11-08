@@ -4,6 +4,7 @@
 export type {
     AcceleratorConfig,
     AppearanceConfig,
+    BrowserConfig,
     Config,
     LayoutConfig,
     NetworkConfig,

@@ -140,6 +140,14 @@ type Config struct {
 	Layout        LayoutConfig       `json:"layout"`
 	TreeBehavior  TreeBehaviorConfig `json:"treeBehavior"`
 	Startup       StartupConfig      `json:"startup"`
+	Browser       BrowserConfig      `json:"browser"`
+}
+
+// BrowserConfig 是浏览器相关行为。RestartAfterApply：应用队列把 Hosts 写完后，
+// 自动温和退出正在运行的浏览器并按原样拉起——Chrome 系重启时补「恢复上次会话」参数，
+// 关闭前的窗口会自动还原；Firefox 靠它自己的会话恢复设置。默认关闭。
+type BrowserConfig struct {
+	RestartAfterApply bool `json:"restartAfterApply"`
 }
 
 // Patch 是字段级保存请求：没带的字段保持原值，所以一次只改档位的保存
@@ -160,6 +168,7 @@ type Patch struct {
 	DetectFocusFollow              *bool              `json:"detectFocusFollow"`
 	ApplyFocusFollow               *bool              `json:"applyFocusFollow"`
 	CheckedItemIDs                 *[]string          `json:"checkedItemIds"`
+	RestartBrowserAfterApply       *bool              `json:"restartBrowserAfterApply"`
 	AutoStart                      *bool              `json:"autoStart"`
 	StartMinimized                 *bool              `json:"startMinimized"`
 	CloseToTray                    *bool              `json:"closeToTray"`
@@ -184,6 +193,8 @@ func Default() Config {
 		Layout: LayoutConfig{SidebarWidth: 224, QueueHeight: QueueHeightSmall, QueueListWidth: 220, ToastDisabled: true, QueueHeightLocked: false},
 		// 两个焦点跟随出厂默认打开（拍板 2026-10-31）：队列跟着正在跑的项目走是这功能的本意。
 		TreeBehavior: TreeBehaviorConfig{DetectFocusFollow: true, ApplyFocusFollow: true},
+		// 浏览器重启出厂关闭：动用户正开着的程序必须用户点头。
+		Browser: BrowserConfig{RestartAfterApply: false},
 	}
 }
 
@@ -589,6 +600,9 @@ func applyPatch(c *Config, p Patch) {
 	}
 	if p.ApplyFocusFollow != nil {
 		c.TreeBehavior.ApplyFocusFollow = *p.ApplyFocusFollow
+	}
+	if p.RestartBrowserAfterApply != nil {
+		c.Browser.RestartAfterApply = *p.RestartBrowserAfterApply
 	}
 	if p.CheckedItemIDs != nil {
 		ids := *p.CheckedItemIDs

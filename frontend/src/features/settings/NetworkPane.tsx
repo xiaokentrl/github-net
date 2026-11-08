@@ -23,12 +23,14 @@ export function NetworkPane({
   save,
   onProfile,
   onBudget,
+  onRestartBrowser,
 }: {
   settings: Config
   hostnames: number
   save: SaveState
   onProfile: (profile: NetworkProfile) => void
   onBudget: (value: number) => void
+  onRestartBrowser: (enabled: boolean) => void
 }) {
   const [draft, setDraft] = useState(String(settings.network.maxCandidateProbesPerRun))
   const [invalid, setInvalid] = useState(false)
@@ -37,6 +39,7 @@ export function NetworkPane({
   const busy = save.kind === 'pending'
   // 这一屏只有「每轮候选上限」带状态条（档位那条在顶栏），别把顶栏的改动提示搬进来。
   const budgetSave = saveStateFor(save, 'budget')
+  const browserSave = saveStateFor(save, 'restartBrowser')
   const spec = profileSpec(settings.network.profile)
   // 一轮全量需要的次数按目录里去重后的主机名数算，和后端「每 hostname 候选上限」同一口径。
   const needed = hostnames * spec.candidates
@@ -136,6 +139,26 @@ export function NetworkPane({
             ? t('settings.network.coverageFull', { cap })
             : t('settings.network.coverageShort', { cap, gap: needed - cap })}
         </div>
+      </div>
+
+      <div className={styles.card}>
+        <div className={styles.cardTitle}>
+          <span className={styles.ico} aria-hidden="true">
+            ↻
+          </span>
+          {t('settings.browser.title')}
+        </div>
+        <p className={styles.profileDesc}>{t('settings.browser.desc')}</p>
+        <label className={styles.checkRow}>
+          <input
+            type="checkbox"
+            checked={settings.browser?.restartAfterApply === true}
+            disabled={busy}
+            onChange={(event) => onRestartBrowser(event.target.checked)}
+          />
+          {t('settings.browser.toggle')}
+        </label>
+        <InlineStatus kind={browserSave.kind} text={browserSave.text} />
       </div>
 
       <div className={styles.note}>{t('settings.network.note')}</div>

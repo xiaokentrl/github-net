@@ -76,6 +76,7 @@ export type SettingsPatch = {
   autoCloseAfterApply?: boolean
   detectFocusFollow?: boolean
   applyFocusFollow?: boolean
+  restartBrowserAfterApply?: boolean
   checkedItemIds?: string[]
 }
 
@@ -127,6 +128,7 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     autoStart: patch.autoStart ?? null,
     detectFocusFollow: patch.detectFocusFollow ?? null,
     applyFocusFollow: patch.applyFocusFollow ?? null,
+    restartBrowserAfterApply: patch.restartBrowserAfterApply ?? null,
     checkedItemIds: patch.checkedItemIds ?? null,
     autoDetectMenus: patch.autoDetectMenus ?? null,
     autoApplyOnStartup: patch.autoApplyOnStartup ?? null,

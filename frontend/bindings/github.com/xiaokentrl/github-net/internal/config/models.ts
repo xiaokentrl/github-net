@@ -18,6 +18,15 @@ export interface AppearanceConfig {
 }
 
 /**
+ * BrowserConfig 是浏览器相关行为。RestartAfterApply：应用队列把 Hosts 写完后，
+ * 自动温和退出正在运行的浏览器并按原样拉起——Chrome 系重启时补「恢复上次会话」参数，
+ * 关闭前的窗口会自动还原；Firefox 靠它自己的会话恢复设置。默认关闭。
+ */
+export interface BrowserConfig {
+    "restartAfterApply": boolean;
+}
+
+/**
  * Config 是完整配置快照，也是磁盘上的文件内容。
  */
 export interface Config {
@@ -29,6 +38,7 @@ export interface Config {
     "layout": LayoutConfig;
     "treeBehavior": TreeBehaviorConfig;
     "startup": StartupConfig;
+    "browser": BrowserConfig;
 }
 
 /**
@@ -86,6 +96,7 @@ export interface Patch {
     "detectFocusFollow": boolean | null;
     "applyFocusFollow": boolean | null;
     "checkedItemIds": string[] | null;
+    "restartBrowserAfterApply": boolean | null;
     "autoStart": boolean | null;
     "startMinimized": boolean | null;
     "closeToTray": boolean | null;

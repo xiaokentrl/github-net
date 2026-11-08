@@ -52,6 +52,11 @@ func (s *Service) ApplyItems(itemIDs []string) ([]task.Task, error) {
 		}
 		tasks = append(tasks, t)
 	}
+	// 应用落定后自动重启浏览器（拍板 2026-11-08）：开关开着才动；
+	// 那一轮里至少一条真写成功（StatusDone）才重启，全跳过/全失败一个浏览器都不动。
+	if s.browserRestartEnabled() {
+		go s.restartBrowsersAfterApply(roundID)
+	}
 	return tasks, nil
 }
 

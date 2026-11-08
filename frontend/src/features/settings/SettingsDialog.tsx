@@ -51,6 +51,7 @@ export function SettingsDialog({
   onClose,
   onProfile,
   onBudget,
+  onRestartBrowser,
   onSidebarWidth,
   onQueueHeight,
   onQueueListWidth,
@@ -77,6 +78,7 @@ export function SettingsDialog({
   onClose: () => void
   onProfile: (profile: NetworkProfile) => void
   onBudget: (value: number) => void
+  onRestartBrowser: (enabled: boolean) => void
   onSidebarWidth: (width: number) => void
   onQueueHeight: (height: number) => void
   onQueueListWidth: (width: number) => void
@@ -167,7 +169,7 @@ export function SettingsDialog({
 
           <div className={styles.content}>
             {pane === 'network' && (
-              <NetworkPane settings={settings} hostnames={hostnames} save={save} onProfile={onProfile} onBudget={onBudget} />
+              <NetworkPane settings={settings} hostnames={hostnames} save={save} onProfile={onProfile} onBudget={onBudget} onRestartBrowser={onRestartBrowser} />
             )}
             {pane === 'layout' && (
               <LayoutPane

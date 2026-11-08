@@ -11,6 +11,13 @@ const DETECT_EVENT = 'detect:progress'
 const SETTINGS_EVENT = 'settings:changed'
 const UPDATE_EVENT = 'update:status'
 const AUTOMATION_EVENT = 'automation:status'
+// 事件名必须和 Go 侧 internal/app/browser_restart.go 的 browserRestartedEvent 一致。
+const BROWSER_EVENT = 'browser:restarted'
+
+export type BrowserRestartedPayload = {
+  restarted: number
+  families: string[]
+}
 
 export type RuntimeStatusPayload = {
   sequence: number
@@ -117,6 +124,15 @@ export function subscribeAutomationStatus(onPayload: (payload: AutomationStatus)
   return Events.On(AUTOMATION_EVENT, (event: Events.WailsEvent) => {
     const payload = event.data as AutomationStatus | undefined
     if (!payload || typeof payload.stage !== 'string' || payload.stage === '') return
+    onPayload(payload)
+  })
+}
+
+// 订阅「应用后浏览器已重启」回执：restarted 是重启了几家，families 是家族名清单。
+export function subscribeBrowserRestarted(onPayload: (payload: BrowserRestartedPayload) => void): () => void {
+  return Events.On(BROWSER_EVENT, (event: Events.WailsEvent) => {
+    const payload = event.data as BrowserRestartedPayload | undefined
+    if (!payload || typeof payload.restarted !== 'number') return
     onPayload(payload)
   })
 }
