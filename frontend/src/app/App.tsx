@@ -313,6 +313,16 @@ export function App() {
     return map
   }, [snapshot])
 
+  // 全部还原弹框的对照表分组列：每个二级菜单一格，域名归属按目录 + Hosts 实写条目算；
+  // 归属不上的行在表里落「—」组，不硬塞给某个菜单。和详情页还原本菜单那套同一个口径。
+  const restoreGroups = useMemo(() => (snapshot?.categories ?? []).flatMap((cat) => (cat.items ?? []).map((it) => ({
+    name: it.name,
+    hostnames: Array.from(new Set([
+      ...(it.hostnames ?? []),
+      ...(hostsOf.get(it.id)?.entries ?? []).map((e) => e.hostname),
+    ])),
+  }))), [snapshot, hostsOf])
+
   // 二级菜单在目录里的先后顺序。清理弹框的 IP 缓存分组照这个排，不按候选池延迟。
   const menuOrder = useMemo(() => {
     const names: string[] = []
@@ -880,7 +890,7 @@ export function App() {
     document.querySelector(`[data-item-id="${runningItemId}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [runningItemId, followEnabled, expanded])
 
-  // 一条还原链路，详情页的「还原此项」和树上的 ↺（单项或整类）都走这里。
+  // 一条还原链路，详情页的「还原此项」和「还原本菜单」都走这里。
   // 命令只代表「排进队列」，返回的任务还在 waiting：除了终态事件之外，这里直接问后端这批任务
   // 落定没有，落定就无条件重读目录。不把表格刷新全押在一条 Wails 事件上——事件没送到、
   // 或者中途被别处并发请求挤掉，列表就会一直停在还原前的样子。
@@ -929,7 +939,7 @@ export function App() {
   // 工具栏「恢复」和队列面板那颗共用同一条实现（useRestoreAll）；失败按同一条规矩：原位一句 + 右下角一条。
   // 还原不进队列、没有任务落定事件，所以成功后在这里重读目录，树上的状态才跟着回到「未替换」。
   const handleRestoreError = useCallback((err: unknown) => reportRejection(setHostsError, err), [])
-  const { busy: restoreBusy, restoreAll, restoreAllNow, confirmDialog: restoreAllConfirm } = useRestoreAllTasks(handleRestoreError, loadCatalog)
+  const { busy: restoreBusy, restoreAll, restoreAllNow, confirmDialog: restoreAllConfirm } = useRestoreAllTasks(handleRestoreError, loadCatalog, restoreGroups)
 
   const sidebar = (
     <CategoryTree
@@ -952,7 +962,6 @@ export function App() {
         userTouchedRef.current = true
       }}
       onSelect={setSelectedId}
-      onRestoreItems={startRestoreItems}
     />
   )
 
@@ -1096,6 +1105,7 @@ export function App() {
         <ClearCacheDialog
           sourceIds={clearAsk}
           menuOrder={menuOrder}
+          hostsGroups={restoreGroups}
           hostsDisabled={restoreBusy}
           onCancel={() => setClearAsk(null)}
           onConfirm={(choice) => runClearSelected(choice, restoreAllNow, restoreBusy)}

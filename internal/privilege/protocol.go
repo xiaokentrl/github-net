@@ -27,8 +27,9 @@ const (
 )
 
 // 操作白名单：协议里只认这六个。别的 op 一律拒绝，服务侧不解释、不透传。
-// hostsState / hostsPreview 都是只读的：只回「最后一次成功写入的摘要」和「全量还原后的前后对比」，
+// hostsState / hostsPreview 都是只读的：只回「最后一次成功写入的摘要」和「还原后的前后对比」，
 // 不改任何文件；界面靠它们判断状态——而恢复元数据在 root 目录里，界面进程自己读不到。
+// hostsPreview 带 itemID 时只看「还原这一个项目」，不带则是全量还原。
 const (
 	OpPing         = "ping"
 	OpApply        = "apply"
@@ -43,18 +44,20 @@ const (
 const MaxFrameSize = 1 << 20
 
 // Request 是客户端发来的一个操作。所有字段都是服务侧要白名单校验的输入：
-// op 必须在白名单里；itemID 必须非空（restoreAll / hostsState / hostsPreview 除外）；
+// op 必须在白名单里；apply / restoreItem 用 itemID 且必须非空；
+// hostsPreview 用 itemIDs（空＝全量还原，N 个＝按这个顺序一起还原这 N 个项目）；
 // mappings 只在 apply 时有意义。
 type Request struct {
 	Op       string          `json:"op"`
 	ItemID   string          `json:"itemId,omitempty"`
+	ItemIDs  []string        `json:"itemIds,omitempty"`
 	Mappings []hosts.Mapping `json:"mappings,omitempty"`
 }
 
 // Response 是服务的一次应答。OK 为 false 时 Code/Message 一定非空；
 // Restored 是 restoreAll 实际还原的项目数，其他操作不带；
 // Written 只在 hostsState 时带上「最后一次成功写入」的读侧视图；
-// Preview 只在 hostsPreview 时带上「全量还原前后对比」的只读视图。
+// Preview 只在 hostsPreview 时带上「还原前后对比」的只读视图（全量或按项目）。
 type Response struct {
 	OK       bool                  `json:"ok"`
 	Code     string                `json:"code,omitempty"`
@@ -76,13 +79,14 @@ const (
 )
 
 // Handler 是服务对白名单操作的实现。返回 error 表示这一笔没做成（事务层保证失败时原文件不动）。
-// State / Preview 都是只读的，不改任何文件。
+// State / Preview 都是只读的，不改任何文件。Preview 的 itemIDs 为空＝全量还原，
+// 一个＝只还原这个项目，多个＝按给定顺序一起还原：三条路径对应界面上三种还原动作，结果不能混用。
 type Handler interface {
 	Apply(itemID string, mappings []hosts.Mapping) error
 	RestoreItem(itemID string) error
 	RestoreAll() (restored int, err error)
 	State() (hosts.Written, error)
-	Preview() (hosts.RestorePreview, error)
+	Preview(itemIDs []string) (hosts.RestorePreview, error)
 }
 
 // ValidateRequest 是服务侧的入口校验：op 在白名单、字段与操作匹配。

@@ -27,7 +27,8 @@ type Caller interface {
 	RestoreItem(itemID string) error
 	RestoreAll() (restored int, err error)
 	State() (hosts.Written, error)
-	Preview() (hosts.RestorePreview, error)
+	// Preview 的 itemIDs 为空＝全量还原，一个＝单项目，多个＝按给定顺序一起还原。
+	Preview(itemIDs []string) (hosts.RestorePreview, error)
 }
 
 // Client 是 Caller 的真实现：连固定端点、一问一答、答完即关。
@@ -95,10 +96,11 @@ func (c *Client) State() (hosts.Written, error) {
 	return *resp.Written, nil
 }
 
-// Preview 只读问一次「全量还原之后每个受管理域名的前后对比」。服务答「没写过」时返回零值，
-// 不是错误；连不上或服务拒了才报错，调用方据此区分「确实没得还原」和「问不着」。
-func (c *Client) Preview() (hosts.RestorePreview, error) {
-	resp, err := c.call(Request{Op: OpHostsPreview})
+// Preview 只读问一次还原前后对比：itemIDs 为空＝全量，一个＝单项目，多个＝按这个顺序一起还原。
+// 服务答「没写过」时返回零值，不是错误；连不上或服务拒了才报错，
+// 调用方据此区分「确实没得还原」和「问不着」。
+func (c *Client) Preview(itemIDs []string) (hosts.RestorePreview, error) {
+	resp, err := c.call(Request{Op: OpHostsPreview, ItemIDs: itemIDs})
 	if err != nil {
 		return hosts.RestorePreview{}, err
 	}

@@ -4,6 +4,8 @@ import { getErrorMessage } from '../../api/errors'
 import { Dialog } from './Dialog'
 import uiStyles from './ui.module.css'
 import styles from './ClearCacheDialog.module.css'
+import { RestorePreviewTable } from '../../features/items/RestorePreviewTable'
+import dt from '../../features/items/DetectTables.module.css'
 import { previewIPCache, previewRestoreHosts, previewSourcesCache, reprobeIP } from '../../api/client'
 import type { HostsRestorePreview, IPCachePreview, PoolEntryView, SourceCachePreview } from '../../api/client'
 
@@ -25,55 +27,6 @@ const STATUS_KEY: Record<string, string> = {
 
 function statusLabel(status: string): string {
   return t(STATUS_KEY[status] ?? 'detect.candidate.unknown')
-}
-
-// 还原预览按「点下去会变成什么」分成三种具体结果，不让新用户自己对着两列猜。
-// after 为空＝应用前本来没有这条，整条删掉；after 和 before 相同＝还被别的项目用着，不变；
-// 其余＝现在指向的 IP 会被换回应用前那个。
-type HostsRow = NonNullable<HostsRestorePreview['rows']>[number]
-type HostsGroupKind = 'restore' | 'remove' | 'keep'
-type HostsGroup = { kind: HostsGroupKind; rows: HostsRow[] }
-
-const HOSTS_GROUP_KEY: Record<HostsGroupKind, { title: string; hint: string; sum: string }> = {
-  restore: {
-    title: 'toolbar.clearCache.hosts.groupRestore',
-    hint: 'toolbar.clearCache.hosts.groupRestoreHint',
-    sum: 'toolbar.clearCache.hosts.sumRestore',
-  },
-  remove: {
-    title: 'toolbar.clearCache.hosts.groupRemove',
-    hint: 'toolbar.clearCache.hosts.groupRemoveHint',
-    sum: 'toolbar.clearCache.hosts.sumRemove',
-  },
-  keep: {
-    title: 'toolbar.clearCache.hosts.groupKeep',
-    hint: 'toolbar.clearCache.hosts.groupKeepHint',
-    sum: 'toolbar.clearCache.hosts.sumKeep',
-  },
-}
-
-function hostsGroups(rows: HostsRow[]): HostsGroup[] {
-  const by: Record<HostsGroupKind, HostsRow[]> = { restore: [], remove: [], keep: [] }
-  for (const r of rows) {
-    if (!r.after) by.remove.push(r)
-    else if (r.after === r.before) by.keep.push(r)
-    else by.restore.push(r)
-  }
-  return (['restore', 'remove', 'keep'] as const)
-    .map((kind) => ({ kind, rows: by[kind] }))
-    .filter((g) => g.rows.length > 0)
-}
-
-// 三种结果各自的颜色类，写死映射而不是拼字符串，样式表改类名时类型检查能抓到。
-const HOSTS_SUM_CLASS: Record<HostsGroupKind, string> = {
-  restore: styles.restoreSumRestore,
-  remove: styles.restoreSumRemove,
-  keep: styles.restoreSumKeep,
-}
-const HOSTS_CARD_CLASS: Record<HostsGroupKind, string> = {
-  restore: styles.restoreCardRestore,
-  remove: styles.restoreCardRemove,
-  keep: styles.restoreCardKeep,
 }
 
 // 上次检测：按距今多久说人话。时间没带或读到未来时间都按「刚刚」，读不懂给「—」。
@@ -121,12 +74,15 @@ function groupByMenu(entries: IPEntry[] | null, menuOrder: string[]): IPGroup[] 
 export function ClearCacheDialog({
   sourceIds,
   menuOrder,
+  hostsGroups,
   hostsDisabled,
   onCancel,
   onConfirm,
 }: {
   sourceIds: string[]
   menuOrder: string[]
+  // 域名→二级菜单的归属（App 按目录 + Hosts 实写条目算好），「清除已写入的 Hosts」对照表分组用。
+  hostsGroups: { name: string; hostnames: string[] }[]
   hostsDisabled: boolean
   onCancel: () => void
   onConfirm: (choice: ClearCacheChoice) => void
@@ -137,8 +93,6 @@ export function ClearCacheDialog({
   const [activePanel, setActivePanel] = useState<PanelKey>(null)
   const sourceCount = sourceIds.length
   const noCheckedItems = sourceCount === 0
-  const hostsOn = hosts && !hostsDisabled
-  const any = sources || allIP || hostsOn
 
   const [sourceRows, setSourceRows] = useState<SourceCachePreview[] | null>(null)
   const [ipPreview, setIpPreview] = useState<IPCachePreview | null>(null)
@@ -147,6 +101,16 @@ export function ClearCacheDialog({
   const [previewErrors, setPreviewErrors] = useState<Partial<Record<Exclude<PanelKey, null>, string>>>({})
   const [reprobingKey, setReprobingKey] = useState<string | null>(null)
   const [actionError, setActionError] = useState('')
+
+  // 预览读出来了而且是空的＝本工具根本没写过 Hosts：勾选置灰显原因，
+  // 别让用户勾一项空跑（另外两个还原弹框同一规矩：空表就不给点）。
+  // 读失败不算空——读不出来不等于没有，勾选照旧可点。
+  const hostsEmpty = hostsPreview !== null && (hostsPreview.rows ?? []).length === 0
+  const hostsOn = hosts && !hostsDisabled && !hostsEmpty
+  // IP 缓存同一个规矩：候选池读出来是空的就没有要清的，置灰显原因；读失败不算空。
+  const ipEmpty = ipPreview !== null && (ipPreview.entries ?? []).length === 0
+  const allIPOn = allIP && !ipEmpty
+  const any = sources || allIPOn || hostsOn
 
   useEffect(() => {
     let alive = true
@@ -198,15 +162,15 @@ export function ClearCacheDialog({
       .finally(() => setReprobingKey((k) => (k === key ? null : k)))
   }
 
-  const pickedCount = [sources, allIP, hostsOn].filter(Boolean).length
+  const pickedCount = [sources, allIPOn, hostsOn].filter(Boolean).length
   const activeError = activePanel ? previewErrors[activePanel] : undefined
-  const hostsRows = hostsPreview?.rows ?? []
   const detailExpand = t('toolbar.clearCache.detailExpand')
 
   // 详情面板共用的两条提示：预览读失败、重新检测失败。都摆在面板里，不靠会消失的提示。
+  // Hosts 面板除外：它的预览错误由 RestorePreviewTable 自己显示，这里再摆一遍就重复了。
   const notices = (
     <>
-      {activeError ? <p className={styles.alert}>{t('toolbar.clearCache.previewFailed', { reason: activeError })}</p> : null}
+      {activeError && activePanel !== 'hosts' ? <p className={styles.alert}>{t('toolbar.clearCache.previewFailed', { reason: activeError })}</p> : null}
       {actionError ? <p className={styles.alert}>{actionError}</p> : null}
     </>
   )
@@ -232,7 +196,7 @@ export function ClearCacheDialog({
               type="button"
               className={`${uiStyles.btn} ${uiStyles.primary}`}
               disabled={!any}
-              onClick={() => onConfirm({ sources, allIP, hosts: hostsOn })}
+              onClick={() => onConfirm({ sources, allIP: allIPOn, hosts: hostsOn })}
             >
               {t('toolbar.clearCache.ask.action')}
             </button>
@@ -245,7 +209,7 @@ export function ClearCacheDialog({
         <div className={styles.layout}>
           {/* 左列：三张卡片（勾选决定执行，详情按钮决定右侧展示） */}
           <div className={styles.list}>
-            <section className={`${styles.opt} ${activePanel === 'cache' ? styles.isActive : ''} ${sources ? styles.checked : ''}`}>
+            <section className={`${styles.opt} ${activePanel === 'cache' ? styles.isActive : ''} ${sources ? styles.checked : ''} ${noCheckedItems ? styles.disabled : ''}`}>
               <div className={styles.optHead}>
                 <label className={styles.cb} htmlFor="opt-cache">
                   <input
@@ -265,7 +229,9 @@ export function ClearCacheDialog({
                     {t('toolbar.clearCache.source')}
                     <span className={styles.tag}>{t('toolbar.clearCache.unitSources', { count: sourceRows?.filter((r) => r.downloaded).length ?? 0 })}</span>
                   </span>
-                  <span className={styles.optDesc}>{t('toolbar.clearCache.source.hint', { count: sourceCount })}</span>
+                  <span className={styles.optDesc}>
+                    {noCheckedItems ? t('toolbar.clearCache.needCheck') : t('toolbar.clearCache.source.hint', { count: sourceCount })}
+                  </span>
                 </label>
                 <button type="button" className={styles.optExpand} onClick={() => togglePanel('cache')} aria-label={`${detailExpand}：${t('toolbar.clearCache.source')}`}>
                   {detailExpand}
@@ -274,14 +240,15 @@ export function ClearCacheDialog({
               </div>
             </section>
 
-            <section className={`${styles.opt} ${activePanel === 'ip' ? styles.isActive : ''} ${allIP ? styles.checked : ''}`}>
+            <section className={`${styles.opt} ${activePanel === 'ip' ? styles.isActive : ''} ${allIPOn ? styles.checked : ''} ${ipEmpty ? styles.disabled : ''}`}>
               <div className={styles.optHead}>
                 <label className={styles.cb} htmlFor="opt-ip">
                   <input
                     id="opt-ip"
                     type="checkbox"
                     className={styles.cbInput}
-                    checked={allIP}
+                    checked={allIPOn}
+                    disabled={ipEmpty}
                     onChange={(e) => setAllIP(e.target.checked)}
                   />
                   <svg className={styles.cbMark} viewBox="0 0 16 16" fill="none">
@@ -293,7 +260,9 @@ export function ClearCacheDialog({
                     {t('toolbar.clearCache.allIP')}
                     <span className={styles.tag}>{t('toolbar.clearCache.unitDomains', { count: ipPreview?.domains ?? 0 })}</span>
                   </span>
-                  <span className={styles.optDesc}>{t('toolbar.clearCache.allIP.hint')}</span>
+                  <span className={styles.optDesc}>
+                    {ipEmpty ? t('toolbar.clearCache.allIP.previewEmpty') : t('toolbar.clearCache.allIP.hint')}
+                  </span>
                 </label>
                 <button type="button" className={styles.optExpand} onClick={() => togglePanel('ip')} aria-label={`${detailExpand}：${t('toolbar.clearCache.allIP')}`}>
                   {detailExpand}
@@ -302,7 +271,7 @@ export function ClearCacheDialog({
               </div>
             </section>
 
-            <section className={`${styles.opt} ${activePanel === 'hosts' ? styles.isActive : ''} ${hostsOn ? styles.checked : ''} ${hostsDisabled ? styles.disabled : ''}`}>
+            <section className={`${styles.opt} ${activePanel === 'hosts' ? styles.isActive : ''} ${hostsOn ? styles.checked : ''} ${hostsDisabled || hostsEmpty ? styles.disabled : ''}`}>
               <div className={styles.optHead}>
                 <label className={styles.cb} htmlFor="opt-hosts">
                   <input
@@ -310,7 +279,7 @@ export function ClearCacheDialog({
                     type="checkbox"
                     className={styles.cbInput}
                     checked={hostsOn}
-                    disabled={hostsDisabled}
+                    disabled={hostsDisabled || hostsEmpty}
                     onChange={(e) => setHosts(e.target.checked)}
                   />
                   <svg className={styles.cbMark} viewBox="0 0 16 16" fill="none">
@@ -323,7 +292,11 @@ export function ClearCacheDialog({
                     <span className={styles.tag}>{t('toolbar.clearCache.unitMappings', { count: hostsPreview?.count ?? 0 })}</span>
                   </span>
                   <span className={styles.optDesc}>
-                    {hostsDisabled ? t('toolbar.clearCache.hosts.busy') : t('toolbar.clearCache.hosts.hint')}
+                    {hostsDisabled
+                      ? t('toolbar.clearCache.hosts.busy')
+                      : hostsEmpty
+                        ? t('hosts.restoreCategory.nothingToRestore')
+                        : t('toolbar.clearCache.hosts.hint')}
                   </span>
                 </label>
                 <button
@@ -359,10 +332,13 @@ export function ClearCacheDialog({
                   <h3>{t('toolbar.clearCache.source')}</h3>
                   <span className={styles.detailSub}>{t('toolbar.clearCache.source.previewTitle', { count: sourceRows?.length ?? 0 })}</span>
                 </div>
-                {(sourceRows ?? []).length === 0 ? (
+                {sourceRows === null && !previewErrors.cache ? (
+                  <p className={styles.emptyRow}>{t('detail.detectBox.previewLoading')}</p>
+                ) : (sourceRows ?? []).length === 0 ? (
                   <p className={styles.emptyRow}>{t('toolbar.clearCache.source.previewEmpty')}</p>
                 ) : (
-                  <table className={styles.tbl}>
+                  <section className={dt.block}>
+                  <table className={`${styles.tbl} ${styles.inBlock}`}>
                     <thead>
                       <tr>
                         <th style={{ width: 40 }}>#</th>
@@ -384,6 +360,7 @@ export function ClearCacheDialog({
                       ))}
                     </tbody>
                   </table>
+                  </section>
                 )}
                 <p className={styles.detailNote}>{t('toolbar.clearCache.source.noteDownloaded')}</p>
                 <p className={styles.detailNote}>{t('toolbar.clearCache.source.note', { count: sourceCount })}</p>
@@ -393,32 +370,43 @@ export function ClearCacheDialog({
                 {notices}
                 <div className={styles.detailHead}>
                   <h3>{t('toolbar.clearCache.allIP')}</h3>
-                  <span className={styles.detailSub}>{t('toolbar.clearCache.allIP.previewSummary', {
-                    rounds: ipPreview?.rounds ?? 0,
-                    addresses: ipPreview?.addresses ?? 0,
-                    domains: ipPreview?.domains ?? 0,
-                    candidateRows: ipPreview?.candidateRows ?? 0,
-                    memoryResults: ipPreview?.memoryResults ?? 0,
-                  })}</span>
                 </div>
-                {(ipPreview?.entries ?? []).length === 0 ? (
+                {/* 三态分明：读失败只在 notices 里说、加载中明说、空才说空——错误态不冒充空表。 */}
+                {ipPreview === null && !previewErrors.ip ? (
+                  <p className={styles.emptyRow}>{t('detail.detectBox.previewLoading')}</p>
+                ) : ipEmpty ? (
                   <p className={styles.emptyRow}>{t('toolbar.clearCache.allIP.previewEmpty')}</p>
                 ) : (
-                  <table className={`${styles.tbl} ${styles.ipTable}`}>
-                    <colgroup>
-                      <col className={styles.cGroup} />
-                      <col className={styles.cHost} />
-                      <col className={styles.cLast} />
-                      <col className={styles.cAct} />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        <th>{t('toolbar.clearCache.allIP.colGroup')}</th>
-                        <th>{t('toolbar.clearCache.allIP.colHosts')}</th>
-                        <th className={styles.centered}>{t('toolbar.clearCache.allIP.colLast')}</th>
-                        <th className={styles.centered}>{t('toolbar.clearCache.allIP.colAct')}</th>
-                      </tr>
-                    </thead>
+                  <section className={`${dt.block} ${dt.blockDetect}`}>
+                    {/* 统计行与「清除已写入的 Hosts」的汇总行同位同形：这些是数量不是结果，清一色中性灰。 */}
+                    <div className={styles.chips}>
+                      {([
+                        ['sumRounds', ipPreview?.rounds ?? 0],
+                        ['sumAddresses', ipPreview?.addresses ?? 0],
+                        ['sumDomains', ipPreview?.domains ?? 0],
+                        ['sumCandidates', ipPreview?.candidateRows ?? 0],
+                        ['sumMemory', ipPreview?.memoryResults ?? 0],
+                      ] as const).map(([key, count]) => (
+                        <span key={key} className={`${dt.sumChip} ${dt.tagKeep}`}>
+                          {t(`toolbar.clearCache.allIP.${key}`, { count })}
+                        </span>
+                      ))}
+                    </div>
+                    <table className={`${styles.tbl} ${styles.ipTable} ${styles.inBlock}`}>
+                      <colgroup>
+                        <col className={styles.cGroup} />
+                        <col className={styles.cHost} />
+                        <col className={styles.cLast} />
+                        <col className={styles.cAct} />
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th>{t('toolbar.clearCache.allIP.colGroup')}</th>
+                          <th>{t('toolbar.clearCache.allIP.colHosts')}</th>
+                          <th className={styles.centered}>{t('toolbar.clearCache.allIP.colLast')}</th>
+                          <th className={styles.centered}>{t('toolbar.clearCache.allIP.colAct')}</th>
+                        </tr>
+                      </thead>
                     <tbody>
                       {groupByMenu(ipPreview?.entries ?? null, menuOrder).map((group) =>
                         group.rows.map((e, i) => {
@@ -460,13 +448,13 @@ export function ClearCacheDialog({
                         }),
                       )}
                     </tbody>
-                  </table>
+                    </table>
+                  </section>
                 )}
                 <p className={styles.detailNote}>{t('toolbar.clearCache.allIP.note')}</p>
               </div>
             ) : (
               <div className={styles.detailBody}>
-                {notices}
                 <div className={styles.detailHead}>
                   <h3>{t('toolbar.clearCache.hosts')}</h3>
                   <span className={styles.detailSub}>{t('toolbar.clearCache.hosts.previewTitle', {
@@ -474,57 +462,14 @@ export function ClearCacheDialog({
                     items: hostsPreview?.items ?? 0,
                   })}</span>
                 </div>
-                {hostsRows.length === 0 ? (
-                  <p className={styles.emptyRow}>{t('toolbar.clearCache.hosts.previewEmpty')}</p>
-                ) : (
-                  <>
-                    <p className={styles.restoreIntro}>{t('toolbar.clearCache.hosts.intro', { count: hostsRows.length })}</p>
-                    <div className={styles.restoreSummary}>
-                      {hostsGroups(hostsRows).map((g) => (
-                        <span key={g.kind} className={`${styles.restoreSum} ${HOSTS_SUM_CLASS[g.kind]}`}>
-                          {t(HOSTS_GROUP_KEY[g.kind].sum, { count: g.rows.length })}
-                        </span>
-                      ))}
-                    </div>
-                    {hostsGroups(hostsRows).map((g) => (
-                      <section key={g.kind} className={styles.restoreGroup}>
-                        <div className={styles.restoreGroupHead}>
-                          <h4>{t(HOSTS_GROUP_KEY[g.kind].title)}</h4>
-                          <span className={styles.restoreGroupCount}>{t('toolbar.clearCache.unitMappings', { count: g.rows.length })}</span>
-                        </div>
-                        <p className={styles.restoreGroupHint}>{t(HOSTS_GROUP_KEY[g.kind].hint)}</p>
-                        <div className={styles.restoreCards}>
-                          {g.rows.map((r) => (
-                            <div key={r.hostname} className={`${styles.restoreCard} ${HOSTS_CARD_CLASS[g.kind]}`}>
-                              <div className={styles.restoreDomain}>{r.hostname}</div>
-                              <div className={styles.restoreFlow}>
-                                <div className={styles.restoreSide}>
-                                  <span className={styles.restoreSideLabel}>{t('toolbar.clearCache.hosts.now')}</span>
-                                  <span className={styles.restoreLine}>
-                                    <span className={styles.mono}>{r.before}</span> <span className={styles.restoreLineHost}>{r.hostname}</span>
-                                  </span>
-                                </div>
-                                <svg className={styles.restoreArrow} viewBox="0 0 20 12" fill="none" aria-hidden="true">
-                                  <path d="M1 6h16m-5-4 5 4-5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                                <div className={styles.restoreSide}>
-                                  <span className={styles.restoreSideLabel}>{t('toolbar.clearCache.hosts.then')}</span>
-                                  {r.after ? (
-                                    <span className={styles.restoreLine}>
-                                      <span className={`${styles.mono} ${styles.restoreAfterIp}`}>{r.after}</span> <span className={styles.restoreLineHost}>{r.hostname}</span>
-                                    </span>
-                                  ) : (
-                                    <span className={styles.restoreAfterNone}>{t('toolbar.clearCache.hosts.thenRemove')}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </section>
-                    ))}
-                  </>
-                )}
+                {/* 布局照「还原 Hosts」弹框（拍板 2026-11-08）：同一张汇总+对照表，
+                    读取中／读失败／空表三种态也由组件自己说，面板不再重复摆。 */}
+                <RestorePreviewTable
+                  rows={hostsPreview?.rows ?? null}
+                  groups={hostsGroups}
+                  loading={hostsPreview === null && !previewErrors.hosts}
+                  error={previewErrors.hosts ?? ''}
+                />
                 <p className={styles.detailNote}>{t('toolbar.clearCache.hosts.note')}</p>
               </div>
             )}

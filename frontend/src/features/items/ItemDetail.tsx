@@ -13,7 +13,8 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import uiStyles from '../../components/ui/ui.module.css'
 import { pickBestCandidate } from '../detect/candidateChoice'
 import { DetectTables } from './DetectTables'
-import { RestorePreviewCards } from './RestorePreviewCards'
+import { RestorePreviewTable } from './RestorePreviewTable'
+import tableStyles from './RestorePreviewTable.module.css'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
 import { ensureLastResults, isTerminalTask, useTaskQueue } from '../tasks/taskStore'
 import { addressUsable, projectState, toneForCandidate, toneForItem, type Tone } from '../tasks/statusTone'
@@ -57,12 +58,6 @@ const CANDIDATE_TAG_CLASS: Record<Tone, string> = {
 
 // 全二级菜单表的表头，顺序和渲染一一对应；拖拽分隔线只在前四列的表头上。
 const ITEM_TABLE_HEADERS = ['detail.table.item', 'detail.metric.appliedIp', 'detail.metric.bestIp', 'detail.metric.available', 'detail.metric.lastCheck']
-
-// 「哪些项目能进批量检测」只有一个主人：这里算，App 拿到的是已经算好的那批。
-// 挡在外面的是两类——域名由用户自填的手动映射，和目录里没给主机名的项：都没有可解析的目标。
-export function detectableItems(items: CatalogItem[]): CatalogItem[] {
-  return items.filter((it) => !it.userSupplied && (it.hostnames?.length ?? 0) > 0)
-}
 
 // 后端标了「当前写入」的那几条，按域名摊成一行一条：域名取这一行候选自己的主机名，
 // 地址取候选自己的 IP。同一域名同一地址只记一次（IPv4／IPv6 可能各被标一条）。
@@ -125,6 +120,15 @@ export function ItemDetail({
     return st === HostsStatus.HostsApplied || st === HostsStatus.HostsPartial
   })
   const menuIdsKey = restorableItems.map((it) => it.id).join('|')
+  // 弹框对照表的分组列：每个可还原菜单一格，域名归属按目录 + Hosts 实写条目算；
+  // 归属不上的行在表里落「—」组，不硬塞给某个菜单。
+  const menuGroups = restorableItems.map((it) => ({
+    name: it.name,
+    hostnames: Array.from(new Set([
+      ...(it.hostnames ?? []),
+      ...(hostsOf.get(it.id)?.entries ?? []).map((e) => e.hostname),
+    ])),
+  }))
   const [menuPreview, setMenuPreview] = useState<HostsRestorePreview | null>(null)
   const [menuPreviewError, setMenuPreviewError] = useState('')
   useEffect(() => {
@@ -665,6 +669,11 @@ export function ItemDetail({
               <button
                 type="button"
                 className={`${uiStyles.btn} ${uiStyles.primary}`}
+                // 对照表读出来了而且是空的，就没有任何要还原的东西：置灰并说明原因，点了也只会空跑一趟。
+                disabled={menuPreview !== null && (menuPreview.rows ?? []).length === 0}
+                title={menuPreview !== null && (menuPreview.rows ?? []).length === 0
+                  ? t('hosts.restoreCategory.nothingToRestore')
+                  : undefined}
                 onClick={() => {
                   setRestoreMenuOpen(false)
                   onRestoreCategory(restorableItems.map((it) => it.id))
@@ -675,14 +684,12 @@ export function ItemDetail({
             </>
           }
         >
-          <p className={styles.flowDesc}>
-            {t('hosts.restoreCategory.body', {
-              count: restorableItems.length,
-              names: restorableItems.map((it) => it.name).join('、'),
-            })}
+          <p className={tableStyles.lead}>
+            {t('hosts.restoreCategory.body', { count: restorableItems.length })}
           </p>
-          <RestorePreviewCards
+          <RestorePreviewTable
             rows={menuPreview?.rows ?? null}
+            groups={menuGroups}
             loading={menuPreview === null && menuPreviewError === ''}
             error={menuPreviewError}
           />

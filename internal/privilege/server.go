@@ -101,7 +101,8 @@ func (s *Server) callHandler(req Request) (resp *Response) {
 		}
 		return &Response{OK: true, Written: &written}
 	case OpHostsPreview:
-		preview, err := s.handler.Preview()
+		// itemIDs 为空看全量，N 个看这 N 个项目一起还原（顺序即队列执行顺序）；都是只读，不写文件。
+		preview, err := s.handler.Preview(req.ItemIDs)
 		if err != nil {
 			return &Response{Code: CodeApplyFailed, Message: err.Error()}
 		}

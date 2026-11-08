@@ -1,0 +1,22 @@
+/* 还原本菜单弹框的前后对照表：表体样式复用 DetectTables.module.css，
+   这里只放两张表搬不过来的部分——三列的列宽、绿框块里汇总行的边距、表上方的说明段。 */
+.cMenu { width: 20%; }
+.cData { width: 44%; }
+.cAfter { width: 36%; }
+
+/* 对照表上方那段说明（还原本菜单／还原 Hosts 两个弹框共用）：小字灰，别跟表内容抢眼。 */
+.lead {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+/* 汇总行在绿框块里、表头上方：Own 边距，不借用 DetectTables 里给卡片头配的 21px 缩进。 */
+.sums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+}

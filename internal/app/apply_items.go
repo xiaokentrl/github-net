@@ -326,22 +326,53 @@ type HostsRestoreRow struct {
 	After    string `json:"after"`
 }
 
-// PreviewRestoreHosts 只读算「清除已写入的 Hosts」之后每个受管理域名的前后对比。
-// 不写盘、不进队列；界面在用户勾选那一项时调用，让他先看清楚恢复前和恢复后的差别。
-// 真正的还原仍是 RestoreAllHosts 那一份；这里只把结果翻译成前端要的形状。
-func (s *Service) PreviewRestoreHosts() (HostsRestorePreview, error) {
-	if s.priv == nil {
-		return HostsRestorePreview{}, NewError(CodeHelperUnavailable, "特权辅助服务没在运行，无法预览还原", nil)
-	}
-	preview, err := s.priv.Preview()
-	if err != nil {
-		return HostsRestorePreview{}, privilegePublicError(err)
-	}
+// hostsPreviewToDTO 把 hosts 层的还原前后对比翻成界面形状，三种预览共用一份口径。
+func hostsPreviewToDTO(preview hosts.RestorePreview) HostsRestorePreview {
 	rows := make([]HostsRestoreRow, 0, len(preview.Rows))
 	for _, r := range preview.Rows {
 		rows = append(rows, HostsRestoreRow{Hostname: r.Hostname, Before: r.Before, After: r.After})
 	}
-	return HostsRestorePreview{Rows: rows, Count: preview.Count, Items: preview.Items}, nil
+	return HostsRestorePreview{Rows: rows, Count: preview.Count, Items: preview.Items}
+}
+
+func (s *Service) previewRestore(ids []string) (HostsRestorePreview, error) {
+	if s.priv == nil {
+		return HostsRestorePreview{}, NewError(CodeHelperUnavailable, "特权辅助服务没在运行，无法预览还原", nil)
+	}
+	preview, err := s.priv.Preview(ids)
+	if err != nil {
+		return HostsRestorePreview{}, privilegePublicError(err)
+	}
+	return hostsPreviewToDTO(preview), nil
+}
+
+// PreviewRestoreHosts 只读算「清除已写入的 Hosts」（全量还原）之后每个受管理域名的前后对比。
+// 不写盘、不进队列；界面在用户勾选那一项时调用，让他先看清楚恢复前和恢复后的差别。
+// 真正的还原仍是 RestoreAllHosts 那一份；这里只把结果翻译成前端要的形状。
+func (s *Service) PreviewRestoreHosts() (HostsRestorePreview, error) {
+	return s.previewRestore(nil)
+}
+
+// PreviewRestoreHostsItem 只读算「只还原这一个项目」之后的前后对比，给详情页的还原表用。
+// 必须与 RestoreItems 走同一个单项目算法：共享域名在其他项目还认领时 IP 保持不变，
+// 拿全量预览的结果来报，会把那一行错标成「删掉／变回」。
+func (s *Service) PreviewRestoreHostsItem(itemID string) (HostsRestorePreview, error) {
+	if _, err := s.uniqueKnownItems([]string{itemID}); err != nil {
+		return HostsRestorePreview{}, err
+	}
+	return s.previewRestore([]string{itemID})
+}
+
+// PreviewRestoreHostsItems 只读算「把这几个二级菜单按给定顺序一起还原」之后的前后对比，
+// 给「还原本菜单」弹框用。执行侧是同一批 itemIDs 按目录顺序排队、串行逐条还原，
+// 共享域名的最终 IP 由最后释放的那个项目决定，所以必须一次联合算完，
+// 不能拿 N 份单项目预览去合并。
+func (s *Service) PreviewRestoreHostsItems(itemIDs []string) (HostsRestorePreview, error) {
+	ids, err := s.uniqueKnownItems(itemIDs)
+	if err != nil {
+		return HostsRestorePreview{}, err
+	}
+	return s.previewRestore(ids)
 }
 
 // OpenHosts 请系统用默认编辑器打开 Hosts 文件。打开动作由后端执行，

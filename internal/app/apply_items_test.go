@@ -58,7 +58,7 @@ func (f *fakePriv) State() (hosts.Written, error) {
 	return f.written, nil
 }
 
-func (f *fakePriv) Preview() (hosts.RestorePreview, error) {
+func (f *fakePriv) Preview(_ []string) (hosts.RestorePreview, error) {
 	if f.err != nil {
 		return hosts.RestorePreview{}, f.err
 	}

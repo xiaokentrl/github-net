@@ -214,12 +214,31 @@ export function PreviewIPCache(): $CancellablePromise<$models.IPCachePreview> {
 }
 
 /**
- * PreviewRestoreHosts 只读算「清除已写入的 Hosts」之后每个受管理域名的前后对比。
+ * PreviewRestoreHosts 只读算「清除已写入的 Hosts」（全量还原）之后每个受管理域名的前后对比。
  * 不写盘、不进队列；界面在用户勾选那一项时调用，让他先看清楚恢复前和恢复后的差别。
  * 真正的还原仍是 RestoreAllHosts 那一份；这里只把结果翻译成前端要的形状。
  */
 export function PreviewRestoreHosts(): $CancellablePromise<$models.HostsRestorePreview> {
     return $Call.ByID(2628185047);
+}
+
+/**
+ * PreviewRestoreHostsItem 只读算「只还原这一个项目」之后的前后对比，给详情页的还原表用。
+ * 必须与 RestoreItems 走同一个单项目算法：共享域名在其他项目还认领时 IP 保持不变，
+ * 拿全量预览的结果来报，会把那一行错标成「删掉／变回」。
+ */
+export function PreviewRestoreHostsItem(itemID: string): $CancellablePromise<$models.HostsRestorePreview> {
+    return $Call.ByID(3573281968, itemID);
+}
+
+/**
+ * PreviewRestoreHostsItems 只读算「把这几个二级菜单按给定顺序一起还原」之后的前后对比，
+ * 给「还原本菜单」弹框用。执行侧是同一批 itemIDs 按目录顺序排队、串行逐条还原，
+ * 共享域名的最终 IP 由最后释放的那个项目决定，所以必须一次联合算完，
+ * 不能拿 N 份单项目预览去合并。
+ */
+export function PreviewRestoreHostsItems(itemIDs: string[] | null): $CancellablePromise<$models.HostsRestorePreview> {
+    return $Call.ByID(195186425, itemIDs);
 }
 
 /**

@@ -94,15 +94,23 @@ func (a *HostsApplier) RestoreAll() (int, error) {
 	return len(restored), nil
 }
 
-// Preview 只读算「全量还原之后」每个受管理域名的前后对比，不写任何文件。
-// 恢复元数据在 root 数据目录里、界面进程读不到，所以这一步放到特权服务侧做，
-// 界面只管拿结果展示。没写过（账本不存在）时 hosts.PreviewRestore 返回空预览，不是错误。
-func (a *HostsApplier) Preview() (hosts.RestorePreview, error) {
+// Preview 只读算还原前后的逐域名对比，不写任何文件。
+// 恢复元数据在 root 数据目录里、界面进程读不到，所以这一步放到特权服务侧做。
+// itemIDs 为空＝清除已写入的 Hosts（全量）；一个＝行级还原；多个＝「还原本菜单」按给定顺序一起还原。
+// 没写过（账本不存在）时返回空预览，不是错误。
+func (a *HostsApplier) Preview(itemIDs []string) (hosts.RestorePreview, error) {
 	content, meta, err := a.load()
 	if err != nil {
 		return hosts.RestorePreview{}, err
 	}
-	return hosts.PreviewRestore(meta, content)
+	switch len(itemIDs) {
+	case 0:
+		return hosts.PreviewRestore(meta, content)
+	case 1:
+		return hosts.PreviewRestoreItem(meta, content, itemIDs[0])
+	default:
+		return hosts.PreviewRestoreItems(meta, content, itemIDs)
+	}
 }
 
 // State 只读恢复元数据，回答「最后一次成功写入是哪批映射」。
