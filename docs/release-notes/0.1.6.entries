@@ -1,0 +1,3 @@
+# 0.1.6 相对 0.1.5 的净变化；一条一行，格式「分类|语言|内容」
+updated|zh|CI 与发版工作流的官方 action 升到最新大版本（checkout/setup-node/setup-go/upload-artifact/download-artifact），运行器维护性升级，应用本体无变化
+updated|en|The official actions in the CI and release workflows were upgraded to their latest majors (checkout/setup-node/setup-go/upload-artifact/download-artifact); a runner-maintenance update with no application changes

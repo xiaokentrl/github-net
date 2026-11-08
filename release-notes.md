@@ -1,6 +1,6 @@
 ## English
 
-### github-net 0.1.5 Stable (0.1.4 → 0.1.5)
+### github-net 0.1.6 Stable (0.1.5 → 0.1.6)
 
 **Added**
 
@@ -8,15 +8,15 @@ None
 
 **Fixed**
 
-1. The per-IP re-probe inside the item dialog now refreshes the detail results when it finishes, so the candidate table no longer shows stale statuses after closing the dialog
+None
 
 **Updated**
 
-None
+1. The official actions in the CI and release workflows were upgraded to their latest majors (checkout/setup-node/setup-go/upload-artifact/download-artifact); a runner-maintenance update with no application changes
 
 ## 中文
 
-### 0.1.5 稳定版（0.1.4 → 0.1.5）
+### 0.1.6 稳定版（0.1.5 → 0.1.6）
 
 **新增**
 
@@ -24,8 +24,8 @@ None
 
 **修复**
 
-1. 详情页弹框里的「重新检测」收尾后同步刷新详情页候选表，关掉弹框不再看到旧实测
+无
 
 **更新**
 
-无
+1. CI 与发版工作流的官方 action 升到最新大版本（checkout/setup-node/setup-go/upload-artifact/download-artifact），运行器维护性升级，应用本体无变化
