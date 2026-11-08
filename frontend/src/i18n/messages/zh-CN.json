@@ -542,5 +542,11 @@
   "hosts.restoreAll.done": "已把 {count} 个项目退回应用前的状态",
   "hosts.restoreAll.none": "当前没有本工具写入的 Hosts 映射，无需还原",
   "update.available": "发现新版本 {version}，可在设置中心的检测升级屏查看详情",
-  "update.checkFailed": "检查更新失败：{reason}"
+  "update.checkFailed": "检查更新失败：{reason}",
+  "settings.subject.browser": "浏览器重启",
+  "settings.browser.title": "应用后重启浏览器",
+  "settings.browser.desc": "应用队列把 Hosts 写完后，自动温和退出正在运行的浏览器并按原命令行拉起：Chrome 系（Chrome／Chromium／Edge／Brave／Vivaldi／Opera）重启时自动补「恢复上次会话」，关闭前的窗口和标签页会还原；Firefox 需要在浏览器自己的设置里开启「恢复先前会话」才还原。没在跑的浏览器不会拉起，退不干净的不会强杀。只认进程名不认安装方式，deb、snap、flatpak 装的都能认。",
+  "settings.browser.toggle": "应用完成后自动重启正在运行的浏览器",
+  "browser.restart.done": "已重启 {names}，关闭前的窗口会自动还原",
+  "browser.restart.none": "没发现正在运行的浏览器，跳过重启"
 }

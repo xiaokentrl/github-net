@@ -542,5 +542,11 @@
   "hosts.restoreAll.done": "已把 {count} 個項目退回應用前的狀態",
   "hosts.restoreAll.none": "目前沒有本工具寫入的 Hosts 對應，無需還原",
   "update.available": "發現新版本 {version}，可在設定中心的檢測升級頁查看詳情",
-  "update.checkFailed": "檢查更新失敗：{reason}"
+  "update.checkFailed": "檢查更新失敗：{reason}",
+  "settings.subject.browser": "瀏覽器重啟",
+  "settings.browser.title": "套用後重啟瀏覽器",
+  "settings.browser.desc": "套用佇列把 Hosts 寫完後，自動溫和結束正在執行的瀏覽器並按原命令列拉起：Chrome 系（Chrome／Chromium／Edge／Brave／Vivaldi／Opera）重啟時自動補「恢復上次工作階段」，關閉前的視窗和分頁會還原；Firefox 需在瀏覽器自己的設定裡開啟「恢復先前的工作階段」才會還原。沒在執行的瀏覽器不會拉起，退不乾淨的不會強殺。只認程序名不認安裝方式，deb、snap、flatpak 裝的都認得。",
+  "settings.browser.toggle": "套用完成後自動重啟正在執行的瀏覽器",
+  "browser.restart.done": "已重啟 {names}，關閉前的視窗會自動還原",
+  "browser.restart.none": "沒發現正在執行的瀏覽器，跳過重啟"
 }
