@@ -168,17 +168,21 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
   const alive = useRef(true)
   useEffect(() => () => { alive.current = false }, [])
 
+  // 按需拉取（拍板 2026-11-04）：还原弹框用不到候选池、检测弹框用不到还原预览，
+  // 各自只拉自己那张表要用的数据，弹框打开更快。
   useEffect(() => {
+    if (only === 'restore') return
     let live = true
     getCandidatePool()
       .then((rows) => { if (live) { setPool(rows); setPoolError(''); setProbeOverrides({}) } })
       .catch((err: unknown) => { if (live) setPoolError(getErrorMessage(err)) })
     return () => { live = false }
-  }, [refreshKey])
+  }, [refreshKey, only])
 
   // 还原前后对比：只读，不写 Hosts。特权服务没起来 / 读失败时把原因摆在表里，
   // 「还原后」一列留空，不拿别的项目或全量还原的结论糊上去。
   useEffect(() => {
+    if (only === 'detect') return
     let live = true
     previewRestoreHostsItem(itemId)
       .then((res) => {
@@ -197,7 +201,7 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
         if (live) { setRestorePreview(null); setRestorePreviewError(getErrorMessage(err)) }
       })
     return () => { live = false }
-  }, [itemId, refreshKey])
+  }, [itemId, refreshKey, only])
 
   const afterByHost = new Map<string, { before: string; after: string }>()
   for (const row of restorePreview?.rows ?? []) {
