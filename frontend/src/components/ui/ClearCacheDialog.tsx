@@ -78,6 +78,7 @@ export function ClearCacheDialog({
   hostsDisabled,
   onCancel,
   onConfirm,
+  onReprobed,
 }: {
   sourceIds: string[]
   menuOrder: string[]
@@ -86,6 +87,8 @@ export function ClearCacheDialog({
   hostsDisabled: boolean
   onCancel: () => void
   onConfirm: (choice: ClearCacheChoice) => void
+  // 单条「重新检测」成功后的收尾：后端候选池变了，详情页的结果 store 要重拉一遍才不脱节。
+  onReprobed?: () => void
 }) {
   const [sources, setSources] = useState(false)
   const [allIP, setAllIP] = useState(false)
@@ -161,6 +164,7 @@ export function ClearCacheDialog({
           ...prev,
           entries: (prev.entries ?? []).map((e) => e.hostname === hostname && e.ip === ip ? row : e),
         } : prev)
+        onReprobed?.()
       })
       .catch((err: unknown) => setActionError(t('toolbar.clearCache.allIP.reprobeFailed', { reason: getErrorMessage(err) })))
       .finally(() => setReprobingKey((k) => (k === key ? null : k)))

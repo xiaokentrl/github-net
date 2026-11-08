@@ -25,7 +25,7 @@ import { ItemDetail } from '../features/items/ItemDetail'
 import { DetectProfileDialog } from '../features/detect/DetectProfileDialog'
 import { TaskPanel } from '../features/tasks/TaskPanel'
 import { subscribeTaskEvents } from '../features/tasks/taskEvents'
-import { clearResults, isTerminalTask, refreshResult, taskStateSnapshot, useTaskQueue } from '../features/tasks/taskStore'
+import { clearResults, isTerminalTask, refreshAllResults, refreshResult, taskStateSnapshot, useTaskQueue } from '../features/tasks/taskStore'
 import { useRestoreAllTasks } from '../features/tasks/useRestoreAll'
 import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
@@ -743,6 +743,41 @@ export function App() {
     pushNotice('warning', notice)
   }, [])
 
+  // 应用/还原共用：命令只代表「排进队列」，返回的任务还在 waiting。轮询队列快照直到
+  // 这批任务全部落定（或 40 次超时），然后无条件重读目录——「当前写入 IP」和树上的
+  // 状态都出自 GetItems 现读，不重读列表就停在写入前的样子（修复：写入可用IP之后
+  // 详情列表不更新）。不把刷新全押在一条 Wails 事件上——事件没送到就会停在旧样子。
+  // 失败任务的错误顺带回显到原位错误条。
+  const watchTasksSettled = useCallback(
+    (tasks: { id: string; errorMsg?: string | null }[] | null | undefined) => {
+      const ids = new Set((tasks ?? []).map((t) => t.id))
+      if (ids.size === 0) {
+        loadCatalog()
+        return
+      }
+      let tries = 0
+      const poll = () => {
+        getTasks()
+          .then((snap) => {
+            const mine = (snap.tasks ?? []).filter((t) => ids.has(t.id))
+            const settled = mine.length > 0 && mine.every((t) => isTerminalTask(t.status))
+            if (settled || tries++ >= 40) {
+              loadCatalog()
+              // 再补一轮，吸收后端写盘与恢复元数据落盘的时序差。
+              window.setTimeout(loadCatalog, 800)
+              const failed = mine.find((t) => t.errorMsg)
+              if (failed?.errorMsg) setHostsError(failed.errorMsg)
+              return
+            }
+            window.setTimeout(poll, 250)
+          })
+          .catch(() => loadCatalog())
+      }
+      window.setTimeout(poll, 200)
+    },
+    [loadCatalog],
+  )
+
   // 批量应用：勾选项整批交给后端。界面不再自己筛「有没有可用候选」——
   // 自己筛就是第二套判断标准，用户勾 6 项、队列只剩 1 行时说不清另外 5 行去哪了；
   // 现在做不了的项也在同一轮里以「跳过」落定并写明原因。
@@ -755,10 +790,13 @@ export function App() {
       }
       queueExpandRef.current?.()
       applyItems([...checked])
-        .then(reportSkippedApply)
+        .then((tasks) => {
+          reportSkippedApply(tasks)
+          watchTasksSettled(tasks)
+        })
         .catch((err: unknown) => reportRejection(setHostsError, err))
     },
-    [reportSkippedApply],
+    [reportSkippedApply, watchTasksSettled],
   )
 
   // 清理弹框：点工具栏那颗只开框，框里勾了哪几件就只做哪几件，三项可任意组合。
@@ -862,9 +900,12 @@ export function App() {
     setHostsError('')
     queueExpandRef.current?.()
     applyItems([itemId])
-      .then(reportSkippedApply)
+      .then((tasks) => {
+        reportSkippedApply(tasks)
+        watchTasksSettled(tasks)
+      })
       .catch((err: unknown) => reportRejection(setHostsError, err))
-  }, [reportSkippedApply])
+  }, [reportSkippedApply, watchTasksSettled])
 
   // 树侧焦点跟随（原型 followItem，第 2676–2689 行 + 开关说明第 1002–1030 行）：
   // 开启时临时收起其他类目、只展开当前项所属类目，跑完恢复开跑前的展开状态；
@@ -924,34 +965,9 @@ export function App() {
   const startRestoreItems = useCallback((itemIds: string[]) => {
     setHostsError('')
     restoreItems(itemIds)
-      .then((queued) => {
-        const ids = new Set((queued ?? []).map((t) => t.id))
-        if (ids.size === 0) {
-          loadCatalog()
-          return
-        }
-        let tries = 0
-        const poll = () => {
-          getTasks()
-            .then((snap) => {
-              const mine = (snap.tasks ?? []).filter((t) => ids.has(t.id))
-              const settled = mine.length > 0 && mine.every((t) => isTerminalTask(t.status))
-              if (settled || tries++ >= 40) {
-                loadCatalog()
-                // 再补一轮，吸收后端写盘与恢复元数据落盘的时序差。
-                window.setTimeout(loadCatalog, 800)
-                const failed = mine.find((t) => String(t.status) === 'failed' || String(t.status) === 'rolledback')
-                if (failed?.errorMsg) setHostsError(failed.errorMsg)
-                return
-              }
-              window.setTimeout(poll, 250)
-            })
-            .catch(() => loadCatalog())
-        }
-        window.setTimeout(poll, 200)
-      })
+      .then((queued) => watchTasksSettled(queued))
       .catch((err: unknown) => reportRejection(setHostsError, err))
-  }, [loadCatalog])
+  }, [watchTasksSettled])
 
   const startRestore = useCallback((itemId: string) => startRestoreItems([itemId]), [startRestoreItems])
 
@@ -1138,6 +1154,7 @@ export function App() {
           hostsDisabled={restoreBusy}
           onCancel={() => setClearAsk(null)}
           onConfirm={(choice) => runClearSelected(choice, restoreAllNow, restoreBusy)}
+          onReprobed={() => { void refreshAllResults() }}
         />
       ) : null}
       {profileAsk ? (
