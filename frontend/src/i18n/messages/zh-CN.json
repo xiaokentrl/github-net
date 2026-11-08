@@ -362,7 +362,7 @@
   "hosts.restoreCategory.sumRestore": "{count} 条变回原 IP",
   "hosts.restoreCategory.sumRemove": "{count} 条删掉映射",
   "hosts.restoreCategory.sumKeep": "{count} 条不变",
-  "hosts.restoreRow": "检测",
+  "hosts.restoreRow": "还原",
   "hosts.detectEntry": "检测",
   "hosts.detectEntryHint": "打开检测与写入表：全部候选 IP、网络状态与上次检测",
   "detail.detectBox.title": "检测与还原 · {name}（可还原 {count} 条）",

@@ -362,7 +362,7 @@
   "hosts.restoreCategory.sumRestore": "{count} 條變回原 IP",
   "hosts.restoreCategory.sumRemove": "{count} 條刪掉映射",
   "hosts.restoreCategory.sumKeep": "{count} 條不變",
-  "hosts.restoreRow": "偵測",
+  "hosts.restoreRow": "還原",
   "hosts.detectEntry": "偵測",
   "hosts.detectEntryHint": "打開偵測與寫入表：全部候選 IP、網路狀態與上次偵測",
   "detail.detectBox.title": "偵測與還原 · {name}（可還原 {count} 條）",
