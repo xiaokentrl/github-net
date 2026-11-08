@@ -26,8 +26,8 @@ jobs:
     name: 前端构建
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -35,7 +35,7 @@ jobs:
       - name: 类型检查并打包
         run: npm ci && npm run build
         working-directory: frontend
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: frontend/dist
@@ -50,12 +50,12 @@ jobs:
     steps:
       - name: 装构建依赖
         run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git xz-utils gcc pkg-config binutils libgtk-4-dev libwebkitgtk-6.0-dev
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: 取前端产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: frontend/dist
@@ -73,12 +73,12 @@ jobs:
     steps:
       - name: 装构建依赖
         run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git xz-utils gcc pkg-config binutils libgtk-4-dev libwebkitgtk-6.0-dev
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: 取前端产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: frontend/dist
@@ -128,7 +128,7 @@ jobs:
           cat ldd.txt
           if grep -E 'not found|undefined symbol' ldd.txt; then echo "::error::门二不过：Ubuntu 26.04 有未解析依赖"; exit 1; fi
           for so in $RUNTIME_LIBS; do grep -q "$so => /" ldd.txt || { echo "::error::门二不过：Ubuntu 26.04 缺 $so"; exit 1; }; done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: github-net-linux-amd64
           path: bin/github-net
@@ -143,7 +143,7 @@ jobs:
     steps:
       - name: 装运行库
         run: apt-get update && apt-get install -y --no-install-recommends ca-certificates binutils libgtk-4-1 libwebkitgtk-6.0-4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: github-net-linux-amd64
           path: bin

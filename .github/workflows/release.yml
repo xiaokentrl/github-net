@@ -39,7 +39,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.guard_only
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: 校验嵌入公钥与签名私钥配对
         if: env.GITHUB_NET_SIGNING_KEY != ''
         env:
@@ -66,11 +66,11 @@ jobs:
           apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             ca-certificates curl git xz-utils gcc pkg-config binutils \
             libgtk-4-dev libwebkitgtk-6.0-dev nodejs npm
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # 标签解析和 VCS 打标都要完整历史。
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: 校验标签与版本一致
@@ -121,7 +121,7 @@ jobs:
             wails3 tool package -name github-net -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
           test -f bin/github-net.deb || { echo "::error::deb 没打出来"; exit 1; }
           dpkg-deb -I bin/github-net.deb | grep -E 'Package|Version' || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: github-net-deb
           path: |
@@ -134,9 +134,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: 取安装包
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: github-net-deb
           path: bin
