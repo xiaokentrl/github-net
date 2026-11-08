@@ -364,6 +364,7 @@
   "hosts.restoreCategory.sumKeep": "{count} 条不变",
   "hosts.restoreRow": "检测",
   "hosts.detectEntry": "检测",
+  "hosts.detectEntryHint": "打开检测与写入表：全部候选 IP、网络状态与上次检测",
   "detail.detectBox.title": "检测与还原 · {name}（可还原 {count} 条）",
   "detail.detectBox.hint": "上面这张管还原，下面这张管检测与写入：两张表各管一件事，按钮只对各自那张表的数据生效。上面那张能直接看到还原前和还原后的差别。",
   "detail.detectBox.firstTitle": "还原已写入的 IP",

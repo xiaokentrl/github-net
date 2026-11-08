@@ -364,6 +364,7 @@
   "hosts.restoreCategory.sumKeep": "{count} 條不變",
   "hosts.restoreRow": "偵測",
   "hosts.detectEntry": "偵測",
+  "hosts.detectEntryHint": "打開偵測與寫入表：全部候選 IP、網路狀態與上次偵測",
   "detail.detectBox.title": "偵測與還原 · {name}（可還原 {count} 條）",
   "detail.detectBox.hint": "上面這張管還原，下面這張管偵測與寫入：兩張表各管一件事，按鈕只對各自那張表的資料生效。上面那張能直接看到還原前和還原後的差別。",
   "detail.detectBox.firstTitle": "還原已寫入的 IP",
