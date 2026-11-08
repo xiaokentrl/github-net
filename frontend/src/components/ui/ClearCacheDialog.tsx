@@ -105,9 +105,11 @@ export function ClearCacheDialog({
   // 预览读出来了而且是空的＝本工具根本没写过 Hosts：勾选置灰显原因，
   // 别让用户勾一项空跑（另外两个还原弹框同一规矩：空表就不给点）。
   // 读失败不算空——读不出来不等于没有，勾选照旧可点。
+  const hostsLoading = hostsPreview === null && !previewErrors.hosts
   const hostsEmpty = hostsPreview !== null && (hostsPreview.rows ?? []).length === 0
   const hostsOn = hosts && !hostsDisabled && !hostsEmpty
   // IP 缓存同一个规矩：候选池读出来是空的就没有要清的，置灰显原因；读失败不算空。
+  const ipLoading = ipPreview === null && !previewErrors.ip
   const ipEmpty = ipPreview !== null && (ipPreview.entries ?? []).length === 0
   const allIPOn = allIP && !ipEmpty
   const any = sources || allIPOn || hostsOn
@@ -132,6 +134,8 @@ export function ClearCacheDialog({
     if (hostsDisabled) {
       setHostsPreview(null)
       setPreviewErrors((p) => ({ ...p, hosts: undefined }))
+      // 勾选是用户明说的：忙起来把勾收掉，忙完了不许「幽灵复勾」。
+      setHosts(false)
       return
     }
     let alive = true
@@ -248,7 +252,7 @@ export function ClearCacheDialog({
                     type="checkbox"
                     className={styles.cbInput}
                     checked={allIPOn}
-                    disabled={ipEmpty}
+                    disabled={ipEmpty || ipLoading}
                     onChange={(e) => setAllIP(e.target.checked)}
                   />
                   <svg className={styles.cbMark} viewBox="0 0 16 16" fill="none">
@@ -279,7 +283,7 @@ export function ClearCacheDialog({
                     type="checkbox"
                     className={styles.cbInput}
                     checked={hostsOn}
-                    disabled={hostsDisabled || hostsEmpty}
+                    disabled={hostsDisabled || hostsEmpty || hostsLoading}
                     onChange={(e) => setHosts(e.target.checked)}
                   />
                   <svg className={styles.cbMark} viewBox="0 0 16 16" fill="none">

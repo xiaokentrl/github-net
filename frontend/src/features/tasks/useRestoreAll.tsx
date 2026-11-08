@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getTasks, previewRestoreHosts, restoreAllHosts } from '../../api/client'
 import { getErrorMessage } from '../../api/errors'
 import type { HostsRestorePreview } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
@@ -27,6 +27,8 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
     (task) => task.status === 'running' || task.status === 'waiting' || task.status === 'restoring',
   )
   const [askOpen, setAskOpen] = useState(false)
+  // 还原不进队列，busy 看不见它：这颗 ref 防同一笔还原被点两次。
+  const restoringRef = useRef(false)
   // 前后对照只在开框那刻拉一遍全量预览：只读，不动队列也不动 Hosts。
   const [preview, setPreview] = useState<HostsRestorePreview | null>(null)
   const [previewError, setPreviewError] = useState('')
@@ -52,6 +54,10 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
   // 要能等这一笔还原落定再统一刷新，逻辑仍只有这一份。
   // skipCatalogRefresh 给清理弹框用：它自己会在整批结束后重读一次目录，这里不重复读。
   const runRestoreAll = useCallback((skipCatalogRefresh = false) => {
+    // 双保险：队列转忙（弹框开着时别的入口排了任务）或上一笔还原还没收尾，都不再发。
+    if (busy) return Promise.resolve()
+    if (restoringRef.current) return Promise.resolve()
+    restoringRef.current = true
     setAskOpen(false)
     return restoreAllHosts()
       .then((count) => {
@@ -65,7 +71,8 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
       .then(() => refreshAllResults())
       .then(() => { if (!skipCatalogRefresh) onRestored?.() })
       .catch(onError)
-  }, [onError, onRestored])
+      .finally(() => { restoringRef.current = false })
+  }, [onError, onRestored, busy])
 
   const confirmDialog = askOpen ? (
     <Dialog
@@ -81,9 +88,14 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
           <button
             type="button"
             className={`${uiStyles.btn} ${uiStyles.primary}`}
-            // 对照表读出来了而且是空的，就没有任何要还原的东西：置灰并说明原因，点了也只会空跑一趟。
-            disabled={nothingToRestore}
-            title={nothingToRestore ? t('hosts.restoreCategory.nothingToRestore') : undefined}
+            // 预览没读到（读取中/失败）也不给点：什么都看不到却执行全量还原，
+            // 等于拿着一句「读不出来」去动全系统 Hosts。失败原因摆在框里，读了再点。
+            disabled={preview === null || nothingToRestore}
+            title={nothingToRestore
+              ? t('hosts.restoreCategory.nothingToRestore')
+              : previewError
+                ? t('detail.detectBox.previewFailed', { reason: previewError })
+                : undefined}
             onClick={() => { void runRestoreAll() }}
           >
             {t('queue.restoreAll.ask.action')}

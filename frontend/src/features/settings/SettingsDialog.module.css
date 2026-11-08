@@ -63,8 +63,10 @@
   align-items: center;
   gap: 10px;
   /* 头部就是拖动条（useDragMove），关闭按钮自己 pointer 光标不受影响；
-     标 no-drag 防止顶到窗口标题栏把窗口拖走。 */
+     标 no-drag 防止顶到窗口标题栏把窗口拖走。触摸屏上要挡手势，
+     不然拖动被系统截胡成 pointercancel。 */
   cursor: move;
+  touch-action: none;
   --wails-draggable: no-drag;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);

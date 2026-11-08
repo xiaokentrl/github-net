@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type RefObject, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject, type PointerEvent as ReactPointerEvent } from 'react'
 
 /** 界面缩放是给 body 设 CSS zoom：指针坐标是视口像素，元素长度是缩放前的 CSS 像素，
     拖动换算要先除回来（和公共 Dialog 同一套口径）。 */
@@ -96,6 +96,17 @@ export function useDragMove(panelRef: RefObject<HTMLElement | null>, edgeGap = 8
   }, [])
 
   const reset = useCallback(() => setOffset({ x: 0, y: 0 }), [])
+
+  // 窗口缩放后把面板重新夹回可视区：不夹的话拖到边角再缩小窗口，面板会悬在窗外。
+  useEffect(() => {
+    const onResize = () => {
+      const next = clamp(offsetRef.current)
+      offsetRef.current = next
+      setOffset(next)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [clamp])
 
   return { offset, dragging, start, move, up, reset }
 }

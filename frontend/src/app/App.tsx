@@ -428,7 +428,9 @@ export function App() {
   // 运行中的焦点跟随照旧会把正在跑的分类展开，不受这个默认影响。
 
   // 工具栏「折叠」：全展开时一键全折叠，否则一键全展开（原型第 3599–3610 行同一条规则）。
+  // 算一次用户亲手操作：焦点跟随的任务跑完后不许把这次折叠整份盖回（和树行点击同一口径）。
   const foldAll = useCallback(() => {
+    userTouchedRef.current = true
     const categories = snapshot?.categories ?? []
     setExpanded((current) => {
       if (categories.length > 0 && categories.every((cat) => current.has(cat.id))) return new Set()
