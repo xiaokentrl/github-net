@@ -16,7 +16,7 @@ import { DetectTables } from './DetectTables'
 import { RestorePreviewTable } from './RestorePreviewTable'
 import tableStyles from './RestorePreviewTable.module.css'
 import { ServiceStrategySelector } from '../strategies/ServiceStrategySelector'
-import { ensureLastResults, isTerminalTask, useTaskQueue } from '../tasks/taskStore'
+import { ensureLastResults, isTerminalTask, refreshResult, useTaskQueue } from '../tasks/taskStore'
 import { addressUsable, projectState, toneForCandidate, toneForItem, type Tone } from '../tasks/statusTone'
 import styles from './ItemDetail.module.css'
 import detectStyles from './DetectResult.module.css'
@@ -641,6 +641,7 @@ export function ItemDetail({
               hasDetectResult: boxConfirmReady,
             }}
             refreshKey={boxRefreshKey}
+            onReprobed={() => { if (restoreBox) void refreshResult(restoreBox.itemId) }}
           />
 
           {/* 检测/还原的进度与回执照旧摆在表下方，跟着视图走。 */}

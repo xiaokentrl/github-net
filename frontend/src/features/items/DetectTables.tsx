@@ -143,7 +143,7 @@ function CardHead({ step, title, desc, countLabel, tone, extra }: {
   )
 }
 
-export function DetectTables({ name, itemId, hostnames, entries, actions, busy, ready, refreshKey, only }: {
+export function DetectTables({ name, itemId, hostnames, entries, actions, busy, ready, refreshKey, only, onReprobed }: {
   name: string
   // 还原前后对比按这一个二级菜单算，不能拿全量还原的结果来顶。
   itemId: string
@@ -156,6 +156,9 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
   refreshKey: string
   // 拆分入口（拍板 2026-11-04）：只渲染其中一张表；不传＝两张都渲染（旧形态）。
   only?: 'restore' | 'detect'
+  // 「重新检测」整轮收尾后的通知：后端候选池已更新，调用方重拉结果 store，
+  // 详情页的候选表才不会停在旧实测状态。
+  onReprobed?: () => void
 }) {
   const [pool, setPool] = useState<PoolEntryView[] | null>(null)
   const [poolError, setPoolError] = useState('')
@@ -286,6 +289,9 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
     if (failed > 0) {
       setReprobeError(t('detail.detectBox.reprobeFailed', { count: failed, reason: firstReason }))
     }
+    // 整轮收尾：后端候选池已是新实测，通知调用方重拉结果 store——
+    // 不然弹框里看得到新状态、关掉后详情页的候选表还是旧的。
+    onReprobed?.()
   }
 
   const button = (

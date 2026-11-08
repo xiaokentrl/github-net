@@ -1,0 +1,3 @@
+# 0.1.5 相对 0.1.4 的净变化；一条一行，格式「分类|语言|内容」
+fixed|zh|详情页弹框里的「重新检测」收尾后同步刷新详情页候选表，关掉弹框不再看到旧实测
+fixed|en|The per-IP re-probe inside the item dialog now refreshes the detail results when it finishes, so the candidate table no longer shows stale statuses after closing the dialog
