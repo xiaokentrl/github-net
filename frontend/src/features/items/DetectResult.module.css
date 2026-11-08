@@ -12,28 +12,6 @@
   margin-left: auto;
 }
 
-/* 一个域名一条分块：本项目一个项目可能带好几个域名，后端按域名各给一批候选。 */
-.block {
-  border-top: 1px solid var(--border);
-}
-
-.block:first-child {
-  border-top: none;
-}
-
-/* 分块抬头：域名 + 解析失败那句（原型没有这一层，是本项目按真实数据形状补的一行）。 */
-.blockHead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--strip);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  color: var(--text-2);
-}
-
 .blockFailed {
   color: var(--red);
   font-family: inherit;
@@ -158,11 +136,6 @@
 
 .tagFail {
   background: var(--red);
-  color: var(--on-primary);
-}
-
-.tagWarn {
-  background: var(--amber);
   color: var(--on-primary);
 }
 

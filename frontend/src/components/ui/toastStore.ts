@@ -169,15 +169,3 @@ export function setNoticeCollapsed(next: boolean): void {
 export function toggleNoticeCollapsed(): void {
   setNoticeCollapsed(!collapsed)
 }
-
-/** 只剩测试和「重置界面」会用：把面板恢复到刚进应用时的样子。 */
-export function resetNotices(): void {
-  if (timer !== null) {
-    clearTimeout(timer)
-    timer = null
-  }
-  notices = []
-  collapsed = false
-  nextId = 1
-  publish()
-}

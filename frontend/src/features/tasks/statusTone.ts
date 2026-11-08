@@ -17,8 +17,6 @@ export type Tone = 'working' | 'failed' | 'written' | 'unwritten'
 export type Progress = 'detecting' | 'applying' | 'restoring'
 export type ProjectState = { tone: Tone; progress?: Progress; reason?: string; written: boolean }
 
-export const TONE_VALUES: readonly Tone[] = ['working', 'failed', 'written', 'unwritten']
-
 // 只有这三种是「测完给出的结论」。排队中、在测、被取消、没排上测——这些都只是还没有结论，
 // 拿它们当证据会把「没测过」显示成「连不通」。
 const DECISIVE = new Set(['available', 'unavailable', 'timeout'])
@@ -115,20 +113,10 @@ const TERMINAL = new Set<string>([
   Status.StatusRolledback, Status.StatusRestored,
 ])
 
-export type ToneTask = Pick<Task, 'itemId' | 'kind' | 'status' | 'errorMsg' | 'finishedAt'>
-
-export function toneForTask(task: Pick<Task, 'status'>): Tone {
-  const status = String(task.status)
-  if (ACTIVE.has(status)) return 'working'
-  return TASK_TONE[status] ?? 'unwritten'
-}
+type ToneTask = Pick<Task, 'itemId' | 'kind' | 'status' | 'errorMsg' | 'finishedAt'>
 
 export function toneForCandidate(status: string): Tone {
   return CANDIDATE_TONE[status] ?? 'unwritten'
-}
-
-export function toneForHosts(status: string | undefined): Tone {
-  return status ? HOSTS_TONE[status] ?? 'unwritten' : 'unwritten'
 }
 
 function progressOf(task: ToneTask): Progress {

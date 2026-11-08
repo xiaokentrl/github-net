@@ -92,11 +92,8 @@ export function subscribeUpdateStatus(onPayload: (payload: UpdateNoticePayload) 
   })
 }
 
-// 托盘菜单切主题后推来的新配置：App 用它整体刷新（语言/主题/缩放同一条 applyConfig 路）。
-export type SettingsChangedPayload = {
-  config: Config
-}
-
+// 托盘菜单切主题后推来的新配置（载荷形如 { config: Config }）：
+// App 用它整体刷新（语言/主题/缩放同一条 applyConfig 路）。
 export function subscribeSettingsChanged(onPayload: (payload: Config) => void): () => void {
   return Events.On(SETTINGS_EVENT, (event: Events.WailsEvent) => {
     const payload = event.data as { config?: Config } | undefined

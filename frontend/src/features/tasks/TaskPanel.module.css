@@ -130,8 +130,7 @@
   flex: 1;
 }
 
-.head button,
-.row button {
+.head button {
   font: inherit;
   font-size: 0.78rem;
   padding: 0.1rem 0.5rem;
@@ -142,8 +141,7 @@
   cursor: pointer;
 }
 
-.head button:disabled,
-.row button:disabled {
+.head button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -157,69 +155,6 @@
   color: var(--text-2);
 }
 
-.list {
-  list-style: none;
-  margin: 0.25rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-}
-
-.badge {
-  flex: none;
-  font-size: 0.72rem;
-  padding: 0 0.4rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--text-2);
-}
-
-.badge.running {
-  color: var(--primary);
-  border-color: var(--primary);
-}
-
-.badge.done,
-.badge.restored {
-  color: var(--green);
-  border-color: var(--green);
-}
-
-.badge.failed,
-.badge.cancelled {
-  color: var(--red);
-  border-color: var(--red);
-}
-
-.name {
-  max-width: 16rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.progress {
-  color: var(--text-2);
-  font-size: 0.76rem;
-}
-
-.errorText {
-  color: var(--red);
-  font-size: 0.76rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.empty,
 .error {
   margin: 0.3rem 0 0;
   font-size: 0.8rem;
@@ -228,22 +163,6 @@
 
 .error {
   color: var(--red);
-}
-
-.progress {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.progress::before {
-  content: '';
-  width: 0.6rem;
-  height: 0.6rem;
-  border: 2px solid var(--border-strong);
-  border-top-color: var(--primary);
-  border-radius: 999px;
-  animation: queue-spin 0.9s linear infinite;
 }
 
 @keyframes queue-spin {
@@ -313,13 +232,6 @@
   font-weight: 600;
   color: var(--text-2);
   flex: none;
-}
-
-.paneEmpty {
-  padding: 18px 14px;
-  color: var(--text-2);
-  font-size: 12px;
-  text-align: center;
 }
 
 .qrow {
@@ -467,45 +379,6 @@ tr.qUnwritten td, tr.qUnwritten:hover td { background: var(--band); }
 
 .qtable2 tbody tr {
   cursor: pointer;
-}
-
-.qdCtl {
-  white-space: nowrap;
-  width: 1%;
-  text-align: right;
-}
-
-.qdPage {
-  font-size: 11px;
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
-  margin-right: 6px;
-}
-
-.qdArrow {
-  width: 22px;
-  height: 20px;
-  padding: 0;
-  font-size: 11px;
-  color: var(--text-2);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 4px;
-}
-
-.qdArrow:hover:not(:disabled) {
-  color: var(--primary);
-  border-color: var(--primary);
-}
-
-.qdArrow:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .err {

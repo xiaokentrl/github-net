@@ -20,8 +20,6 @@ export const THEMES: Theme[] = [
   { id: 'oled', swatches: ['#000000', '#08090b', '#60a5fa', '#34d399'] },
 ]
 
-export const THEME_IDS = THEMES.map((theme) => theme.id)
-
 export function themeName(id: string): string {
   return t(`theme.${id}.name`)
 }
