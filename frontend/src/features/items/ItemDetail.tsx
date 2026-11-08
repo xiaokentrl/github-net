@@ -115,6 +115,7 @@ export function ItemDetail({
   // 列宽：拖过一次就转固定布局（px），没拖过是 null（auto 自适应）。
   const tableRef = useRef<HTMLTableElement | null>(null)
   const [colWidths, setColWidths] = useState<number[] | null>(null)
+  const selfDetectable = item !== null && !item.userSupplied && (item.hostnames?.length ?? 0) > 0
   // 还原本菜单的公共弹框（拍板 2026-11-03）：确认文案在框里，动作走 onRestoreCategory。
   const [restoreMenuOpen, setRestoreMenuOpen] = useState(false)
   // 可还原的二级菜单：各自的 Hosts 状态是已应用或部分生效（拍板 2026-11-03）。
@@ -151,7 +152,7 @@ export function ItemDetail({
   // 框只剩两屏——detect 看数据、restoring 给回执；「立刻还原」要看得见这一项的检测数据才可点。
   // writtenCount 是点开那一刻数出来的待还原条数——还原落定后 entries 会被刷新成空，
   // 回执要是跟着现数就会写成「已还原 0 条」。
-  const [restoreBox, setRestoreBox] = useState<{ itemId: string; name: string; writtenCount: number } | null>(null)
+  const [restoreBox, setRestoreBox] = useState<{ itemId: string; name: string; writtenCount: number; view: 'restore' | 'detect' } | null>(null)
   // 候选 IP 表的本地焦点行：这张表没有「选中某个项目」的语义，只记上下移动的位置。
   const [candFocus, setCandFocus] = useState(0)
   // 这个框是几点几分打开的：用来分清「本框点重新检测跑出来的结论」和「后端留着的上一轮结论」。
@@ -179,9 +180,6 @@ export function ItemDetail({
     ...(boxItem?.hostnames ?? []),
     ...boxAllEntries.map((entry) => entry.hostname),
   ]))
-  // 可还原条数与第一张表同一口径：本项目写进 Hosts 的映射（written + 有地址）。
-  // 网络通不通是旁边「网络状态」那一列的事，不拿它来筛掉可还原的 IP。
-  const boxRestorableCount = boxAllEntries.filter((entry) => entry.written && entry.ip).length
   // 这一项的任务状态一变就当刷新信号：检测/还原/写入落定后，缓存表跟着重拉。
   const boxRefreshKey = restoreBox
     ? state.tasks
@@ -209,9 +207,9 @@ export function ItemDetail({
 
   // 点行内「还原」＝只开框，不排任务：用户没点「立刻还原」之前，列表和队列一格都不该被这一步改动。
   // 框里要看的检测数据在这屏加载时就补读进 store 了（见上面的 ensureLastResults），这里不再单独发请求。
-  const openRestoreBox = (itemId: string, name: string, writtenCount: number) => {
+  const openRestoreBox = (itemId: string, name: string, writtenCount: number, view: 'restore' | 'detect') => {
     boxOpenedAt.current = Date.now()
-    setRestoreBox({ itemId, name, writtenCount })
+    setRestoreBox({ itemId, name, writtenCount, view })
   }
 
   // 检测那一段的一行字：本框跑的检测给「进行中／结论／后端原因」；
@@ -486,20 +484,32 @@ export function ItemDetail({
                   </td>
                   <td>{res?.finishedAt ? formatRelativeTime(res.finishedAt) : '—'}</td>
                   <td className={styles.rowAction}>
-                    {/* 文案先按需求叫「检测」，行为仍是打开还原框；功能随后再换，文案键届时一起重命名。 */}
-                    {restorableItems.some((r) => r.id === it.id) ? (
-                      <button
-                        type="button"
-                        className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.restore}`}
-                        title={t('hosts.restore')}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          openRestoreBox(it.id, it.name, claimed)
-                        }}
-                      >
-                        {t('hosts.restoreRow')}
-                      </button>
-                    ) : null}
+                    {/* 两颗固定入口（拍板 2026-11-04）：「还原」开还原表（不可还原的行置灰），「检测」开检测与写入表。
+                        弹框里先看数据，主按钮在弹框内。 */}
+                    <button
+                      type="button"
+                      className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.restore}`}
+                      disabled={!restorableItems.some((r) => r.id === it.id)}
+                      title={t('hosts.restoreRow')}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openRestoreBox(it.id, it.name, claimed, 'restore')
+                      }}
+                    >
+                      {t('hosts.restoreRow')}
+                    </button>
+                    <button
+                      type="button"
+                      className={`${uiStyles.btn} ${uiStyles.small}`}
+                      disabled={!selfDetectable}
+                      title={t('hosts.detectEntryHint')}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openRestoreBox(it.id, it.name, claimed, 'detect')
+                      }}
+                    >
+                      {t('hosts.detectEntry')}
+                    </button>
                   </td>
                 </tr>
               )
@@ -592,7 +602,11 @@ export function ItemDetail({
 
       {restoreBox ? (
         <Dialog
-          title={t('detail.detectBox.title', { name: restoreBox.name, count: boxRestorableCount })}
+          title={
+            restoreBox.view === 'restore'
+              ? t('detail.detectBox.firstTitle')
+              : t('detail.detectBox.secondTitle')
+          }
           onClose={() => setRestoreBox(null)}
           width={760}
           footer={
@@ -601,13 +615,12 @@ export function ItemDetail({
             </button>
           }
         >
-          {/* 上面一张只列支持还原的 IP 并逐条复测网络状态，下面一张是全部域名由「检测全部」刷新。
-              四颗按钮都接真动作，动作归到各自那张表的操作列。 */}
           <DetectTables
             name={restoreBox.name}
             itemId={restoreBox.itemId}
             hostnames={boxHostnames}
             entries={boxAllEntries}
+            only={restoreBox.view}
             actions={{
               restoreIp: () => onRestore(restoreBox.itemId),
               detectAll: () => boxItem ? onDetectAll([boxItem]) : undefined,
@@ -626,12 +639,15 @@ export function ItemDetail({
             refreshKey={boxRefreshKey}
           />
 
-          {/* 原有检测/还原的进度与回执留着，不能因为换布局就把反馈丢了。 */}
-          <div className={styles.boxDetect}>
-            <p className={styles.boxStage}>{boxDetectText || t('detail.box.noResult')}</p>
-          </div>
-
-          {boxRestoreTask ? <p className={styles.boxStage}>{boxRestoreText}</p> : null}
+          {/* 检测/还原的进度与回执照旧摆在表下方，跟着视图走。 */}
+          {restoreBox.view === 'detect' && (boxDetectText || boxDetectRunning) ? (
+            <div className={styles.boxDetect}>
+              <p className={styles.boxStage}>{boxDetectText || t('detail.box.noResult')}</p>
+            </div>
+          ) : null}
+          {restoreBox.view === 'restore' && boxRestoreTask ? (
+            <p className={styles.boxStage}>{boxRestoreText}</p>
+          ) : null}
         </Dialog>
       ) : null}
 

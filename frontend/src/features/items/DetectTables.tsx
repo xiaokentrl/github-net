@@ -123,7 +123,7 @@ function NetTag({ net }: { net: NetState }) {
 }
 
 function CardHead({ step, title, desc, countLabel, tone, extra }: {
-  step: string
+  step?: string
   title: string
   desc: string
   countLabel: string
@@ -133,7 +133,7 @@ function CardHead({ step, title, desc, countLabel, tone, extra }: {
   return (
     <div className={`${styles.cardHead} ${tone === 'restore' ? styles.headRestore : styles.headDetect}`}>
       <div className={styles.headLine}>
-        <span className={styles.headStep}>{step}</span>
+        {step ? <span className={styles.headStep}>{step}</span> : null}
         <h4 className={styles.headTitle}>{title}</h4>
         <span className={styles.headCount}>{countLabel}</span>
       </div>
@@ -143,7 +143,7 @@ function CardHead({ step, title, desc, countLabel, tone, extra }: {
   )
 }
 
-export function DetectTables({ name, itemId, hostnames, entries, actions, busy, ready, refreshKey }: {
+export function DetectTables({ name, itemId, hostnames, entries, actions, busy, ready, refreshKey, only }: {
   name: string
   // 还原前后对比按这一个二级菜单算，不能拿全量还原的结果来顶。
   itemId: string
@@ -154,6 +154,8 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
   ready: Ready
   // 检测/还原/写入任务状态一变就重拉候选池与还原预览，表里始终是刚落定的真实数据。
   refreshKey: string
+  // 拆分入口（拍板 2026-11-04）：只渲染其中一张表；不传＝两张都渲染（旧形态）。
+  only?: 'restore' | 'detect'
 }) {
   const [pool, setPool] = useState<PoolEntryView[] | null>(null)
   const [poolError, setPoolError] = useState('')
@@ -463,16 +465,18 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
     </section>
   )
 
+  const showRestore = only !== 'detect'
+  const showDetect = only !== 'restore'
   return (
     <div className={styles.wrap}>
-      <p className={styles.hint}>{t('detail.detectBox.hint')}</p>
-      {firstTable}
-      {restorePreviewError
+      {only === undefined ? <p className={styles.hint}>{t('detail.detectBox.hint')}</p> : null}
+      {showRestore ? firstTable : null}
+      {showRestore && restorePreviewError
         ? <p className={styles.alert}>{t('detail.detectBox.previewFailed', { reason: restorePreviewError })}</p>
         : null}
-      {reprobeError ? <p className={styles.alert}>{reprobeError}</p> : null}
-      {poolError ? <p className={styles.alert}>{t('detail.detectBox.poolFailed', { reason: poolError })}</p> : null}
-      {secondTable}
+      {showRestore && reprobeError ? <p className={styles.alert}>{reprobeError}</p> : null}
+      {showDetect && poolError ? <p className={styles.alert}>{t('detail.detectBox.poolFailed', { reason: poolError })}</p> : null}
+      {showDetect ? secondTable : null}
     </div>
   )
 }
