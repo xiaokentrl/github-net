@@ -13,6 +13,7 @@ import { UpdatesPane } from './UpdatesPane'
 import { StartupPane } from './StartupPane'
 import { TrayPane } from './TrayPane'
 import { ZoomPane } from './ZoomPane'
+import { useDragMove } from '../../components/ui/useDragMove'
 import styles from './SettingsDialog.module.css'
 
 export type SettingsPaneID = 'layout' | 'zoom' | 'appearance' | 'network' | 'tray' | 'startup' | 'updates' | 'about'
@@ -95,6 +96,9 @@ export function SettingsDialog({
   onToastVisible: (enabled: boolean) => void
 }) {
   const closeRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  // 拖动（拍板 2026-11-08）：头部就是拖动条，按住拖、双击回居中；位移只活在本轮，重开回正。
+  const dragMove = useDragMove(panelRef)
   // onClose 用 ref 转一手：App 每次渲染都给新的箭头函数，副作用若直接依赖它，
   // 任何队列事件触发的重渲染都会把焦点抢回关闭按钮——输入框敲数字就被顶掉就是这么来的。
   const onCloseRef = useRef(onClose)
@@ -115,13 +119,22 @@ export function SettingsDialog({
   return (
     <div className={styles.mask} onClick={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <div
-        className={styles.panel}
+        ref={panelRef}
+        className={`${styles.panel} ${dragMove.dragging ? styles.panelDragging : ''}`}
+        style={{ transform: `translate(${dragMove.offset.x}px, ${dragMove.offset.y}px)` }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
         tabIndex={-1}
       >
-        <div className={styles.head}>
+        <div
+          className={styles.head}
+          onPointerDown={dragMove.start}
+          onPointerMove={dragMove.move}
+          onPointerUp={dragMove.up}
+          onPointerCancel={dragMove.up}
+          onDoubleClick={dragMove.reset}
+        >
           <h2 id="settings-title">{t('settings.dialog.title')}</h2>
           <span className={styles.sub}>{t(PANE_SUB[pane])}</span>
           <span className={styles.spacer} />
