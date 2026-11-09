@@ -265,7 +265,10 @@ export function App() {
         if (siblings.length > 0 && siblings.every((tk) => isTerminalTask(tk.status))) {
           reportedApplyRounds.add(settled.roundId)
           const done = siblings.filter((tk) => tk.status === 'done').length
-          const failed = siblings.length - done
+          // skipped 是「这轮做不了」不是失败：失败原因在队列明细里，跳过原因已由
+          // reportSkippedApply 单独报过，这里混进「失败」就是双报＋标签不准。
+          const skipped = siblings.filter((tk) => tk.status === 'skipped').length
+          const failed = siblings.length - done - skipped
           if (done > 0) {
             pushNotice(
               failed > 0 ? 'warning' : 'success',
