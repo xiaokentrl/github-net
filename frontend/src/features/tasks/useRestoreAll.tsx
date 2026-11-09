@@ -8,7 +8,8 @@ import uiStyles from '../../components/ui/ui.module.css'
 import { t } from '../../i18n'
 import { RestorePreviewTable } from '../items/RestorePreviewTable'
 import tableStyles from '../items/RestorePreviewTable.module.css'
-import { applyTaskSnapshot, refreshAllResults, useTaskQueue } from './taskStore'
+import { applyTaskSnapshot, useTaskQueue } from './taskStore'
+import { invalidate } from '../../sync/syncHub'
 
 // 「恢复」只有这一份实现：工具栏那颗走这里，队列面板不放还原按钮。
 // 规则：队列里还有没落定的任务就先不动；用户确认后才让后端一笔原子还原；还原完重拉一遍快照。
@@ -68,7 +69,7 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
       })
       .then(() => getTasks().then(applyTaskSnapshot))
       // 「当前写入 IP」的权威在后端检测结果里，还原后整批重拉一遍。
-      .then(() => refreshAllResults())
+      .then(() => invalidate('results'))
       .then(() => { if (!skipCatalogRefresh) onRestored?.() })
       .catch(onError)
       .finally(() => { restoringRef.current = false })

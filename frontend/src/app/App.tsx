@@ -26,6 +26,7 @@ import { DetectProfileDialog } from '../features/detect/DetectProfileDialog'
 import { TaskPanel } from '../features/tasks/TaskPanel'
 import { subscribeTaskEvents } from '../features/tasks/taskEvents'
 import { clearResults, isTerminalTask, refreshAllResults, refreshResult, taskStateSnapshot, useTaskQueue } from '../features/tasks/taskStore'
+import { invalidate, registerRefresher, useFocusInvalidation } from '../sync/syncHub'
 import { useRestoreAllTasks } from '../features/tasks/useRestoreAll'
 import { useSettingsSave } from '../hooks/useSettingsSave'
 import { setLocale, t } from '../i18n'
@@ -197,6 +198,19 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    // 统一失效入口的登记表（拍板 2026-11-09）：命令落定只声明失效哪些事实，
+    // 刷新动作从这张表查——「谁该刷什么」从记忆变成可审计的登记。
+    const unregisterCatalog = registerRefresher('catalog', loadCatalog)
+    const unregisterSettings = registerRefresher('settings', loadSettings)
+    const unregisterStatus = registerRefresher('status', loadStatus)
+    const unregisterAutomation = registerRefresher('automation', loadAutomation)
+    const unregisterResults = registerRefresher('results', (itemIds) => {
+      if (itemIds && itemIds.length > 0) {
+        void Promise.all(itemIds.map((id) => refreshResult(id).catch(() => undefined)))
+        return
+      }
+      void refreshAllResults()
+    })
     loadStatus()
     loadSettings()
     loadCatalog()
@@ -213,17 +227,12 @@ export function App() {
     // 任务与候选进度：应用级只挂一份订阅，先订阅再拉快照（taskEvents.ts）。
     // 应用/还原类任务落定后重读目录，详情页的 Hosts 状态才会跟着变；检测类不用（结果存储自己追）。
     const unsubscribeTasks = subscribeTaskEvents((settled) => {
-      // 任务落定的统一同步层（拍板 2026-11-03 从底层修复）：
-      // 任何类型的任务落定都做一轮权威刷新——Hosts 状态（loadCatalog）+ 该项目的检测结果
-      // （refreshResult），再在 800ms 后补一轮，吸收后端写盘与元数据落盘的时序差。
-      // 以前各处散着「apply/restore 才刷目录」「detect 靠结果存储自己追」的碎片规则，
-      // 每条都可能漏；漏了就是用户报「表格没同步」。
-      loadCatalog()
-      void refreshResult(settled.itemId).catch(() => undefined)
-      window.setTimeout(() => {
-        loadCatalog()
-        void refreshResult(settled.itemId).catch(() => undefined)
-      }, 800)
+      // 任务落定的统一失效（拍板 2026-11-03 从底层修复；2026-11-09 收编进 syncHub）：
+      // 任何类型的任务落定都失效 Hosts 状态（catalog）+ 该项目的检测结果（results），
+      // 再在 800ms 后补一轮兜底，吸收后端写盘与元数据落盘的时序差。
+      // 刷新动作从登记表转发，这里只声明失效哪些事实。
+      invalidate('catalog')
+      invalidate('results', { itemIds: [settled.itemId], fallbackDelayMs: 800 })
       // 检测轮收尾回执（拍板 2026-11-03）：一项一项递就是刷屏，按轮聚合一条。
       // 该轮全部任务到终态的那一刻算收尾；有失败的用警告档，干净的用成功档。
       if (settled.kind === 'detect' && settled.status === 'done' && settled.roundId) {
@@ -305,6 +314,11 @@ export function App() {
       unsubscribeSettings()
       unsubscribeAutomation()
       unsubscribeBrowser()
+      unregisterCatalog()
+      unregisterSettings()
+      unregisterStatus()
+      unregisterAutomation()
+      unregisterResults()
     }
   }, [loadStatus, loadSettings, loadCatalog, loadAutomation, applyConfig])
 
@@ -350,6 +364,11 @@ export function App() {
   // 树上那一行的状态字和色点要跟着队列走：正在检测、正在写 Hosts、正在还原的项目，原型是整行变色。
   // 队列只有 taskStore 这一份，TaskPanel 和树读的是同一个快照，不存在两份真相。
   const queue = useTaskQueue()
+  // 焦点恢复失效（统一同步层的兜底一环）：切回窗口补一轮目录与结果，
+  // 外部改动（手改 hosts）与休眠唤醒的残余陈旧在这里收敛。
+  // 目录失效的稳定包装：任何「只想重读目录」的调用方都走它，不再直呼 loadCatalog。
+  const resyncCatalog = useCallback(() => invalidate('catalog'), [])
+  useFocusInvalidation()
   // 工具栏四颗动作按钮共用的「队列里还有没落定的任务」：检测/应用/还原排队中也算，
   // 不只看正在跑的那一条。有任务在途时四颗一起关上，避免重复发起或一边排队一边清缓存。
   const queueBusy = queue.tasks.some((task) => !isTerminalTask(task.status))
@@ -752,7 +771,7 @@ export function App() {
     (tasks: { id: string; errorMsg?: string | null }[] | null | undefined) => {
       const ids = new Set((tasks ?? []).map((t) => t.id))
       if (ids.size === 0) {
-        loadCatalog()
+        invalidate('catalog')
         return
       }
       let tries = 0
@@ -762,20 +781,19 @@ export function App() {
             const mine = (snap.tasks ?? []).filter((t) => ids.has(t.id))
             const settled = mine.length > 0 && mine.every((t) => isTerminalTask(t.status))
             if (settled || tries++ >= 40) {
-              loadCatalog()
-              // 再补一轮，吸收后端写盘与恢复元数据落盘的时序差。
-              window.setTimeout(loadCatalog, 800)
+              // 轮询是「推」路丢失时的兜底：落定重读交给登记表，这里只负责探到落定与错误回显。
+              invalidate('catalog', { fallbackDelayMs: 800 })
               const failed = mine.find((t) => t.errorMsg)
               if (failed?.errorMsg) setHostsError(failed.errorMsg)
               return
             }
             window.setTimeout(poll, 250)
           })
-          .catch(() => loadCatalog())
+          .catch(() => invalidate('catalog'))
       }
       window.setTimeout(poll, 200)
     },
-    [loadCatalog],
+    [],
   )
 
   // 批量应用：勾选项整批交给后端。界面不再自己筛「有没有可用候选」——
@@ -843,11 +861,11 @@ export function App() {
         }
       }
       if (doHosts) await restoreAllNow(true)
-      loadCatalog()
+      invalidate('catalog')
     } finally {
       setClearBusy(false)
     }
-  }, [clearAsk, loadCatalog])
+  }, [clearAsk])
 
   // 单项检测（方法下拉旁那颗、还原框的「重新检测」）不弹档位框，沿用设置里的档位。
   const startDetect = useCallback((itemId: string, strategyId?: string) => {
@@ -982,7 +1000,7 @@ export function App() {
   // 工具栏「恢复」和队列面板那颗共用同一条实现（useRestoreAll）；失败按同一条规矩：原位一句 + 右下角一条。
   // 还原不进队列、没有任务落定事件，所以成功后在这里重读目录，树上的状态才跟着回到「未替换」。
   const handleRestoreError = useCallback((err: unknown) => reportRejection(setHostsError, err), [])
-  const { busy: restoreBusy, restoreAll, restoreAllNow, confirmDialog: restoreAllConfirm } = useRestoreAllTasks(handleRestoreError, loadCatalog, restoreGroups)
+  const { busy: restoreBusy, restoreAll, restoreAllNow, confirmDialog: restoreAllConfirm } = useRestoreAllTasks(handleRestoreError, resyncCatalog, restoreGroups)
 
   const sidebar = (
     <CategoryTree
@@ -999,7 +1017,7 @@ export function App() {
       }}
       load={catalogLoad}
       error={catalogError}
-      onRetry={loadCatalog}
+      onRetry={resyncCatalog}
       onToggle={(categoryID) => {
         toggleCategory(categoryID)
         userTouchedRef.current = true
@@ -1154,7 +1172,7 @@ export function App() {
           hostsDisabled={restoreBusy}
           onCancel={() => setClearAsk(null)}
           onConfirm={(choice) => runClearSelected(choice, restoreAllNow, restoreBusy)}
-          onReprobed={() => { void refreshAllResults() }}
+          onReprobed={() => invalidate('results')}
         />
       ) : null}
       {profileAsk ? (
