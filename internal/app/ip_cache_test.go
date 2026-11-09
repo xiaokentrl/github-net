@@ -12,6 +12,10 @@ import (
 // 清理全部 IP 缓存是「用户主动点的全清」：底账和内存这一份都得认得出样本、清完都查不到。
 // 库没打开时也不能假装清过，但内存那轮仍必须丢掉——界面摆着旧候选就是没清干净。
 func clearCacheSample() *accelerator.Result {
+	// 样本时间必须跟着当前时钟走：SaveRound 末尾会按真实时钟 Prune 掉超过
+	// retention.MaxAge（3 天）的缓存，写死日期过了那天就会让样本刚落盘就被清掉，
+	// 测试便永远报「清掉 0 轮」。这里只验清空，时间取「刚刚」才在保留期内。
+	finished := time.Now().UTC()
 	return &accelerator.Result{
 		ItemID:    "gh-main",
 		Hostnames: []accelerator.HostOutcome{{Hostname: "github.com", Resolved: true}},
@@ -19,8 +23,8 @@ func clearCacheSample() *accelerator.Result {
 			{ID: "c1", Hostname: "github.com", IP: "140.82.121.4", Status: accelerator.StatusAvailable, LatencyMS: 120},
 		},
 		ProbesUsed: 1, DNSQueries: 1, Available: 1,
-		StartedAt:  time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC),
-		FinishedAt: time.Date(2026, 11, 6, 8, 0, 5, 0, time.UTC),
+		StartedAt:  finished.Add(-5 * time.Second),
+		FinishedAt: finished,
 	}
 }
 

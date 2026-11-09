@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"log"
 	"os/exec"
 	"runtime"
 	"sort"
@@ -54,12 +55,15 @@ func (s *Service) ApplyItems(itemIDs []string) ([]task.Task, error) {
 	}
 	// 应用落定后自动重启浏览器（拍板 2026-11-08）：开关开着才动；
 	// 那一轮里至少一条真写成功（StatusDone）才重启，全跳过/全失败一个浏览器都不动。
+	// 开关没开是最常见的「功能没效果」，留一行日志，别让人对着界面猜。
 	if s.browserRestartEnabled() {
 		s.browserWG.Add(1)
 		go func() {
 			defer s.browserWG.Done()
 			s.restartBrowsersAfterApply(roundID)
 		}()
+	} else {
+		log.Printf("[browser-restart] 轮次 %s：开关未开启，本次应用不重启浏览器", roundID)
 	}
 	return tasks, nil
 }

@@ -14,9 +14,17 @@ const AUTOMATION_EVENT = 'automation:status'
 // 事件名必须和 Go 侧 internal/app/browser_restart.go 的 browserRestartedEvent 一致。
 const BROWSER_EVENT = 'browser:restarted'
 
+// reason 是后端给的「这一轮到底做了什么」原因码。旧版特权服务/旧回执没有这个字段，
+// 前端按 undefined 走原来的「重启了几家 / 没发现浏览器」两档，不炸。
 export type BrowserRestartedPayload = {
   restarted: number
   families: string[]
+  reason?: string
+  scanned?: number
+  launchers?: number
+  signalFailed?: number
+  notGone?: number
+  launchFailed?: number
 }
 
 export type RuntimeStatusPayload = {

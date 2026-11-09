@@ -226,6 +226,8 @@ export function App() {
 
     // 任务与候选进度：应用级只挂一份订阅，先订阅再拉快照（taskEvents.ts）。
     // 应用/还原类任务落定后重读目录，详情页的 Hosts 状态才会跟着变；检测类不用（结果存储自己追）。
+    // 一轮写入只报一条回执：事件逐条到达，「本轮全部落定」那一刻可能被两条同时看见。
+    const reportedApplyRounds = new Set<string>()
     const unsubscribeTasks = subscribeTaskEvents((settled) => {
       // 任务落定的统一失效（拍板 2026-11-03 从底层修复；2026-11-09 收编进 syncHub）：
       // 任何类型的任务落定都失效 Hosts 状态（catalog）+ 该项目的检测结果（results），
@@ -255,7 +257,31 @@ export function App() {
       const reason = settled.errorMsg || t('error.unknown')
       if (settled.status === 'failed') pushNotice('error', t('hosts.task.failed', { reason }))
       if (settled.status === 'rolledback') pushNotice('error', t('hosts.task.rolledback', { reason }))
-      if (settled.kind === 'apply' && settled.status === 'done') pushNotice('info', t('hosts.apply.doneHint'))
+      // 写入 Hosts 成功：按轮聚合一条 success，明确告诉用户「写进去了」。
+      // 以前每条 done 都递一条 info「重开标签页」，勾 6 项就刷 6 条，还看不出成功与否。
+      // 一轮全部落定的那一刻统计：全成功报 success，部分失败报 warning，全失败只留上面的错误条。
+      if (settled.kind === 'apply' && settled.roundId && !reportedApplyRounds.has(settled.roundId)) {
+        const siblings = taskStateSnapshot().tasks.filter((tk) => tk.roundId === settled.roundId)
+        if (siblings.length > 0 && siblings.every((tk) => isTerminalTask(tk.status))) {
+          reportedApplyRounds.add(settled.roundId)
+          const done = siblings.filter((tk) => tk.status === 'done').length
+          const failed = siblings.length - done
+          if (done > 0) {
+            pushNotice(
+              failed > 0 ? 'warning' : 'success',
+              failed > 0
+                ? t('hosts.apply.done.partial', { done, failed })
+                : t('hosts.apply.done', { total: done }),
+            )
+            pushNotice('info', t('hosts.apply.doneHint'))
+          }
+        }
+      }
+      // 没有轮 ID 的单项写入（旧后端或单独排进来的任务）：按单条报，不漏反馈。
+      if (settled.kind === 'apply' && !settled.roundId && settled.status === 'done') {
+        pushNotice('success', t('hosts.apply.done', { total: 1 }))
+        pushNotice('info', t('hosts.apply.doneHint'))
+      }
     })
 
     // 启动自动检查的结果落到顶栏徽标；详情看设置中心的检测升级屏。
@@ -277,10 +303,31 @@ export function App() {
       applyConfig(config)
     })
 
-    // 应用后自动重启浏览器的回执：重启了几家说几家，一家没跑就明说跳过了。
+    // 应用后自动重启浏览器的回执：新版带原因码，把每一种「跳过」如实说出来——
+    // 以前所有早退都压成一句「没发现正在运行的浏览器」，用户只能得出「功能没效果」。
+    // 旧回执没有 reason，仍按 restarted 走原来两档。
     const unsubscribeBrowser = subscribeBrowserRestarted((payload) => {
+      const names = (payload.families ?? []).join('、')
+      const reason = payload.reason
+      if (reason && reason !== 'ok' && reason !== 'partial') {
+        const skipped =
+          reason === 'noneFound' ? t('browser.restart.none')
+            : reason === 'notGone' ? t('browser.restart.notGone')
+              : reason === 'launchFailed' ? t('browser.restart.launchFailed')
+                : reason === 'signalFailed' ? t('browser.restart.signalFailed')
+                  : reason === 'roundNotSettled' ? t('browser.restart.roundNotSettled')
+                    : reason === 'noWritten' ? t('browser.restart.noWritten')
+                      : reason === 'debounced' ? t('browser.restart.debounced')
+                        : t('browser.restart.skipped')
+        const failed = reason === 'notGone' || reason === 'launchFailed' || reason === 'signalFailed'
+        pushNotice(failed ? 'warning' : 'info', skipped)
+        return
+      }
       if (payload.restarted > 0) {
-        pushNotice('success', t('browser.restart.done', { names: payload.families.join('、') }))
+        pushNotice(reason === 'partial' ? 'warning' : 'success',
+          reason === 'partial'
+            ? t('browser.restart.partial', { names })
+            : t('browser.restart.done', { names }))
         return
       }
       pushNotice('info', t('browser.restart.none'))

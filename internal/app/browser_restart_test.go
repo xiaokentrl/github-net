@@ -1,7 +1,10 @@
 package app
 
 import (
+	"errors"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -128,16 +131,106 @@ func TestFamilyOfByExeAndFlatpakID(t *testing.T) {
 		{"firefox-esr", nil, "Firefox"},
 		{"google-chrome-stable", nil, "Chrome"},
 		{"microsoft-edge", nil, "Edge"},
+		// Linux deb 版 Edge 真正在跑的进程叫 msedge；漏了它界面宣称支持 Edge 却一台都扫不到。
+		{"msedge", nil, "Edge"},
+		{"msedge-stable", nil, "Edge"},
 		{"brave-browser", nil, "Brave"},
 		{"flatpak", []string{"flatpak", "run", "org.mozilla.firefox"}, "Firefox"},
 		{"flatpak", []string{"flatpak", "run", "com.microsoft.Edge"}, "Edge"},
-		{"gedit", nil, ""},           // 非浏览器
-		{"chrome_crashpad", nil, ""}, // 崩溃收集器不是家族前缀命中（带下划线后缀不匹配 chrome 前缀？会匹配——见下）
+		{"gedit", nil, ""},                                    // 非浏览器
+		{"chrome_crashpad", nil, ""},                          // 崩溃收集器
+		{"msedge_crashpad_handler", nil, ""},                  // Edge 的崩溃收集器
+		{"chrome-devtools-mcp", nil, ""},                      // 名字撞 chrome 前缀的独立工具，绝不是浏览器
+		{"chrome-remote-desktop", nil, ""},                    // 同上：误发 SIGTERM 会杀掉别的程序
+		{"msedge", []string{"msedge", "--type=renderer"}, ""}, // 子进程不算主进程候选
 	}
 	for _, c := range cases {
 		got, _ := familyOf(c.exeBase, c.args)
 		if got != c.want {
-			t.Errorf("familyOf(%q) = %q，要 %q", c.exeBase, got, c.want)
+			t.Errorf("familyOf(%q, %v) = %q，要 %q", c.exeBase, c.args, got, c.want)
 		}
+	}
+}
+
+// Edge 的 ChromeLike 不能丢：重启时靠它补 --restore-last-session 还原窗口。
+func TestFamilyOfEdgeIsChromeLike(t *testing.T) {
+	for _, base := range []string{"msedge", "msedge-stable", "microsoft-edge"} {
+		label, chromeLike := familyOf(base, nil)
+		if label != "Edge" || !chromeLike {
+			t.Errorf("familyOf(%q) = (%q, %v)，要 (\"Edge\", true)", base, label, chromeLike)
+		}
+	}
+}
+
+// 真实 /proc 形状：Edge 主进程 + zygote/renderer + 各路 crashpad，最后只该剩主进程当 launcher。
+func TestListBrowserProcsOnlyKeepsEdgeMain(t *testing.T) {
+	const main = "/opt/microsoft/msedge/msedge"
+	// 直接走 familyOf 逐条过滤，跟 listBrowserProcs 同一套判据。
+	cmdlines := [][]string{
+		{main},
+		{main, "--type=zygote", "--no-zygote-sandbox"},
+		{main, "--type=renderer", "--lang=zh-CN"},
+		{"/opt/microsoft/msedge/msedge_crashpad_handler"},
+		{"/home/kentrl/node_modules/.bin/chrome-devtools-mcp"},
+	}
+	procs := make([]browserProc, 0, 1)
+	for _, args := range cmdlines {
+		label, chromeLike := familyOf(strings.ToLower(filepath.Base(args[0])), args)
+		if label != "" {
+			procs = append(procs, browserProc{Exe: args[0], Args: args, Family: label, ChromeLike: chromeLike})
+		}
+	}
+	if len(procs) != 1 || procs[0].Family != "Edge" {
+		t.Fatalf("只该认出 Edge 主进程，实际 %d 条：%+v", len(procs), procs)
+	}
+}
+
+// 信号发不出去、没退干净、拉起失败，都必须在回执里分得清，不能再压成 restarted=0。
+func TestRestartBrowsersReportsFailureStages(t *testing.T) {
+	f := &fakeBrowserEnv{gonePids: map[int]bool{700: true}}
+	f.install(t)
+	browserSignal = func(pid int) error {
+		f.signals = append(f.signals, pid)
+		if pid == 701 {
+			return errors.New("EPERM")
+		}
+		return nil
+	}
+	browserLaunch = func(_ string, _ []string) error {
+		f.launched = append(f.launched, [2]interface{}{"x", nil})
+		return errors.New("拉不起来")
+	}
+	procs := []browserProc{
+		{Pid: 700, Ppid: 1, Exe: "/opt/microsoft/msedge/msedge", Args: []string{"/opt/microsoft/msedge/msedge"}, Family: "Edge", ChromeLike: true},
+		{Pid: 701, Ppid: 700, Exe: "/opt/microsoft/msedge/msedge", Args: []string{"/opt/microsoft/msedge/msedge"}, Family: "Edge", ChromeLike: true},
+	}
+	r := restartBrowsersReport(procs)
+	if r.scanned != 2 || r.launchers != 1 {
+		t.Errorf("扫到 %d 个、主进程 %d 个，要 2/1", r.scanned, r.launchers)
+	}
+	if r.signalFailed != 1 {
+		t.Errorf("信号失败 %d，要 1", r.signalFailed)
+	}
+	if r.launchFailed != 1 {
+		t.Errorf("拉起失败 %d，要 1", r.launchFailed)
+	}
+	if r.restarted != 0 {
+		t.Errorf("这种情况下没重启成任何一家，实际 %d", r.restarted)
+	}
+}
+
+// 一台没扫到（或没重启成）不再白占 30 秒窗口：归还后下一轮能立刻占上。
+func TestBrowserRestartSlotReleasedOnNoRestart(t *testing.T) {
+	s := &Service{}
+	stamp, ok := s.claimBrowserRestartSlot()
+	if !ok {
+		t.Fatal("第一次应该能占上窗口")
+	}
+	if _, ok2 := s.claimBrowserRestartSlot(); ok2 {
+		t.Fatal("窗口占住期间不该让第二轮进来")
+	}
+	s.releaseBrowserRestartSlot(stamp)
+	if _, ok3 := s.claimBrowserRestartSlot(); !ok3 {
+		t.Fatal("没重启成一家后窗口必须归还，否则用户 30 秒内重试全是「点了没反应」")
 	}
 }

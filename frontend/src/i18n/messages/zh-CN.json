@@ -512,6 +512,8 @@
   "ui.toast.kind.warning": "警告",
   "ui.toast.kind.info": "提醒",
   "ui.toast.kind.success": "成功",
+  "hosts.apply.done": "已写入 Hosts 成功：{total} 项",
+  "hosts.apply.done.partial": "写入 Hosts 完成：成功 {done} 项，{failed} 项没写成（见队列明细）",
   "hosts.apply.doneHint": "已写进系统 Hosts。浏览器里已经打开的标签页可能还连着旧地址，重开标签页才会走新地址。",
   "hosts.task.failed": "写 Hosts 的任务失败：{reason}",
   "hosts.task.rolledback": "写 Hosts 没成功，已退回改动前的状态：{reason}",
@@ -524,5 +526,13 @@
   "settings.browser.desc": "应用队列把 Hosts 写完后，自动温和退出正在运行的浏览器并按原命令行拉起：Chrome 系（Chrome／Chromium／Edge／Brave／Vivaldi／Opera）重启时自动补「恢复上次会话」，关闭前的窗口和标签页会还原；Firefox 需要在浏览器自己的设置里开启「恢复先前会话」才还原。没在跑的浏览器不会拉起，退不干净的不会强杀。只认进程名不认安装方式，deb、snap、flatpak 装的都能认。",
   "settings.browser.toggle": "应用完成后自动重启正在运行的浏览器",
   "browser.restart.done": "已重启 {names}，关闭前的窗口会自动还原",
-  "browser.restart.none": "没发现正在运行的浏览器，跳过重启"
+  "browser.restart.none": "没发现正在运行的浏览器，跳过重启",
+  "browser.restart.partial": "已重启 {names}，另有几家没退干净或没拉起，详见日志",
+  "browser.restart.notGone": "发现浏览器，但它没在 8 秒内温和退出：为避免丢窗口不强杀，本次没重启",
+  "browser.restart.launchFailed": "浏览器已退出，但按原命令行没能重新拉起，详见日志",
+  "browser.restart.signalFailed": "发现浏览器，但退出信号发不出去，本次没重启",
+  "browser.restart.roundNotSettled": "这一轮应用还没全部落定，暂不重启浏览器",
+  "browser.restart.noWritten": "这一轮没有真正写入 Hosts，跳过浏览器重启",
+  "browser.restart.debounced": "30 秒内刚重启过浏览器，本次跳过",
+  "browser.restart.skipped": "本次跳过浏览器重启，详见日志"
 }

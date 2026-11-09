@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +21,10 @@ import (
 // apt/deb、snap 包装脚本、flatpak 各装各的，路径五花八门，但进程名就是这几个词。
 // ChromeLike 的家族重启时补 --restore-last-session，让它自己恢复关闭前的窗口；
 // Firefox 系靠它自己的「恢复上次会话」设置，程序不代设（设置里已写明这一条）。
+//
+// 同一个浏览器在不同发行方式下进程名不一样，别只登记包装脚本名：
+// Microsoft Edge 的 deb 包装叫 microsoft-edge，但真正在跑的进程叫 msedge（Linux 实测），
+// 漏了后者就是「开关开着、Hosts 写成功了、浏览器却一台都没重启」。
 type browserFamily struct {
 	prefix     string
 	label      string
@@ -38,6 +43,7 @@ var browserFamilies = []browserFamily{
 	{"brave", "Brave", true},
 	{"vivaldi", "Vivaldi", true},
 	{"microsoft-edge", "Edge", true},
+	{"msedge", "Edge", true},
 	{"opera", "Opera", true},
 }
 
@@ -45,6 +51,14 @@ var browserFamilies = []browserFamily{
 var browserFlatpakIDs = []string{
 	"org.mozilla.firefox", "org.chromium.chromium", "com.google.chrome",
 	"com.brave.browser", "com.vivaldi.vivaldi", "com.microsoft.edge", "com.opera.opera",
+}
+
+// 名字里带这些词的一定不是浏览器主进程。前半是浏览器自带的辅助进程（崩溃收集、
+// 沙箱占位、渲染子进程），后半是名字恰好撞上浏览器前缀的独立工具——
+// 比如 chrome-devtools-mcp 以 chrome 开头，不挡住会对它发 SIGTERM 再按原命令行拉起。
+var browserHelperRejects = []string{
+	"crashpad", "sandbox", "helper", "renderer", "chromedriver", "chrome-headless",
+	"devtools", "mcp", "remote-desktop",
 }
 
 // 浏览器进程扫出来的一行：Exe/Args 原样取自 /proc/<pid>/cmdline（NUL 分隔），
@@ -70,10 +84,6 @@ var (
 
 // browserWaitTimeout 是一次「温和退出」的总等待。真在跑的浏览器 8 秒足够落盘退干净。
 const browserWaitTimeout = 8 * time.Second
-
-// 浏览器自带的辅助进程（崩溃收集、沙箱占位）会撞上家族前缀，明确排除——
-// 它们的父进程正常时是浏览器主进程，但主进程先死时会变孤儿被误判成启动器。
-var browserHelperRejects = []string{"crashpad", "sandbox", "helper", "renderer", "chromedriver", "chrome-headless"}
 
 // familyOf 按可执行名前缀认家族；认不出再看 flatpak 的应用 ID。认不出返回空串。
 func familyOf(exeBase string, args []string) (string, bool) {
@@ -177,16 +187,49 @@ func procPpid(pid int) (int, error) {
 	return 0, fmt.Errorf("/proc/%d/status 里没有 PPid", pid)
 }
 
-// RestartBrowsers 温和退出所有正在运行的浏览器并按原样拉起，返回重启了几家、各叫什么。
-// 没在跑的浏览器绝不拉起；某家等不到退场就跳过这一家，绝不强杀。
-func RestartBrowsers() (int, []string) {
-	return restartBrowsers(browserList())
+// browserRestartReport 是「这一轮到底做了什么」的如实记录。以前只回一个 restarted 数，
+// 0 家、信号发不出去、浏览器没退干净、拉起失败全都被压成 0，界面一律说「没发现浏览器」——
+// 用户看到的就是「功能没效果」却查不出断在哪。每一步都记下来，回执才可能说实话。
+type browserRestartReport struct {
+	scanned      int // /proc 里认出的浏览器进程数
+	launchers    int // 判成主进程的个数（要等退场、要拉起的那几个）
+	signalFailed int // SIGTERM 发不出去的进程数
+	notGone      int // 等不到温和退场的主进程数
+	launchFailed int // 退干净了但按原命令行拉起失败的主进程数
+	restarted    int
+	families     []string
 }
 
-// restartBrowsers 是核心：同家族全体 SIGTERM → 逐个主进程等退场 → 按原命令行各拉一份。
+// 回执原因码：前端按它选文案，别再用一句「没发现正在运行的浏览器」盖住所有早退。
+const (
+	restartReasonOK              = "ok"
+	restartReasonPartial         = "partial"
+	restartReasonRoundNotSettled = "roundNotSettled"
+	restartReasonNoWritten       = "noWritten"
+	restartReasonDebounced       = "debounced"
+	restartReasonNoneFound       = "noneFound"
+	restartReasonNotGone         = "notGone"
+	restartReasonLaunchFailed    = "launchFailed"
+	restartReasonSignalFailed    = "signalFailed"
+)
+
+// RestartBrowsers 温和退出所有正在运行的浏览器并按原样拉起，返回这一轮的完整记录。
+// 没在跑的浏览器绝不拉起；某家等不到退场就跳过这一家，绝不强杀。
+func RestartBrowsers() browserRestartReport {
+	return restartBrowsersReport(browserList())
+}
+
+// restartBrowsers 是原有口径的薄封装：只回「重启了几家、各叫什么」，测试与旧调用方沿用。
+func restartBrowsers(procs []browserProc) (int, []string) {
+	r := restartBrowsersReport(procs)
+	return r.restarted, r.families
+}
+
+// restartBrowsersReport 是核心：同家族全体 SIGTERM → 逐个主进程等退场 → 按原命令行各拉一份。
 // 主进程判定：父进程不属于同家族。同家族可以有多个主进程（不同 profile 的多实例），
 // 每个实例各按各的命令行拉起；回执按家族去重，用户看到的还是「重启了哪几个浏览器」。
-func restartBrowsers(procs []browserProc) (int, []string) {
+func restartBrowsersReport(procs []browserProc) browserRestartReport {
+	r := browserRestartReport{scanned: len(procs)}
 	byFamily := map[string][]browserProc{}
 	for _, p := range procs {
 		byFamily[p.Family] = append(byFamily[p.Family], p)
@@ -207,20 +250,24 @@ func restartBrowsers(procs []browserProc) (int, []string) {
 	}
 	// 按 pid 排序：多实例时先拉早起的那个，顺序稳定可复现。
 	sort.Slice(launchers, func(i, j int) bool { return launchers[i].Pid < launchers[j].Pid })
+	r.launchers = len(launchers)
+	log.Printf("[browser-restart] 扫到 %d 个浏览器进程、%d 个主进程", r.scanned, r.launchers)
 
 	// 整家族一起收 SIGTERM：主进程们各自落盘退场，信号只发这一轮扫到的 pid。
-	for family, ps := range byFamily {
-		_ = family
+	for _, ps := range byFamily {
 		for _, p := range ps {
-			_ = browserSignal(p.Pid)
+			if err := browserSignal(p.Pid); err != nil {
+				r.signalFailed++
+				log.Printf("[browser-restart] 给 pid %d (%s) 发 SIGTERM 失败：%v", p.Pid, p.Family, err)
+			}
 		}
 	}
 
-	restarted := 0
 	familiesSeen := map[string]bool{}
-	var families []string
 	for _, l := range launchers {
 		if !browserWaitGone(l.Pid, browserWaitTimeout) {
+			r.notGone++
+			log.Printf("[browser-restart] %s 主进程 pid %d 在 %s 内没退干净，不强杀、不拉起", l.Family, l.Pid, browserWaitTimeout)
 			continue // 没退干净：不拉起、不强杀，用户自己关了再开
 		}
 		args := append([]string{}, l.Args[1:]...)
@@ -237,15 +284,19 @@ func restartBrowsers(procs []browserProc) (int, []string) {
 			}
 		}
 		if err := browserLaunch(l.Exe, args); err != nil {
+			r.launchFailed++
+			log.Printf("[browser-restart] %s 按 %s 拉起失败：%v", l.Family, l.Exe, err)
 			continue
 		}
-		restarted++
+		r.restarted++
 		if !familiesSeen[l.Family] {
 			familiesSeen[l.Family] = true
-			families = append(families, l.Family)
+			r.families = append(r.families, l.Family)
 		}
 	}
-	return restarted, families
+	log.Printf("[browser-restart] 结果：重启 %d 家 %v，信号失败 %d、没退干净 %d、拉起失败 %d",
+		r.restarted, r.families, r.signalFailed, r.notGone, r.launchFailed)
+	return r
 }
 
 // waitPidGone 轮询直到进程退场或超时。zombie（State: Z）不算活着——
@@ -305,17 +356,60 @@ func userHomeOrEmpty() string {
 // 并发两轮应用各自落定时，后到的看到刚重启过就不再动，免得把刚拉起的又杀一遍。
 const browserRestartAfterApplyDebounce = 30 * time.Second
 
+// claimBrowserRestartSlot 占住去抖窗口，返回本次时间戳；窗口已被占用返回 false。
+// 抽成方法是为了能单独钉死「一台没扫到也白占 30 秒」这个老问题。
+func (s *Service) claimBrowserRestartSlot() (time.Time, bool) {
+	s.browserMu.Lock()
+	defer s.browserMu.Unlock()
+	if time.Since(s.browserLastRestart) < browserRestartAfterApplyDebounce {
+		return time.Time{}, false
+	}
+	stamp := time.Now()
+	s.browserLastRestart = stamp
+	return stamp, true
+}
+
+// releaseBrowserRestartSlot 归还没真重启成的那次占位，只认自己那枚时间戳，
+// 别把并发轮次刚写进去的新时间戳一起清掉。
+func (s *Service) releaseBrowserRestartSlot(stamp time.Time) {
+	s.browserMu.Lock()
+	defer s.browserMu.Unlock()
+	if s.browserLastRestart.Equal(stamp) {
+		s.browserLastRestart = time.Time{}
+	}
+}
+
 // browserRestartEnabled 读开关：配置层没接上（目录加载失败）一律当作关闭——
 // 动用户正开着的浏览器必须拿到明确的授权，拿不到授权就不动。
 func (s *Service) browserRestartEnabled() bool {
 	if s.settings == nil {
+		log.Printf("[browser-restart] 配置层没接上，按「开关关闭」处理")
 		return false
 	}
 	cfg, err := s.settings.Snapshot()
 	if err != nil {
+		log.Printf("[browser-restart] 配置读不出来，按「开关关闭」处理：%v", err)
 		return false
 	}
 	return cfg.Browser.RestartAfterApply
+}
+
+// emitBrowserRestart 发回执。以前只有「真跑完 RestartBrowsers」才发，任何一处早退
+// 界面都毫无动静，用户只能得出「这功能没效果」。现在每一步都带原因码和计数。
+func (s *Service) emitBrowserRestart(reason string, r browserRestartReport) {
+	if s.emit == nil {
+		return
+	}
+	s.emit(event.BrowserRestartedName, map[string]any{
+		"restarted":    r.restarted,
+		"families":     r.families,
+		"reason":       reason,
+		"scanned":      r.scanned,
+		"launchers":    r.launchers,
+		"signalFailed": r.signalFailed,
+		"notGone":      r.notGone,
+		"launchFailed": r.launchFailed,
+	})
 }
 
 // restartBrowsersAfterApply 等这一轮应用落定：至少一条真写成功（StatusDone）才重启浏览器；
@@ -324,7 +418,9 @@ func (s *Service) restartBrowsersAfterApply(roundID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	if err := s.tasks.WaitRound(ctx, roundID); err != nil {
-		return // 队列停了或超时：这一轮没落定，什么都不动
+		log.Printf("[browser-restart] 轮次 %s 没落定，跳过重启：%v", roundID, err)
+		s.emitBrowserRestart(restartReasonRoundNotSettled, browserRestartReport{})
+		return
 	}
 	written := 0
 	for _, t := range s.tasks.Snapshot().Tasks {
@@ -333,20 +429,38 @@ func (s *Service) restartBrowsersAfterApply(roundID string) {
 		}
 	}
 	if written == 0 {
+		// 全跳过、全失败，或用户点了「清空已完成」把本轮终态记录删掉，都会走到这里。
+		// 明说出来，别让人对着「功能没效果」猜。
+		log.Printf("[browser-restart] 轮次 %s 快照里没有 StatusDone 的应用任务，跳过重启", roundID)
+		s.emitBrowserRestart(restartReasonNoWritten, browserRestartReport{})
 		return
 	}
-	// 去重去抖的临界区：另一轮 30 秒内刚重启过（或正重启）就让位，
-	// 不然第二轮会把第一轮刚拉起的浏览器再杀一遍再拉一遍。
-	s.browserMu.Lock()
-	if time.Since(s.browserLastRestart) < browserRestartAfterApplyDebounce {
-		s.browserMu.Unlock()
+	// 去重去抖：另一轮 30 秒内刚重启过就让位，免得把刚拉起的又杀一遍。
+	// 但只占「真重启成」的窗口——一台没扫到也白占 30 秒，用户重试全是「点了没反应」。
+	stamp, ok := s.claimBrowserRestartSlot()
+	if !ok {
+		log.Printf("[browser-restart] 30 秒内刚重启过，本轮跳过")
+		s.emitBrowserRestart(restartReasonDebounced, browserRestartReport{})
 		return
 	}
-	s.browserLastRestart = time.Now()
-	s.browserMu.Unlock()
 
-	restarted, families := RestartBrowsers()
-	if s.emit != nil {
-		s.emit(event.BrowserRestartedName, map[string]any{"restarted": restarted, "families": families})
+	r := RestartBrowsers()
+	if r.restarted == 0 {
+		s.releaseBrowserRestartSlot(stamp) // 没真重启成一家，窗口让出去，下一轮能立刻再试
 	}
+
+	reason := restartReasonOK
+	switch {
+	case r.restarted > 0 && (r.notGone > 0 || r.launchFailed > 0 || r.signalFailed > 0):
+		reason = restartReasonPartial
+	case r.scanned == 0 || r.launchers == 0:
+		reason = restartReasonNoneFound
+	case r.notGone > 0:
+		reason = restartReasonNotGone
+	case r.launchFailed > 0:
+		reason = restartReasonLaunchFailed
+	case r.signalFailed > 0:
+		reason = restartReasonSignalFailed
+	}
+	s.emitBrowserRestart(reason, r)
 }
