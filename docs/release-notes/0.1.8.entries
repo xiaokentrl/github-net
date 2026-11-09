@@ -1,0 +1,3 @@
+# 0.1.8 相对 0.1.7 的净变化；一条一行，格式「分类|语言|内容」
+fixed|zh|应用回执把「带原因跳过」的任务从「失败」里拆出来：勾 6 项、5 成功 1 跳过不再误报「部分失败」，跳过原因仍单独回执
+fixed|en|The apply receipt no longer counts reason-skipped items as failures: 5 written + 1 skipped no longer misreports as "partially failed", and skip reasons keep their own receipt
