@@ -115,12 +115,26 @@ jobs:
       - name: 打 deb 安装包
         run: |
           export PATH="$HOME/go/bin:$PATH"
+          # 包版本必须当场跟 appVersion 对齐，不能指望仓库里那份 nfpm.yaml 恰好同步过：
+          # v0.1.8 的标签打在「nfpm 同步」提交之前，结果文件名叫 0.1.8、包内却是 0.1.7-1。
+          # 这里跟本地 sync:nfpm-version 同一口径改写，标签打在哪笔提交都不影响产物版本。
+          ver="$(bash scripts/version.sh)"
+          sed -i "s/^version: \".*\"/version: \"${ver}\"/" build/linux/nfpm/nfpm.yaml
+          grep -q "^version: \"${ver}\"$" build/linux/nfpm/nfpm.yaml || {
+            echo "::error::包版本同步失败"; exit 1
+          }
           # 生成 deb 时沿用 nfpm 配置（内容含主程序、helper 和 systemd 单元）。
           GIT_COMMITTER_NAME="$(git log -1 --format=%cn)" \
           GIT_COMMITTER_EMAIL="$(git log -1 --format=%ce)" \
             wails3 tool package -name github-net -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
           test -f bin/github-net.deb || { echo "::error::deb 没打出来"; exit 1; }
-          dpkg-deb -I bin/github-net.deb | grep -E 'Package|Version' || true
+          # 产物级兜底：直接读打出来的 deb 的控制文件，不信配置、不信文件名。
+          actual="$(dpkg-deb -f bin/github-net.deb Version)"
+          echo "deb 包内版本：$actual，期望 ${ver}-1"
+          if [ "$actual" != "${ver}-1" ]; then
+            echo "::error::deb 包内版本 $actual 与 ${ver}-1 不符，拒绝发布"
+            exit 1
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: github-net-deb
