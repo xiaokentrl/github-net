@@ -95,6 +95,9 @@ func TestFetcherFailureNotCached(t *testing.T) {
 	srv := newSourceServer(t, http.StatusInternalServerError, "", &hits)
 	f := NewFetcher(srv.Client(), time.Hour)
 	src := Source{ID: "t", Name: "t", URL: srv.URL}
+	// 重试是这次新增的行为：一次拉取最多 3 次尝试（退避置 0 不拖慢用例）。
+	defer func(v time.Duration) { fetchBackoffBase = v }(fetchBackoffBase)
+	fetchBackoffBase = 0
 
 	if _, err := f.Hosts(context.Background(), src); err == nil {
 		t.Fatal("源返回 500 该报错")
@@ -102,8 +105,8 @@ func TestFetcherFailureNotCached(t *testing.T) {
 	if _, err := f.Hosts(context.Background(), src); err == nil {
 		t.Fatal("失败不缓存，第二次还是该报错")
 	}
-	if hits.Load() != 2 {
-		t.Fatalf("两次失败该是两次真实请求，实际 %d 次", hits.Load())
+	if hits.Load() != 6 {
+		t.Fatalf("两次失败各重试到上限该是 6 次请求，实际 %d 次", hits.Load())
 	}
 }
 

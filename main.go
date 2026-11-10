@@ -5,10 +5,16 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -59,6 +65,59 @@ func main() {
 	if os.Getenv("GDK_BACKEND") == "" {
 		_ = os.Setenv("GDK_BACKEND", "x11")
 	}
+
+	// 日志落盘与异常退出检测（日志与可诊断性方案，拍板 2026-11-10）：
+	//   桌面启动的应用 stdout 没人看得见——标准 log 与 wails 系统日志全部落到
+	//   配置目录旁的 app.log（1MB 轮转、保留一份旧文件）。
+	//   运行标记 running.flag 启动时创建、正常退出时删除；残留＝上次异常退出，记进日志。
+	logDir := ""
+	if cfgPath, err := config.Path(); err == nil {
+		logDir = filepath.Dir(cfgPath)
+		_ = os.MkdirAll(logDir, 0o700)
+	}
+	// 运行标记里写 PID：再次启动（单实例握手前的新进程）会先跑到这里——
+	// 标记在、且里面那个 PID 还活着＝上一个自己还在跑，不算异常退出，不写误报。
+	markerPath := ""
+	if logDir != "" {
+		markerPath = filepath.Join(logDir, "running.flag")
+		if data, err := os.ReadFile(markerPath); err == nil {
+			oldPid, _ := strconv.Atoi(strings.TrimSpace(string(data)))
+			stillAlive := oldPid > 0 && oldPid != os.Getpid() && (func() bool {
+				if p, err := os.FindProcess(oldPid); err == nil {
+					return p.Signal(syscall.Signal(0)) == nil
+				}
+				return false
+			})()
+			if !stillAlive {
+				markerLog, _ := os.OpenFile(filepath.Join(logDir, "app.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+				if markerLog != nil {
+					fmt.Fprintf(markerLog, "%s 检测到上次异常退出（pid %d 的运行标记残留）\n", time.Now().Format(time.RFC3339), oldPid)
+					markerLog.Close()
+				}
+			} else {
+				// 上一个实例还活着（二次启动，单实例握手会把本进程送走）：
+				// 不写误报，也不覆写它的标记——标记归属保持第一个实例。
+				markerPath = ""
+			}
+		}
+		if markerPath != "" {
+			if err := os.WriteFile(markerPath, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+				markerPath = "" // 标记写不了（目录不可写）就不再依赖它
+			}
+		}
+	}
+	var logWriter io.Writer = os.Stderr
+	if logDir != "" {
+		logWriter = newRotatingWriter(filepath.Join(logDir, "app.log"), 1<<20)
+		log.SetOutput(io.MultiWriter(os.Stderr, logWriter))
+	}
+	// 降级路径（配置目录不可写、没有文件日志）：直接用 stderr，别把 stderr 双写两遍。
+	var slogSink io.Writer = logWriter
+	if logWriter == io.Writer(os.Stderr) {
+		slogSink = os.Stderr
+	}
+	slogFile := slog.New(slog.NewTextHandler(slogSink, nil))
+
 	emitter := &event.StatusEmitter{}
 	ctx, cancel := context.WithCancel(context.Background())
 	windowFocusRequests := make(chan struct{}, 1)
@@ -94,9 +153,14 @@ func main() {
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
+		Logger: slogFile,
 		OnShutdown: func() {
 			if cleanup != nil {
 				cleanup()
+			}
+			// 清运行标记放在 cleanup 之后：cleanup 里再出的异常也算异常退出，不漏报。
+			if markerPath != "" {
+				_ = os.Remove(markerPath)
 			}
 		},
 	})
@@ -406,4 +470,31 @@ func startupFailureText(err error) string {
 		message += "（这个会话没有 DBus 会话总线，单实例锁拿不到它；从桌面环境里启动，或先在终端设好 DBUS_SESSION_BUS_ADDRESS）"
 	}
 	return message
+}
+
+// rotatingWriter 是带轮转的追加日志写入器：单文件超 max 就改名留旧份（保留一份），
+// 再开新文件继续追加。单进程单写者，互斥锁只护轮转与追加的并发。
+type rotatingWriter struct {
+	mu   sync.Mutex
+	path string
+	max  int64
+}
+
+func newRotatingWriter(path string, max int64) *rotatingWriter {
+	return &rotatingWriter{path: path, max: max}
+}
+
+func (w *rotatingWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if st, err := os.Stat(w.path); err == nil && st.Size()+int64(len(p)) > w.max {
+		_ = os.Remove(w.path + ".1")
+		_ = os.Rename(w.path, w.path+".1")
+	}
+	f, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	return f.Write(p)
 }

@@ -7,8 +7,10 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"strings"
@@ -67,6 +69,10 @@ type loadShare struct {
 }
 
 // Default 是线上共用的拉源器。测试可以整个换掉自己那份，用完换回来。
+//
+// 代理策略（网络与离线弹性方案纪律，显式声明）：遵循环境变量代理（HTTP_PROXY/
+// HTTPS_PROXY，Go 默认 ProxyFromEnvironment），不读桌面 GUI 代理设置；
+// 证书校验不降级。源拉取是幂等 GET：传输层错误与 5xx 带退避抖动自动重试。
 var Default = NewFetcher(&http.Client{Timeout: FetchTimeout}, CacheTTL)
 
 func NewFetcher(client *http.Client, ttl time.Duration) *Fetcher {
@@ -191,27 +197,73 @@ func (f *Fetcher) PruneCache() error {
 	return cache.PruneExpired()
 }
 
+// fetchAttempts 是一次源拉取的总尝试次数（原始 + 2 次重试）：源拉取是幂等 GET，
+// 传输层错误与 5xx 自动重试；4xx（源挪走/不存在）重试无意义，直接返回。
+// 退避 400ms→800ms 带抖动；每次尝试都在同一个 ctx 里，上层掐 deadline 时立即停。
+// fetchBackoffBase 是包级变量：测试置 0 让退避瞬时走完，不拖慢用例。
+const fetchAttempts = 3
+
+var fetchBackoffBase = 400 * time.Millisecond
+
+// retryableError 标记「值得重试」的失败（5xx）：重试分类用 errors.As 判定，
+// 不靠错误文案的字符串匹配——改一句文案就静默改变重试语义的坑就是这么来的。
+type retryableError struct{ err error }
+
+func (e retryableError) Error() string { return e.err.Error() }
+func (e retryableError) Unwrap() error { return e.err }
+
 func (f *Fetcher) download(ctx context.Context, url string) (map[string][]Entry, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("源地址不对: %w", err)
 	}
-	resp, err := f.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("拉取失败: %w", err)
+	var lastErr error
+	for attempt := 0; attempt < fetchAttempts; attempt++ {
+		if attempt > 0 {
+			// 退避翻倍（400ms→800ms）+ 抖动 ±90ms；ctx 取消立即停，不硬睡。
+			backoff := fetchBackoffBase << (attempt - 1)
+			// 抖动 ±90ms（毫秒级；time.Duration 整数是纳秒，之前单位错成了纳秒）
+			jitter := time.Duration(rand.Intn(181)-90) * time.Millisecond
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff + jitter):
+			}
+		}
+		resp, err := f.client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("拉取失败: %w", err)
+			continue // 传输层错误：退避后重试
+		}
+		body, readErr := func() (map[string][]Entry, error) {
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				if resp.StatusCode >= 500 {
+					// 5xx：服务端抖动，值得重试——包上哨兵错误供外层 errors.As 识别
+					return nil, retryableError{fmt.Errorf("源返回了 %s", resp.Status)}
+				}
+				return nil, fmt.Errorf("源返回了 %s", resp.Status) // 4xx：重试无意义
+			}
+			body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes+1))
+			if err != nil {
+				return nil, fmt.Errorf("源内容读不完: %w", err)
+			}
+			if len(body) > MaxBodyBytes {
+				return nil, fmt.Errorf("源文件超过 %d MiB 上限", MaxBodyBytes>>20)
+			}
+			return Parse(string(body)), nil
+		}()
+		if readErr == nil {
+			return body, nil
+		}
+		// 非 5xx（4xx、内容读不完）重试无意义：内容问题重试也是一样的结果
+		var re retryableError
+		if !errors.As(readErr, &re) {
+			return nil, readErr
+		}
+		lastErr = readErr
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("源返回了 %s", resp.Status)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("源内容读不完: %w", err)
-	}
-	if len(body) > MaxBodyBytes {
-		return nil, fmt.Errorf("源文件超过 %d MiB 上限", MaxBodyBytes>>20)
-	}
-	return Parse(string(body)), nil
+	return nil, lastErr
 }
 
 // Parse 把一份源文本拆成「主机名 → 候选地址」。只认标准 hosts 行：

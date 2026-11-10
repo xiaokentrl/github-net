@@ -157,10 +157,45 @@ export function applyDetectEvent(p: DetectProgressPayload) {
 }
 
 // refreshResult 从后端拉一个项目的权威结果放进 store；任务终态后调用。
-export async function refreshResult(itemId: string): Promise<DetectResultView> {
-  const view = await getDetectResult(itemId)
-  publish({ results: { ...state.results, [itemId]: view } })
-  return view
+// 单飞（UI数据一致性方案）：同 itemId 的并发刷新合并成一次权威请求，大家拿同一份 Promise。
+// 水位乱序拒绝（同方案）：每次刷新递增序号，慢到的旧响应（序号不匹配）丢弃，不覆盖新数据。
+// 合并期间又有新失效（紧接的下一轮落定）：旧请求 resolve 后按新序号补一轮，收敛到最新。
+const inFlightResults = new Map<string, Promise<DetectResultView>>()
+const resultVersions = new Map<string, number>()
+const pendingRefetch = new Set<string>()
+
+export function refreshResult(itemId: string): Promise<DetectResultView> {
+  const inflight = inFlightResults.get(itemId)
+  if (inflight) {
+    pendingRefetch.add(itemId)
+    return inflight
+  }
+  const seq = (resultVersions.get(itemId) ?? 0) + 1
+  resultVersions.set(itemId, seq)
+  const p = getDetectResult(itemId)
+    .then((view) => {
+      inFlightResults.delete(itemId)
+      if (resultVersions.get(itemId) === seq) {
+        publish({ results: { ...state.results, [itemId]: view } })
+      }
+      if (pendingRefetch.delete(itemId) && state.results[itemId]) {
+        // 在途期间又有新失效：立即补一轮（新序号），拿到落定后的权威值。
+        // 项目已被 clearResults 清掉的不回灌——清理后的空态是权威状态。
+        void refreshResult(itemId)
+      }
+      return view
+    })
+    .catch((err: unknown) => {
+      inFlightResults.delete(itemId)
+      const hadPending = pendingRefetch.delete(itemId)
+      if (hadPending) {
+        // 合并进来的那次新失效不能因为一次失败就丢：后台补一轮（不往上抛第二次）
+        void refreshResult(itemId).catch(() => undefined)
+      }
+      throw err
+    })
+  inFlightResults.set(itemId, p)
+  return p
 }
 
 function emptyResult(itemId: string): DetectResultView {
@@ -177,6 +212,8 @@ export async function refreshAllResults(): Promise<void> {
 // 「清理全部 IP 缓存」用：后端底账和内存结论都清了，前端不丢就会继续摆着旧候选，
 // 用户看到的列表像没跟着变。
 export function clearResults(): void {
+  // 水位表一并清掉：清理瞬间还在途的刷新 resolve 后序号不匹配，不会再把已清的项目塞回来。
+  resultVersions.clear()
   publish({ results: {}, live: {} })
 }
 
@@ -189,9 +226,14 @@ export function ensureLastResults(itemIds: string[]): void {
   for (const itemId of itemIds) {
     if (!itemId || itemId in state.results || lastResultPending.has(itemId)) continue
     lastResultPending.add(itemId)
+    // 补读也带水位：慢到的旧补读不得覆盖 refreshResult 已放进去的新权威结果。
+    const seq = (resultVersions.get(itemId) ?? 0) + 1
+    resultVersions.set(itemId, seq)
     getDetectResult(itemId)
       .then((view) => {
-        if (view?.hosts && view.hosts.length > 0) publish({ results: { ...state.results, [itemId]: view } })
+        if (view?.hosts && view.hosts.length > 0 && resultVersions.get(itemId) === seq) {
+          publish({ results: { ...state.results, [itemId]: view } })
+        }
       })
       .catch(() => {
         // 读不到不叠错误条：这三格显示「—」本来就是「还没有结论」的口径，不额外吓人。

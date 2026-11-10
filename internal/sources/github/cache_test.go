@@ -158,6 +158,9 @@ func TestDownloadFailureLeavesNoCacheFile(t *testing.T) {
 	src := testSource(srv.URL)
 	dir := t.TempDir()
 	cache := NewFileCache(dir)
+	// 重试后一次拉取 = 3 次尝试；退避置 0 不拖慢用例。
+	defer func(v time.Duration) { fetchBackoffBase = v }(fetchBackoffBase)
+	fetchBackoffBase = 0
 
 	ctx := context.Background()
 	if _, err := fetcherOn(srv.Client(), cache).Hosts(ctx, src); err == nil {
@@ -168,11 +171,12 @@ func TestDownloadFailureLeavesNoCacheFile(t *testing.T) {
 	}
 
 	// 下一轮还要能再试：失败没有被当成「今天已经拉过了」。
+	// 重试是新增行为：两次拉取 × 每次 3 次尝试 = 6 次（退避已置 0）。
 	if _, err := fetcherOn(srv.Client(), cache).Hosts(ctx, src); err == nil {
 		t.Fatal("第二次仍然应当报错")
 	}
-	if got := hits.Load(); got != 2 {
-		t.Errorf("拉失败不该占掉当天这一次，应当各试一遍（累计 2 次），实际 %d 次", got)
+	if got := hits.Load(); got != 6 {
+		t.Errorf("两次失败各重试到上限该是 6 次请求，实际 %d 次", got)
 	}
 }
 
