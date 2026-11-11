@@ -14,24 +14,26 @@ import (
 // 每码一条「码 | 含义 | 引入版本」。码发布即冻结——改义走新码，永不复用；
 // 文案目前随调用点带细节（同一码多种细节），接 {code,params} 协议时再语言包化。
 // 登记清单（17 码）：
-//   empty_token            | 令牌为空 | 0.1.0
-//   catalog_invalid        | 内嵌目录数据不合法 | 0.1.0
-//   internal_error         | 未知内部错误的兜底码 | 0.1.0
-//   invalid_settings       | 设置保存请求不合法 | 0.1.0
-//   revision_conflict      | 设置乐观锁冲突 | 0.1.0
-//   settings_save_failed   | 设置写盘失败 | 0.1.0
-//   config_schema_newer    | 配置 schema 比当前程序新 | 0.1.0
-//   unknown_scope          | 加速范围不认识 | 0.1.0
-//   strategy_unavailable   | 加速方法不可用/不适用 | 0.1.0
-//   invalid_task_id        | 任务请求缺必要信息 | 0.1.0
-//   queue_running          | 应用退出中不接受新任务 | 0.1.0
-//   invalid_item_id        | 项目 ID 不合法/不在目录 | 0.1.0
-//   no_strategy_selected   | 未选择加速方法 | 0.1.0
-//   no_detect_result       | 没有检测结果 | 0.1.0
-//   helper_unavailable     | 特权辅助服务不可用 | 0.1.0
-//   hosts_failed           | 操作系统 Hosts 失败 | 0.1.0
-//   autostart_failed       | 开机自启动设置失败 | 0.1.0
-//   platform_unsupported   | 平台不支持该功能 | 0.1.0
+//
+//	empty_token            | 令牌为空 | 0.1.0
+//	catalog_invalid        | 内嵌目录数据不合法 | 0.1.0
+//	internal_error         | 未知内部错误的兜底码 | 0.1.0
+//	invalid_settings       | 设置保存请求不合法 | 0.1.0
+//	revision_conflict      | 设置乐观锁冲突 | 0.1.0
+//	settings_save_failed   | 设置写盘失败 | 0.1.0
+//	config_schema_newer    | 配置 schema 比当前程序新 | 0.1.0
+//	unknown_scope          | 加速范围不认识 | 0.1.0
+//	strategy_unavailable   | 加速方法不可用/不适用 | 0.1.0
+//	invalid_task_id        | 任务请求缺必要信息 | 0.1.0
+//	queue_running          | 应用退出中不接受新任务 | 0.1.0
+//	invalid_item_id        | 项目 ID 不合法/不在目录 | 0.1.0
+//	no_strategy_selected   | 未选择加速方法 | 0.1.0
+//	no_detect_result       | 没有检测结果 | 0.1.0
+//	helper_unavailable     | 特权辅助服务不可用 | 0.1.0
+//	hosts_failed           | 操作系统 Hosts 失败 | 0.1.0
+//	autostart_failed       | 开机自启动设置失败 | 0.1.0
+//	platform_unsupported   | 平台不支持该功能 | 0.1.0
+//
 // （update.go 另有 update_* 六码，同登记于该文件头部）
 const (
 	CodeEmptyToken         = "empty_token"
