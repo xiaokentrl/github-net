@@ -23,8 +23,30 @@ type roundBudgets struct {
 	profileByID map[string]string
 }
 
+// roundBudgetsMax 是轮账本的保留上限：长会话高频批量检测下，轮记录只增会无界增长。
+// 每轮百字节级、速率低，但仍按基线纪律给上限——超限剪掉最老的轮（预算未用完的被剪
+// 只是这轮不再受预算约束，等价于「早起的轮次早退役」，无正确性影响）。
+const roundBudgetsMax = 500
+
 func newRoundBudgets() *roundBudgets {
 	return &roundBudgets{byID: make(map[string]*int64), profileByID: make(map[string]string)}
+}
+
+// pruneOldestLocked 剪掉多余的轮记录到上限内；skip 是本轮正在登记的 ID，不许剪。
+// 调用方持有 r.mu。候选探测按预算走，被剪的轮等效「退役」，不再受预算约束。
+func (r *roundBudgets) pruneOldestLocked(skip string) {
+	excess := len(r.byID) - roundBudgetsMax
+	if excess <= 0 {
+		return
+	}
+	for roundID := range r.byID {
+		if excess <= 0 || roundID == skip {
+			continue
+		}
+		delete(r.byID, roundID)
+		delete(r.profileByID, roundID)
+		excess--
+	}
 }
 
 // setProfile 给这一轮记下本次检测用的档位；空串表示按设置里的档位走。
@@ -45,6 +67,7 @@ func (r *roundBudgets) profileOf(roundID string) string {
 func (r *roundBudgets) put(roundID string, budget int) string {
 	b := int64(budget)
 	r.mu.Lock()
+	r.pruneOldestLocked(roundID) // 先剪后加：本轮刚登记的档位与预算不会被自己剪掉
 	r.byID[roundID] = &b
 	r.mu.Unlock()
 	return roundID

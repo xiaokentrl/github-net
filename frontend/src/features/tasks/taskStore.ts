@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import type { Round, Snapshot, Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { getDetectResult, getTasks } from '../../api/client'
+import { Status } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { DetectProgressPayload, TaskProgressPayload } from '../../api/events'
 
 // 队列与检测结果是跨页面共享的状态：详情页和队列面板读同一份，这里就是那唯一一份。
@@ -114,6 +115,9 @@ export function applyTaskEvent(payload: TaskProgressPayload) {
     const live = { ...state.live }
     delete results[payload.task.itemId]
     delete live[payload.task.itemId]
+    // 水位同步失效：上一轮终态触发的在途 refreshResult 回来时序号不匹配，
+    // 不会把上一轮的旧结果 publish 回刚清空的新一轮。
+    resultVersions.set(payload.task.itemId, (resultVersions.get(payload.task.itemId) ?? 0) + 1)
     next.results = results
     next.live = live
   }
@@ -181,7 +185,7 @@ export function refreshResult(itemId: string): Promise<DetectResultView> {
       if (pendingRefetch.delete(itemId) && state.results[itemId]) {
         // 在途期间又有新失效：立即补一轮（新序号），拿到落定后的权威值。
         // 项目已被 clearResults 清掉的不回灌——清理后的空态是权威状态。
-        void refreshResult(itemId)
+        void refreshResult(itemId).catch(() => undefined)
       }
       return view
     })
@@ -212,8 +216,10 @@ export async function refreshAllResults(): Promise<void> {
 // 「清理全部 IP 缓存」用：后端底账和内存结论都清了，前端不丢就会继续摆着旧候选，
 // 用户看到的列表像没跟着变。
 export function clearResults(): void {
-  // 水位表一并清掉：清理瞬间还在途的刷新 resolve 后序号不匹配，不会再把已清的项目塞回来。
+  // 水位表与在途表一并清掉：清理瞬间还在途的刷新不再回灌已清空的 store，
+  // 新的 refreshResult 也不会合并进清理前遗留的旧请求。
   resultVersions.clear()
+  inFlightResults.clear()
   publish({ results: {}, live: {} })
 }
 
@@ -246,8 +252,17 @@ export function ensureLastResults(itemIds: string[]): void {
 
 // isTerminalTask 判断任务是否已到终态；taskEvents 用它触发「任务落定」回调。
 export function isTerminalTask(status: Task['status']): boolean {
-  return status === 'done' || status === 'failed' || status === 'skipped' || status === 'rolledback' || status === 'restored'
+  const known = TERMINAL_STATUSES.includes(status)
+  if (!known && !ACTIVE_STATUSES.includes(status)) {
+    // 未知状态（旧前端遇新后端的扩展值）：按已落定兜底——按钮锁死比误报更糟。
+    console.warn(`[taskStore] 未知任务状态 ${String(status)}，按已落定处理`)
+    return true
+  }
+  return TERMINAL_STATUSES.includes(status)
 }
+
+const TERMINAL_STATUSES: Task['status'][] = [Status.StatusDone, Status.StatusFailed, Status.StatusSkipped, Status.StatusRolledback, Status.StatusRestored]
+const ACTIVE_STATUSES: Task['status'][] = [Status.StatusWaiting, Status.StatusRunning, Status.StatusRestoring]
 
 function isFinalStatus(status: string): boolean {
   return status === 'available' || status === 'unavailable' || status === 'timeout' || status === 'cancelled' || status === 'notStarted' || status === 'untested'

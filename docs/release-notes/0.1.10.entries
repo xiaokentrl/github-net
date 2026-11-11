@@ -1,0 +1,13 @@
+# 0.1.10 相对 0.1.9 的净变化；一条一行，格式「分类|语言|内容」
+fixed|zh|CI 发布的安装包此前未带 production 构建标签、携带了调试器：出包命令补标签并新增「生产构建标签」门禁步骤，0.1.10 起发布的包不再携带调试器
+fixed|en|The CI-published installer was built without the production build tag and shipped a debugger: the build command now carries the tag and a "production build tag" gate step was added — packages published from 0.1.10 on no longer include it
+fixed|zh|新增内容安全策略（CSP）：页面不得加载任意外部脚本，全部资源收紧到 self
+fixed|en|Add a Content-Security-Policy: the page can no longer load external scripts; all sources are restricted to self
+fixed|zh|单条 IP 重新检测补域名目录归属校验，防止对目录外的任意域名发起探测
+fixed|en|Per-IP re-probe now validates hostname ownership against the catalog, preventing probes against arbitrary domains
+fixed|zh|结果刷新补齐单飞合并、水位乱序拒绝与清空防回灌；轮预算账本与队列终态记录各设上限，挂机数天不再无界增长
+fixed|en|Result refresh gains single-flight merging, watermark-based out-of-order rejection and clear-safe refetching; the round-budget ledger and finished task records get size caps, so multi-day sessions no longer grow without bounds
+added|zh|新增性能与资源基线表（docs/NFR.md）与操作-反馈矩阵（docs/操作反馈矩阵.md）
+added|en|Add a performance/resource baseline table (docs/NFR.md) and an operation-feedback matrix (docs/操作反馈矩阵.md)
+updated|zh|日志不再记录含用户名的完整路径；updater 与源拉取的代理策略显式声明；错误码补登记表
+updated|en|Logs no longer record full user paths; proxy policies for the updater and source fetcher are declared explicitly; the error-code registry is documented

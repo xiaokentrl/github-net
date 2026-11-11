@@ -71,7 +71,9 @@ type Client struct {
 
 func NewClient() *Client {
 	return &Client{
-		baseURL:  ReleasesAPI,
+		baseURL: ReleasesAPI,
+		// 代理策略（网络与离线弹性方案纪律）：遵循环境变量代理（Go 默认
+		// ProxyFromEnvironment），不读桌面 GUI 代理设置；证书校验不降级。
 		http:     &http.Client{Timeout: checkTimeout},
 		download: &http.Client{Timeout: downloadTimeout},
 		now:      time.Now,

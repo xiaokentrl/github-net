@@ -27,6 +27,30 @@ func (s *Service) ReprobeIP(hostname, ip string) (PoolEntryView, error) {
 	if _, err := netip.ParseAddr(addr); err != nil {
 		return PoolEntryView{}, NewError(CodeInvalidItemID, fmt.Sprintf("地址 %q 不是合法 IP，没法重新检测", addr), nil)
 	}
+	// 域名归属校验（安全边界方案：外部输入不可信）：只允许对目录里的域名发起探测，
+	// 防止前端对任意域名发 HTTPS 请求。helper 的写路径本来就有目录归属门，这里补齐读路径。
+	if s.productCatalog != nil {
+		known := false
+		for _, cat := range s.productCatalog.Categories {
+			for _, it := range cat.Items {
+				for _, hn := range it.Hostnames {
+					if hosts.NormalizeHostname(hn) == host {
+						known = true
+						break
+					}
+				}
+				if known {
+					break
+				}
+			}
+			if known {
+				break
+			}
+		}
+		if !known {
+			return PoolEntryView{}, NewError(CodeInvalidItemID, "这个域名不在目录里，不能检测", nil)
+		}
+	}
 	if s.candidateStore == nil {
 		return PoolEntryView{}, NewError(CodeInternal, "候选底账没接上，没法重新检测", nil)
 	}

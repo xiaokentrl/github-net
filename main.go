@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"log"
 	"log/slog"
 	"os"
@@ -34,7 +35,7 @@ var trayIcon []byte
 
 const (
 	appName    = "GitHub Net"
-	appVersion = "0.1.9"
+	appVersion = "0.1.10"
 	statusTick = 2 * time.Second
 	appID      = "io.github.xiaokentrl.githubnet"
 )
@@ -152,6 +153,17 @@ func main() {
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
+			// CSP（安全边界方案，拍板 2026-11-10）：前端资源是边界外输入，页面不得
+			// 加载任意外部脚本。产物全部走外部样式表（无行内 style、无 data: 图标），
+			// 全部收紧到 self；前端构建若引入行内样式或 data: 资源，这里会拦下并暴露。
+			Middleware: func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Security-Policy",
+						"default-src 'none'; script-src 'self'; style-src 'self'; "+
+							"img-src 'self'; connect-src 'self'; font-src 'self'")
+					next.ServeHTTP(w, r)
+				})
+			},
 		},
 		Logger: slogFile,
 		OnShutdown: func() {

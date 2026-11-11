@@ -510,6 +510,9 @@ func (q *Queue) settle(id string, out Outcome) bool {
 		e.finish(q.now())
 		q.publishLocked(e)
 	}
+	// 终态任务自动上限（性能与资源基线纪律）：挂机数天的会话里终态记录只增不降，
+	// 快照与事件全量拷贝会越滚越大。超限剪最老的终态（活任务不动），轮次随剪。
+	q.pruneExcessTerminalLocked(terminalTasksMax)
 	// 车道空出来了：把驱动重新拉起来领下一条（驱动可能早就因为「没得领」退出了）。
 	q.pumpLocked()
 	if q.stopped {
@@ -517,6 +520,37 @@ func (q *Queue) settle(id string, out Outcome) bool {
 		return false
 	}
 	return true
+}
+
+// terminalTasksMax 是终态任务的保留上限：前端轮询落定以「快照里还有这批任务」为据，
+// 上限剪除后未观察到的轮会走轮询超时兜底重读目录，行为不破。200 条足够回看历史。
+const terminalTasksMax = 200
+
+// pruneExcessTerminalLocked 剪掉最老的终态任务到上限内；等待中与执行中的不动。
+// 调用方持有 q.mu。轮里最后一条任务被剪掉时，轮次也随之清理。
+func (q *Queue) pruneExcessTerminalLocked(max int) int {
+	var terminalIDs []string
+	for _, id := range q.order {
+		if e, ok := q.entries[id]; ok && IsTerminal(e.task.Status) {
+			terminalIDs = append(terminalIDs, id)
+		}
+	}
+	excess := len(terminalIDs) - max
+	if excess <= 0 {
+		return 0
+	}
+	for _, id := range terminalIDs[:excess] {
+		delete(q.entries, id)
+	}
+	kept := make([]string, 0, len(q.order))
+	for _, id := range q.order {
+		if _, ok := q.entries[id]; ok {
+			kept = append(kept, id)
+		}
+	}
+	q.order = kept
+	q.pruneRoundsWithoutTasksLocked()
+	return excess
 }
 
 // publishLocked 假定调用方已持锁：占用下一个序号并投递一条进度事件。

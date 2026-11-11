@@ -50,6 +50,12 @@ jobs:
     steps:
       - name: 装构建依赖
         run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git xz-utils gcc pkg-config binutils libgtk-4-dev libwebkitgtk-6.0-dev
+      # 发版门禁（安全边界方案）：生产出包必须带 production 且不带 devtools——
+      # 调试器编译成空函数靠这个标签链，标签被改走的话这里直接红。
+      - name: 校验生产构建标签
+        run: |
+          grep -q -- '-tags production' build/linux/Taskfile.yml || { echo '生产构建缺 production 标签'; exit 1; }
+          if grep -q -- '-tags production,devtools' build/linux/Taskfile.yml; then echo '发版不允许携带 devtools'; exit 1; fi
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
@@ -73,6 +79,12 @@ jobs:
     steps:
       - name: 装构建依赖
         run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git xz-utils gcc pkg-config binutils libgtk-4-dev libwebkitgtk-6.0-dev
+      # 发版门禁（安全边界方案）：生产出包必须带 production 且不带 devtools——
+      # 调试器编译成空函数靠这个标签链，标签被改走的话这里直接红。
+      - name: 校验生产构建标签
+        run: |
+          grep -q -- '-tags production' build/linux/Taskfile.yml || { echo '生产构建缺 production 标签'; exit 1; }
+          if grep -q -- '-tags production,devtools' build/linux/Taskfile.yml; then echo '发版不允许携带 devtools'; exit 1; fi
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
@@ -107,7 +119,7 @@ jobs:
             df -h "$GITHUB_WORKSPACE" | tail -1
           } > "$RUNNER_TEMP/build.env" 2>&1
           cat "$RUNNER_TEMP/build.env"
-          if ! CGO_ENABLED=1 go build -trimpath -o bin/github-net . > "$RUNNER_TEMP/build.log" 2>&1; then
+          if ! CGO_ENABLED=1 go build -tags production -trimpath -o bin/github-net . > "$RUNNER_TEMP/build.log" 2>&1; then
             msg=$(sed 's/%/%25/g' "$RUNNER_TEMP/build.log" | tr '\n\r' '  ' | cut -c1-1000)
             echo "::error::构建产物失败：$msg"
             cat "$RUNNER_TEMP/build.log"

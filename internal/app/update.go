@@ -106,7 +106,7 @@ func (s *Service) DownloadUpdate(info updater.Info) (UpdateDownloadResult, error
 		// 下载和校验都成功了，包是好的；只是这一步环境里没有桌面安装流程可交接。
 		// 把路径亮出来，用户可以手动安装——如实说两件事，不把整笔下载说成失败。
 		return UpdateDownloadResult{}, NewError(CodeUpdateHandoffFailed,
-			"安装包已下载并通过校验（"+installerPath+"），但没能交给系统安装流程："+err.Error(), err)
+			"安装包已下载并通过校验（"+filepath.Base(installerPath)+"，完整位置见日志），但没能交给系统安装流程："+err.Error(), err)
 	}
 	return UpdateDownloadResult{Path: installerPath, Size: installer.Size}, nil
 }

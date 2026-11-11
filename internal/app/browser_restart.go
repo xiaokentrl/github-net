@@ -285,7 +285,8 @@ func restartBrowsersReport(procs []browserProc) browserRestartReport {
 		}
 		if err := browserLaunch(l.Exe, args); err != nil {
 			r.launchFailed++
-			log.Printf("[browser-restart] %s 按 %s 拉起失败：%v", l.Family, l.Exe, err)
+			// 只记家族与可执行文件名，不记完整路径（含用户名的路径属于敏感清单）
+			log.Printf("[browser-restart] %s 按 %s 拉起失败：%v", l.Family, filepath.Base(l.Exe), err)
 			continue
 		}
 		r.restarted++
