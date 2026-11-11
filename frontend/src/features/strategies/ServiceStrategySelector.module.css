@@ -9,6 +9,31 @@
   min-width: 0;
 }
 
+/* 下拉左边的用途标签：一眼看出这颗下拉在选什么 */
+.pickerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.pickerTag {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* 横排紧凑模式（弹框里用）：下拉占满剩余宽度，按钮固定在右侧同一行 */
+.stackRow {
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+}
+
+.stackRow > :first-child {
+  flex: 1;
+}
+
 .panel {
   display: flex;
   align-items: center;

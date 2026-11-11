@@ -83,6 +83,61 @@
 .cAfter { width: 22%; }
 .cNet { width: 15%; }
 .cAction { width: 22%; }
+
+/* 一站式检测台：方法下拉与档位三选一，两行紧凑排在卡片头与表格之间 */
+.runSetup {
+  padding: 8px 11px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--band, #f7f8fa);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.runRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.runLabel {
+  flex: none;
+  width: 58px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.tierRow {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+}
+
+.tierBtn {
+  flex: 1;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--ctl);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tierBtn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.tierOn {
+  border-color: var(--primary);
+  background: var(--primary-soft, #eaf0fe);
+  color: var(--primary);
+  font-weight: 600;
+}
+
 /* ② 检测与写入（五列）：逐一列出候选、网络状态、上次检测 */
 .cMenu2 { width: 15%; }
 .cData2 { width: 35%; }

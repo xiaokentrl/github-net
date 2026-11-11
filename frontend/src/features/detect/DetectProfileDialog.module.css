@@ -40,3 +40,24 @@
   font-size: 11.5px;
   line-height: 1.5;
 }
+
+/* 方法下拉行（拍板 2026-11-12）：档位弹框开头选「用哪个方法」，
+   紧凑横排、与卡片同宽；下方三张档位卡只管「跑多狠」，方法管「从哪取候选」。 */
+
+/* 方法下拉行（拍板 2026-11-12）：「只测此方法」路径下选「用哪个方法」——
+   预选已保存的默认方法；下方三张档位卡只管「跑多狠」，方法管「从哪取候选」。
+   工具栏批量路径不传 scopeId，这一行不出现。 */
+.methodRow {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--ctl);
+}
+
+.methodNote {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}

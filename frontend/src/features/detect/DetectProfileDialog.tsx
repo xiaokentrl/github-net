@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getLastDetectProfile, setLastDetectProfile, type NetworkProfile } from '../../api/client'
+import { MethodDetectPicker } from '../strategies/MethodDetectPicker'
 import { Dialog } from '../../components/ui/Dialog'
 import uiStyles from '../../components/ui/ui.module.css'
 import { t } from '../../i18n'
@@ -24,14 +25,21 @@ function isProfileID(value: string): value is ProfileID {
 export function DetectProfileDialog({
   onCancel,
   onConfirm,
+  scopeId,
 }: {
   onCancel: () => void
-  onConfirm: (profile: NetworkProfile) => void
+  /** 确认时回调：profile 是本次档位；strategyId 是弹框里选的方法（没动下拉＝未传＝走默认方法链） */
+  onConfirm: (profile: NetworkProfile, strategyId?: string) => void
+  /** 这批项目共同所属的范围：传了才显示「下拉选方法」；跨范围批次不传（各用各的保存默认） */
+  scopeId?: string
 }) {
   // 没记住过就默认省流；记住过就从那档开始，并把「记住选项」保持勾上。
   const [selected, setSelected] = useState<ProfileID>(cachedProfile ?? 'low')
   const [remember, setRemember] = useState(cachedProfile !== null)
   const touched = useRef(false)
+  // 方法下拉：默认预选「已保存的默认方法」；动了就钉住该方法，只作用于这一轮。
+  const [strategyId, setStrategyId] = useState('')
+
 
   // 每次开弹框都对一次盘：重启／重装后这份记忆还在，不依赖进程内存。
   // 用户已经动过手就不覆盖；读失败、读到不认得的值都当没记住过，绝不挡检测。
@@ -61,7 +69,7 @@ export function DetectProfileDialog({
     void setLastDetectProfile(next ?? '').catch((err: unknown) => {
       console.error('记住检测档位失败', err)
     })
-    onConfirm(selected)
+    onConfirm(selected, strategyId === '' ? undefined : strategyId)
   }
   return (
     <Dialog
@@ -84,6 +92,12 @@ export function DetectProfileDialog({
       }
     >
       <p className={styles.hint}>{t('detect.profile.ask.hint')}</p>
+      {scopeId ? (
+        <div className={styles.methodRow}>
+          <p className={styles.methodNote}>{t('detail.detectBox.pickerNote')}</p>
+          <MethodDetectPicker scopeId={scopeId} compact showButton={false} onPick={setStrategyId} />
+        </div>
+      ) : null}
       <div className={cardStyles.profileGrid}>
         {PROFILE_IDS.map((id) => {
           const active = selected === id

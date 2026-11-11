@@ -16,14 +16,10 @@ export function ServiceStrategySelector({
   scopeId,
   scopeName,
   onSaved,
-  detecting,
-  onDetectSelected,
 }: {
   scopeId: string
   scopeName: string
   onSaved: () => void
-  detecting: boolean
-  onDetectSelected: (strategyId: string) => void
 }) {
   const [snap, setSnap] = useState<StrategySnapshot | null>(null)
   const [load, setLoad] = useState<Load>('loading')
@@ -145,10 +141,12 @@ export function ServiceStrategySelector({
   return (
     <div className={styles.stack}>
       <div className={styles.panel}>
-        <Select
-          label={label}
-          labelHidden
-          value={current}
+        <div className={styles.pickerRow}>
+          <span className={styles.pickerTag}>{t('strategy.tag')}</span>
+          <Select
+            label={label}
+            labelHidden
+            value={current}
           placeholder={t('strategy.pickOne')}
           disabled={kind === 'pending'}
           options={flatOptions}
@@ -162,19 +160,7 @@ export function ServiceStrategySelector({
           }
           onChange={choose}
         />
-        {/* 「检测」只检测下拉选中的那一个方法（拍板 2026-10-31）：不改保存的选择，
-            直接按当前选中的 ID 发一轮检测。没选中的时候这颗按钮不出现。 */}
-        {current !== '' ? (
-          <button
-            type="button"
-            className={styles.detectBtn}
-            disabled={kind === 'pending' || detecting}
-            title={t('strategy.detectHint', { name: options.find((o) => o.id === current)?.name ?? current })}
-            onClick={() => onDetectSelected(current)}
-          >
-            {detecting ? t('detect.running') : t('strategy.detect')}
-          </button>
-        ) : null}
+        </div>
       </div>
       {/* 保存状态和提示一律放面板外面：面板里只留选择框和按钮，宽度不再被一句话挤来挤去。 */}
       <div className={styles.statusLine}>

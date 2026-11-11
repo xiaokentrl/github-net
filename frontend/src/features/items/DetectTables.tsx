@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { getLastDetectProfile, type NetworkProfile } from '../../api/client'
 import { t } from '../../i18n'
+import { MethodDetectPicker } from '../strategies/MethodDetectPicker'
 import { getErrorMessage } from '../../api/errors'
 import { getCandidatePool, previewRestoreHostsItem, reprobeIP } from '../../api/client'
 import type { HostEntryState, HostsRestorePreview, PoolEntryView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
@@ -27,7 +29,6 @@ type Row = {
 
 type Actions = {
   restoreIp: () => void
-  detectAll: () => void
   writeIp: () => void
 }
 
@@ -143,7 +144,7 @@ function CardHead({ step, title, desc, countLabel, tone, extra }: {
   )
 }
 
-export function DetectTables({ name, itemId, hostnames, entries, actions, busy, ready, refreshKey, only, onReprobed }: {
+export function DetectTables({ name, itemId, hostnames, entries, actions, busy, ready, refreshKey, only, onReprobed, scopeId, detectRun }: {
   name: string
   // 还原前后对比按这一个二级菜单算，不能拿全量还原的结果来顶。
   itemId: string
@@ -159,6 +160,10 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
   // 「重新检测」整轮收尾后的通知：后端候选池已更新，调用方重拉结果 store，
   // 详情页的候选表才不会停在旧实测状态。
   onReprobed?: () => void
+  /** 项目所属范围：给「下拉选方法」取方法清单（一站式检测台） */
+  scopeId: string
+  /** 弹框内执行：按选中的方法与档位对这一个项目开一轮检测 */
+  detectRun: (strategyId: string, profile: NetworkProfile) => void
 }) {
   const [pool, setPool] = useState<PoolEntryView[] | null>(null)
   const [poolError, setPoolError] = useState('')
@@ -167,6 +172,17 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
   // 第一张表现场复测的结论按「域名|IP」存，覆盖后端读回来的旧定格。
   const [probeOverrides, setProbeOverrides] = useState<Record<string, NetState>>({})
   const [reprobe, setReprobe] = useState<{ done: number; total: number } | null>(null)
+  // 一站式检测台（拍板 2026-11-12）：选源（方法）与档位都在弹框里定，执行走 detectRun。
+  // pickedStrategyId 为空＝用默认方法链（已保存的默认方法）；档位初值读上次记住的那一档。
+  const [pickedStrategyId, setPickedStrategyId] = useState('')
+  const [pickedProfile, setPickedProfile] = useState<NetworkProfile>('low')
+  useEffect(() => {
+    let alive = true
+    getLastDetectProfile().then((profile) => {
+      if (alive && (profile === 'low' || profile === 'standard' || profile === 'full')) setPickedProfile(profile)
+    }).catch(() => undefined)
+    return () => { alive = false }
+  }, [])
   const [reprobeError, setReprobeError] = useState('')
   const alive = useRef(true)
   useEffect(() => () => { alive.current = false }, [])
@@ -331,11 +347,28 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
     </div>
   )
 
-  // ② 的主按钮是「检测全部」，写入是测完之后的动作，用另一种样式但同样可点。
+  // 一站式检测台：方法下拉（默认=已保存的默认方法）+ 档位三选一（初值=上次记住的档）。
+  const tierButtons = (
+    <div className={styles.tierRow}>
+      {(['low', 'standard', 'full'] as const).map((id) => (
+        <button
+          key={id}
+          type="button"
+          className={`${styles.tierBtn} ${pickedProfile === id ? styles.tierOn : ''}`}
+          aria-pressed={pickedProfile === id}
+          onClick={() => setPickedProfile(id)}
+        >
+          {t(`toolbar.profile.${id}`)}
+        </button>
+      ))}
+    </div>
+  )
+  // ② 的主按钮是「开始检测」，写入是测完之后的动作，用另一种样式但同样可点。
   const detectActions = (
     <div className={styles.actionStack}>
-      {button('detail.detectBox.detectAll', 'detail.detectBox.detectAllHint', actions.detectAll,
-        busy.detect || reprobe !== null || !ready.canDetectAll, 'detect', 'detail.box.detecting')}
+      {button('detail.detectBox.detectRun', 'detail.detectBox.detectRunHint', () =>
+        detectRun(pickedStrategyId, pickedProfile),
+        busy.detect || reprobe !== null, 'detect', 'detail.box.detecting')}
       {button('detail.detectBox.writeIp', 'detail.detectBox.writeHint', actions.writeIp,
         busy.apply || !hasUsableIp || !ready.hasDetectResult, 'write',
         !hasUsableIp || !ready.hasDetectResult ? 'detail.detectBox.noUsableIp' : 'detail.box.restoring')}
@@ -402,16 +435,16 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
         <colgroup>
           <col className={styles.cMenu} />
           <col className={styles.cData} />
-          <col className={styles.cAfter} />
           <col className={styles.cNet} />
+          <col className={styles.cAfter} />
           <col className={styles.cAction} />
         </colgroup>
         <thead>
           <tr>
             <th>{t('detail.detectBox.colMenu')}</th>
             <th>{t('detail.detectBox.colWrittenIp')}</th>
-            <th>{t('detail.detectBox.colAfter')}</th>
             <th className={styles.centered}>{t('detail.detectBox.colNetFirst')}</th>
+            <th>{t('detail.detectBox.colAfter')}</th>
             <th className={styles.centered}>{t('detail.detectBox.colAction')}</th>
           </tr>
         </thead>
@@ -422,8 +455,8 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
               <tr key={r.key}>
                 {groupCell(restorableRows, i)}
                 {dataCell(r)}
-                {afterCell(r)}
                 {netCell(r)}
+                {afterCell(r)}
                 {actionCell(restorableRows, i, restoreActions)}
               </tr>
             ))}
@@ -441,6 +474,16 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
         countLabel={t('detail.detectBox.cached', { count: cachedCount })}
         tone="detect"
       />
+      <div className={styles.runSetup}>
+        <div className={styles.runRow}>
+          <span className={styles.runLabel}>{t('detail.detectBox.methodLabel')}</span>
+          <MethodDetectPicker scopeId={scopeId} detecting={busy.detect} onPick={setPickedStrategyId} compact showButton={false} />
+        </div>
+        <div className={styles.runRow}>
+          <span className={styles.runLabel}>{t('detail.detectBox.tierLabel')}</span>
+          {tierButtons}
+        </div>
+      </div>
       <table className={styles.tbl}>
         <colgroup>
           <col className={styles.cMenu2} />

@@ -5,7 +5,7 @@ import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
 import type { CatalogCategory, CatalogItem, DetectResultView, HostsRestorePreview, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
 import { getErrorMessage } from '../../api/errors'
-import { previewRestoreHostsItems } from '../../api/client'
+import { previewRestoreHostsItems, type NetworkProfile } from '../../api/client'
 import { arrowKeys } from '../../hooks/arrowKeys'
 import { Dialog } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -73,8 +73,8 @@ export function ItemDetail({
   onSelectItem,
   detectError,
   hostsError,
-  onDetect,
-  onDetectAll,
+  onDetectAvailability,
+  onDetectRun,
   onApply,
   onRestore,
   onRestoreCategory,
@@ -87,8 +87,8 @@ export function ItemDetail({
   onSelectItem: (itemId: string) => void
   detectError: string
   hostsError: string
-  onDetect: (itemId: string, strategyId?: string) => void
-  onDetectAll: (items: CatalogItem[]) => void
+  onDetectAvailability: () => void
+  onDetectRun: (itemId: string, strategyId: string, profile: NetworkProfile) => void
   onApply: (itemId: string) => void
   onRestore: (itemId: string) => void
   onRestoreCategory: (itemIds: string[]) => void
@@ -354,11 +354,19 @@ export function ItemDetail({
             scopeId={category.scopeId}
             scopeName={category.name}
             onSaved={onStrategySaved}
-            detecting={detecting}
-            onDetectSelected={(strategyId) => onDetect(item.id, strategyId)}
           />
           <div className={styles.headActions}>
             <StatusBadge state={projectState(hosts, state.tasks, item.id, result)} />
+            {/* 检测可用性（拍板 2026-11-12）：用已保存的默认方法，检测本主菜单下全部项目，
+                先弹档位弹框选档；一次性动作，不改默认设置。 */}
+            <button
+              type="button"
+              className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.detect}`}
+              title={t('detail.detectAvailability.title')}
+              onClick={onDetectAvailability}
+            >
+              {t('detail.detectAvailability')}
+            </button>
             {restorableItems.length > 0 ? (
               <button
                 type="button"
@@ -628,7 +636,6 @@ export function ItemDetail({
             only={restoreBox.view}
             actions={{
               restoreIp: () => onRestore(restoreBox.itemId),
-              detectAll: () => boxItem ? onDetectAll([boxItem]) : undefined,
               writeIp: () => onApply(restoreBox.itemId),
             }}
             busy={{
@@ -643,6 +650,8 @@ export function ItemDetail({
             }}
             refreshKey={boxRefreshKey}
             onReprobed={() => invalidate('results', { itemIds: restoreBox ? [restoreBox.itemId] : undefined })}
+            scopeId={category?.scopeId ?? ''}
+            detectRun={(strategyId, profile) => onDetectRun(restoreBox.itemId, strategyId, profile)}
           />
 
           {/* 检测/还原的进度与回执照旧摆在表下方，跟着视图走。 */}

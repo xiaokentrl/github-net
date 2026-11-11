@@ -793,6 +793,7 @@ export function App() {
         return
       }
       // 先选本次档位，选完再由 runDetectWithProfile 按分组发起。
+      // 方法不在这里选：检测选中项关联的是全部勾选菜单，各用各的保存默认方法（拍板 2026-11-12）。
       setProfileAsk({ groups: [...groups.values()], budgetCheck: false })
     },
     [snapshot],
@@ -918,31 +919,33 @@ export function App() {
   }, [clearAsk])
 
   // 单项检测（方法下拉旁那颗、还原框的「重新检测」）不弹档位框，沿用设置里的档位。
-  const startDetect = useCallback((itemId: string, strategyId?: string) => {
-    setDetectError('')
-    detectItems([itemId], strategyId ?? '', '').catch((err: unknown) => reportRejection(setDetectError, err))
-  }, [])
 
   // 批量检测前先选本次档位：groups 是已分好组的待检项目，budgetCheck 表示这一路
   // 还要按选中档位问一次预算预估（详情页那颗批量检测按钮原来就有这道确认）。
-  const [profileAsk, setProfileAsk] = useState<{ groups: string[][]; budgetCheck: boolean } | null>(null)
-  const [budgetAsk, setBudgetAsk] = useState<{ ids: string[]; needed: number; budget: number; shortfall: number; profile: NetworkProfile } | null>(null)
+  // scopeId：只测此方法路径传入（这批项目同属的范围）——档位弹框据此显示方法下拉；
+  // 工具栏批量路径不传（各用各的保存默认，弹框无下拉）。
+  const [profileAsk, setProfileAsk] = useState<{ groups: string[][]; budgetCheck: boolean; scopeId?: string } | null>(null)
+  const [budgetAsk, setBudgetAsk] = useState<{ ids: string[]; needed: number; budget: number; shortfall: number; profile: NetworkProfile; strategyId?: string } | null>(null)
 
-  const startDetectAll = useCallback((items: CatalogItem[]) => {
+  // 详情弹框一站式检测：按弹框里选的方法与档位，对这一个项目开一轮。
+  const startDetectRun = useCallback((itemId: string, strategyId: string, profile: NetworkProfile) => {
     setDetectError('')
-    setProfileAsk({ groups: [items.map((it) => it.id)], budgetCheck: true })
+    queueExpandRef.current?.()
+    detectItems([itemId], strategyId, profile).catch((err: unknown) => reportRejection(setDetectError, err))
   }, [])
 
   // 档位框点「检测」：这一批的所有分组都按选中的档位发，档位只走命令参数、不写回设置。
-  const runDetectWithProfile = useCallback((profile: NetworkProfile) => {
+  const runDetectWithProfile = useCallback((profile: NetworkProfile, strategyId?: string) => {
     if (!profileAsk) return
     const { groups, budgetCheck } = profileAsk
     setProfileAsk(null)
     setDetectError('')
     queueExpandRef.current?.()
+    // 方法参数：只测此方法路径由弹框下拉提供（预选已保存默认，可改）；批量路径无下拉＝默认方法链。
+    const pinned = strategyId ?? ''
     if (!budgetCheck) {
       for (const ids of groups) {
-        detectItems(ids, '', profile).catch((err: unknown) => reportRejection(setDetectError, err))
+        detectItems(ids, pinned, profile).catch((err: unknown) => reportRejection(setDetectError, err))
       }
       return
     }
@@ -950,18 +953,33 @@ export function App() {
     detectBudget(ids, profile)
       .then((budget) => {
         if (budget.shortfall > 0) {
-          setBudgetAsk({ ids, needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall, profile })
+          setBudgetAsk({ ids, needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall, profile, strategyId: pinned })
           return
         }
-        return detectItems(ids, '', profile).catch((err: unknown) => reportRejection(setDetectError, err))
+        return detectItems(ids, pinned, profile).catch((err: unknown) => reportRejection(setDetectError, err))
       })
       .catch((err: unknown) => reportRejection(setDetectError, err))
   }, [profileAsk])
 
-  const runDetectAll = useCallback((ids: string[], profile: NetworkProfile) => {
+  const runDetectAll = useCallback((ids: string[], profile: NetworkProfile, strategyId?: string) => {
     setBudgetAsk(null)
     queueExpandRef.current?.()
-    detectItems(ids, '', profile).catch((err: unknown) => reportRejection(setDetectError, err))
+    // 方法参数：预算差额确认后重发时带上弹框里钉住的方法；空＝默认方法链。
+    detectItems(ids, strategyId ?? '', profile).catch((err: unknown) => reportRejection(setDetectError, err))
+  }, [])
+
+  // 头部「只测此方法」（拍板 2026-11-12）：一次性用下拉选的方法（选完即存为该范围默认，
+  // 不污染后续），检测本主菜单下全部子项。先弹档位弹框选档，确认后整批开跑。
+  // 方法不在这里选——下拉已经选好并存了默认，确认时走默认方法链就是它。
+  const startDetectSelected = useCallback((category: CatalogCategory | null) => {
+    if (!category) return
+    setDetectError('')
+    queueExpandRef.current?.()
+    setProfileAsk({
+      groups: [(category.items ?? []).map((it) => it.id)],
+      budgetCheck: true,
+      scopeId: category.scopeId,
+    })
   }, [])
 
   const startApply = useCallback((itemId: string) => {
@@ -1136,8 +1154,8 @@ export function App() {
             }}
             detectError={detectError}
             hostsError={hostsError}
-            onDetect={startDetect}
-            onDetectAll={startDetectAll}
+            onDetectAvailability={() => startDetectSelected(selected.category)}
+            onDetectRun={startDetectRun}
             onApply={startApply}
             onRestore={startRestore}
             onRestoreCategory={startRestoreCategory}
@@ -1226,7 +1244,11 @@ export function App() {
         />
       ) : null}
       {profileAsk ? (
-        <DetectProfileDialog onCancel={() => setProfileAsk(null)} onConfirm={runDetectWithProfile} />
+        <DetectProfileDialog
+          onCancel={() => setProfileAsk(null)}
+          onConfirm={runDetectWithProfile}
+          scopeId={profileAsk?.scopeId}
+        />
       ) : null}
       {budgetAsk ? (
         <Dialog
@@ -1240,7 +1262,7 @@ export function App() {
               <button
                 type="button"
                 className={`${uiStyles.btn} ${uiStyles.primary}`}
-                onClick={() => runDetectAll(budgetAsk.ids, budgetAsk.profile)}
+                onClick={() => runDetectAll(budgetAsk.ids, budgetAsk.profile, budgetAsk.strategyId)}
               >
                 {t('detect.budget.ask.action')}
               </button>
