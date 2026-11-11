@@ -9,11 +9,18 @@ import styles from './ServiceStrategySelector.module.css'
 type Load = 'loading' | 'ready' | 'error'
 
 /**
- * 「下拉选方法 + 只测本项目」公共组件（拍板 2026-11-12）：
+ * 「下拉选方法」公共组件（拍板 2026-11-12）：
  * 方法清单按传入的范围取（内容随菜单变化），选择只活在本组件里——
- * 不存默认方法、不写配置，检测回调把选中的方法 ID 交给调用方。
- * 按钮写结果：选了什么就显示「用「X」测本项目」。
- * 和页面头部的 ServiceStrategySelector 是两回事：头部那颗选完会存成默认。
+ * 不存默认方法、不写配置，结果通过 onPick / onDetect 交给调用方。
+ *
+ * 预选规则：默认选中「使用已有储存」——不联网、秒出结论，是最稳的起点；
+ * 范围里没有这个方法时退回「已保存的默认方法」。用户手动选过就以用户的为准。
+ * 预选解析完成时通过 onPick 上报一次：宿主的确认按钮要拿到与显示一致的方法 ID。
+ *
+ * 两种形态：
+ * - showButton（缺省）：组件自带「用「X」测本项目」按钮；
+ * - showButton=false + compact：纯下拉横排（档位弹框里用，宿主自己放确认按钮）。
+ * 与页面头部的 ServiceStrategySelector 是两回事：头部那颗选完会存成默认。
  */
 export function MethodDetectPicker({
   scopeId,
@@ -28,11 +35,11 @@ export function MethodDetectPicker({
   detecting?: boolean
   /** 检测回调（showButton=true 时必传） */
   onDetect?: (strategyId: string) => void
-  /** 横排紧凑模式：下拉与按钮同一行（弹框里用）；缺省纵排（页面头部用） */
+  /** 横排紧凑模式：下拉与按钮同一行；缺省纵排 */
   compact?: boolean
-  /** 只要下拉不要按钮（宿主自己有确认按钮时，如档位弹框） */
+  /** 只要下拉不要按钮（宿主自己有确认按钮时） */
   showButton?: boolean
-  /** 选择变化的回调（showButton=false 时宿主靠它拿选中的方法 ID） */
+  /** 选择变化（含预选解析完成）时回调；showButton=false 的宿主靠它拿选中的方法 ID */
   onPick?: (strategyId: string) => void
 }) {
   const [snap, setSnap] = useState<StrategySnapshot | null>(null)
@@ -40,6 +47,13 @@ export function MethodDetectPicker({
   const [reason, setReason] = useState('')
   const [pickedId, setPickedId] = useState('')
   const requestRef = useRef(0)
+
+  const options = snap?.options ?? []
+  // 预选解析（放在 hooks 之后、早退之前）：默认「使用已有储存」，没有再退「已保存的默认方法」。
+  const saved = snap?.savedId && snap.savedUsable ? snap.savedId : ''
+  const storedOption = options.find((o) => o.id === 'stored-ips')
+  const preferred = storedOption?.id ?? saved
+  const current = pickedId || preferred
 
   useEffect(() => {
     const request = requestRef.current + 1
@@ -62,15 +76,18 @@ export function MethodDetectPicker({
     )
   }, [scopeId])
 
+  // 预选解析完成时上报一次：宿主的确认按钮要拿到与显示一致的方法 ID——
+  // 不上报的话，显示「使用已有储存」、确认却走默认方法链，两边对不上。
+  useEffect(() => {
+    if (load !== 'ready' || pickedId !== '' || current === '') return
+    onPick?.(current)
+  }, [load, pickedId, current, onPick])
+
   if (load === 'loading') return <p className={styles.note}>{t('strategy.loading')}</p>
   if (load === 'error') return <p className={styles.warn}>{t('strategy.error', { name: scopeId, reason })}</p>
 
-  const options = snap?.options ?? []
   if (options.length === 0) return <p className={styles.warn}>{t('strategy.empty', { name: scopeId })}</p>
 
-  // 默认选中「已保存的默认方法」（若可用）：多数时候用户就是想用它，少点一步。
-  const saved = snap?.savedId && snap.savedUsable ? snap.savedId : ''
-  const current = pickedId || saved
   const picked = options.find((o) => o.id === current)
 
   const flatOptions = options.map((option) => ({ value: option.id, label: option.name }))
@@ -83,6 +100,11 @@ export function MethodDetectPicker({
   const restOptions = grouped
     ? options.filter((option) => !SOURCE_IDS.includes(option.id)).map((option) => ({ value: option.id, label: option.name }))
     : []
+
+  const pick = (strategyId: string) => {
+    setPickedId(strategyId)
+    onPick?.(strategyId)
+  }
 
   return (
     <div className={compact ? `${styles.stack} ${styles.stackRow}` : styles.stack}>
@@ -100,10 +122,7 @@ export function MethodDetectPicker({
               ]
             : undefined
         }
-        onChange={(id) => {
-          setPickedId(id)
-          onPick?.(id)
-        }}
+        onChange={pick}
       />
       {showButton && current !== '' ? (
         <button
@@ -113,9 +132,7 @@ export function MethodDetectPicker({
           title={t('strategy.detectHint', { name: picked?.name ?? current })}
           onClick={() => onDetect?.(current)}
         >
-          {/* 按钮写结果：标签恒为「用「X」测本项目」。检测中（无论哪路检测在跑）只置灰，
-              不换成「检测中」——弹框里可能有另一路检测全部在跑，换文案会让人以为选的方法正在用。 */}
-          {t('strategy.detectProject', { name: picked?.name ?? current })}
+          {detecting ? t('detect.running') : t('strategy.detectProject', { name: picked?.name ?? current })}
         </button>
       ) : null}
     </div>
