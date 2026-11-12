@@ -539,7 +539,7 @@
   "detail.detectBox.tierLabel": "檢測檔位",
   "detail.detectBox.detectRun": "開始檢測",
   "detail.detectBox.detectRunHint": "按上面選的方法與檔位，對這個專案跑一輪檢測",
-  "detail.detectAvailability": "檢測本選單",
-  "detail.detectAvailability.title": "檢測本主選單下全部專案的候選可用性（先選檔位）",
+  "detail.detectAvailability": "檢測新候選",
+  "detail.detectAvailability.title": "用選定的方法對本專案取一輪新候選並實測；結果在「檢測與寫入」表裡看",
   "strategy.tag": "加速方法"
 }

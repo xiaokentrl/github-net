@@ -539,7 +539,7 @@
   "detail.detectBox.tierLabel": "检测档位",
   "detail.detectBox.detectRun": "开始检测",
   "detail.detectBox.detectRunHint": "按上面选的方法与档位，对这个项目跑一轮检测",
-  "detail.detectAvailability": "检测本菜单",
-  "detail.detectAvailability.title": "检测本主菜单下全部项目的候选可用性（先选档位）",
+  "detail.detectAvailability": "检测新候选",
+  "detail.detectAvailability.title": "用选定的方法对本项目取一轮新候选并实测；结果在「检测与写入」表里看",
   "strategy.tag": "加速方法"
 }

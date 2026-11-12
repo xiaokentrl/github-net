@@ -342,6 +342,8 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
         redetectDisabled, 'ghost',
         restorableCount === 0 ? 'detail.detectBox.noRestorable' : 'detail.box.detecting',
         redetectLabel)}
+      {/* 检测新候选：按上面选的方法与档位，对本项目取一轮新候选并实测——
+          与「重新检测」的差别是对象：这里测方法给出的新候选，那颗测还原表里已写入的 IP。 */}
       {button('detail.detectAvailability', 'detail.detectAvailability.title', () =>
         actions.detectRun(pickedStrategyId, pickedProfile),
         busy.detect || reprobe !== null, 'detect')}
@@ -439,6 +441,8 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
         tone="restore"
         extra={restoreLoading || restorePreviewError ? undefined : restoreSums}
       />
+      {/* 选源选档台（还原视图）：方法与档位只管「检测新候选」这一颗——
+          测的对象是本项目的方法新候选，不是还原表里已写入的 IP（那颗是上面的重新检测）。 */}
       <div className={styles.runSetup}>
         <div className={styles.runRow}>
           <span className={styles.runLabel}>{t('detail.detectBox.methodLabel')}</span>

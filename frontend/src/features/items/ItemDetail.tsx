@@ -657,7 +657,11 @@ export function ItemDetail({
             refreshKey={boxRefreshKey}
             onReprobed={() => invalidate('results', { itemIds: restoreBox ? [restoreBox.itemId] : undefined })}
             scopeId={category?.scopeId ?? ''}
-            detectRun={(strategyId, profile) => onDetectRun(restoreBox.itemId, strategyId, profile)}
+            detectRun={(strategyId, profile) => {
+              onDetectRun(restoreBox.itemId, strategyId, profile)
+              // 新候选的结果在「检测与写入」表：点了就切过去，现场看逐条实测
+              setRestoreBox((prev) => (prev ? { ...prev, view: 'detect' } : prev))
+            }}
           />
 
           {/* 检测/还原的进度与回执照旧摆在表下方，跟着视图走。 */}
