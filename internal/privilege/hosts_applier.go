@@ -151,8 +151,15 @@ func (a *HostsApplier) RestoreAll() (int, error) {
 // 走 writeMu：写事务「先 rename Hosts、后 rename meta」分两步，不加锁的话
 // 两步之间读到的 Hosts 与 meta 是两代账本，界面可能闪一次假冲突（2026-11-13 审计低危）。
 func (a *HostsApplier) Preview(itemIDs []string) (hosts.RestorePreview, error) {
+	// flock 与写事务同款（复核 2026-11-13）：writeMu 只防本进程，另一进程的写事务
+	// 停在「Hosts 已换、meta 未换」两步之间时，跨进程读到的就是半代账本。
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
+	unlock, lerr := a.lockFile()
+	if lerr != nil {
+		return hosts.RestorePreview{}, lerr
+	}
+	defer unlock()
 	content, meta, err := a.load()
 	if err != nil {
 		return hosts.RestorePreview{}, err
@@ -172,8 +179,14 @@ func (a *HostsApplier) Preview(itemIDs []string) (hosts.RestorePreview, error) {
 // 元数据不存在就是「没写过」，返回零值而不是错误——这两件事不能混。
 // 同 Preview 走 writeMu：别在写事务两步之间读走半代账本。
 func (a *HostsApplier) State() (hosts.Written, error) {
+	// 同 Preview：flock 兜跨进程（复核 2026-11-13）。
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
+	unlock, lerr := a.lockFile()
+	if lerr != nil {
+		return hosts.Written{}, lerr
+	}
+	defer unlock()
 	metaRaw, err := os.ReadFile(a.metaPath())
 	if errors.Is(err, os.ErrNotExist) {
 		return hosts.Written{}, nil

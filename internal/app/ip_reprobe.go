@@ -76,9 +76,11 @@ func (s *Service) ReprobeIP(hostname, ip string) (PoolEntryView, error) {
 		probe = detector.ProbeHTTPS
 	}
 	res, err := probe(ctx, detector.Target{IP: addr, Hostname: host})
-	status := accelerator.StatusUntested
+	// 与应用复验（verifyOne）同一条判据同一份原因：Verdict 给的分类文本写进行里，
+	// 不然超时/证书失败这些行只剩状态没原因（2026-11-13 全面检查补漏）。
+	status, reason := accelerator.StatusUntested, "探测没有给出结论，这一条没有复验"
 	if err == nil {
-		status, _ = accelerator.Verdict(res)
+		status, reason = accelerator.Verdict(res)
 	}
 
 	at := time.Now()
@@ -87,10 +89,6 @@ func (s *Service) ReprobeIP(hostname, ip string) (PoolEntryView, error) {
 	}
 	// 内存结论同步回写（与应用复验的 recordProbeResult 同一动作）：详情页三格摘要、
 	// 「可用 N」计数立刻跟上复测事实，不用等下一轮真检测。找不到对应轮就什么都不动。
-	reason := ""
-	if err != nil {
-		reason = "探测失败"
-	}
 	if s.detectResults != nil {
 		for _, itemID := range ownerIDs {
 			s.detectResults.markProbe(itemID, host, addr, status, res.LatencyMS, reason, at)

@@ -878,3 +878,28 @@ func TestWaitRoundReleasesEveryWaiter(t *testing.T) {
 		}
 	}
 }
+
+// 已有未剪除的 skipped 记录时复用而不是追加一行（2026-11-13 按钮审计修复的钉子）：
+// 双击「写入可用IP」时第二次调用里被挡的项若再排一条 skipped，队列会出现两轮重复行、
+// 通知双报、空轮还多发 noWritten。skipped 是终态事实，重复说一遍没有信息增量。
+func TestEnqueueSkippedReusesExistingSkippedRow(t *testing.T) {
+	f := successExecutor()
+	q, _ := newEnv(f)
+
+	roundID := q.BeginRound(KindApply, "", "应用队列 · 1 项")
+	first, err := q.EnqueueSkipped(NewRequest{Kind: KindApply, ItemID: "bare", RoundID: roundID}, "这个项目还没有检测结果")
+	if err != nil {
+		t.Fatalf("第一条 skipped: %v", err)
+	}
+
+	second, err := q.EnqueueSkipped(NewRequest{Kind: KindApply, ItemID: "bare", RoundID: q.BeginRound(KindApply, "", "应用队列 · 1 项")}, "这个项目还没有检测结果")
+	if err != nil {
+		t.Fatalf("第二次 skipped: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Errorf("已有一模一样的 skipped 记录该复用它，不该追加新行: %q vs %q", first.ID, second.ID)
+	}
+	if got := len(q.Snapshot().Tasks); got != 1 {
+		t.Errorf("快照里该只有一条 skipped，实际 %d 条", got)
+	}
+}

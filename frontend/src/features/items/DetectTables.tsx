@@ -392,9 +392,7 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
             ? 'detail.detectBox.poolLoading'
             : busy.apply
               ? 'detail.detectBox.writeRunning'
-              : !hasUsableIp || !ready.hasDetectResult
-                ? 'detail.detectBox.noUsableIp'
-                : 'detail.box.restoring')}
+              : 'detail.detectBox.noUsableIp')}
     </div>
   )
 

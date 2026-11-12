@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -196,8 +197,12 @@ func TestDetectExecutorRunsOneRoundAndReportsProgress(t *testing.T) {
 	}
 
 	// 同一个域名的三种写法只解析一次，且解析按规范化后的写法发起。
+	// 解析并发开两个 worker（省流档），谁先领到任务不保证——按集合比对，不断言先后
+	// （并发顺序断言天然 flaky，复核 2026-11-13 实测颠倒过一次）。
 	hosts, methods, maxes := lookup.calls()
-	if strings.Join(hosts, ",") != detectHostAPI+","+detectHostCodeload {
+	sorted := append([]string(nil), hosts...)
+	sort.Strings(sorted)
+	if strings.Join(sorted, ",") != detectHostAPI+","+detectHostCodeload {
 		t.Errorf("去重后应该只解析这两个域名，实际 %v", hosts)
 	}
 	if len(methods) != 2 || methods[0] != detectMethodGitHub || methods[1] != detectMethodGitHub {
