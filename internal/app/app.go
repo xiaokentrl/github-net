@@ -152,6 +152,11 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	// 全进程网络并发闸：无论多少条检测任务并行，同时活动的 DNS/IP 请求不过 8 个。
 	probeGate := accelerator.NewGate(accelerator.MaxConcurrency)
 	// 候选底账开在配置文件旁边。开不出来不拦启动：底账是锦上添花的记录，检测结果照常有。
+	// 落点拍板（2026-11-13 对照复核立档）：缓存/底账/升级包都住配置目录旁而不拆去
+	// XDG_CACHE_HOME——单目录备份/迁移/卸载语义最简单；《磁盘资源缓存管理方案》
+	// 「缓存住 cache 目录」铁律的关切（误删用户数据）由清理的文件级+归属门兜住
+	// （cleanup.go 只删本应用写的两类文件名），代价是系统清 XDG cache 不会替我们清，
+	// 由 3 天保留期自动兜底。
 	var candDB *store.Store
 	if p, perr := config.Path(); perr == nil {
 		if db, derr := store.Open(filepath.Join(filepath.Dir(p), "detect-history.db")); derr == nil {

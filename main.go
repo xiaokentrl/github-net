@@ -123,6 +123,9 @@ func main() {
 		slogSink = os.Stderr
 	}
 	slogFile := slog.New(slog.NewTextHandler(slogSink, nil))
+	// 启动第一行先报身份：之后任何一条日志都能顺着回答「这是哪个版本」
+	// （对照复核 2026-11-13：版本此前只在关于页可查）。
+	slogFile.Info("应用启动", "版本", appVersion, "系统", runtime.GOOS+"/"+runtime.GOARCH)
 
 	emitter := &event.StatusEmitter{}
 	ctx, cancel := context.WithCancel(context.Background())

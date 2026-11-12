@@ -468,6 +468,37 @@ func (s *Store) Snapshot() (Config, error) {
 	return s.cfg, nil
 }
 
+// salvageConfig 逐组从一份校验不过的配置里抢救（对照《配置文件方案》验收清单
+// 「手改出错的文件：逐键降级，应用照常启动」）：每组单独套进默认底稿做整份校验，
+// 过不了的那组退回默认并记下组名，其余组的设置照常生效——不再一个键写错就全部归零。
+// 组的划分以「有没有组内联动规则」为准：启动三开关互为前后件，必须一组一起验。
+func salvageConfig(bad Config, scopeIDs, strategies, menuIDs map[string]bool) (Config, []string) {
+	dropped := []string{}
+	draft := Default()
+	draft.Revision = bad.Revision
+	groups := []struct {
+		name  string
+		apply func(d *Config, b Config)
+	}{
+		{"网络检测", func(d *Config, b Config) { d.Network = b.Network }},
+		{"加速方法", func(d *Config, b Config) { d.Accelerator = b.Accelerator }},
+		{"外观", func(d *Config, b Config) { d.Appearance = b.Appearance }},
+		{"布局", func(d *Config, b Config) { d.Layout = b.Layout }},
+		{"分类树", func(d *Config, b Config) { d.TreeBehavior = b.TreeBehavior }},
+		{"启动", func(d *Config, b Config) { d.Startup = b.Startup }},
+		{"浏览器", func(d *Config, b Config) { d.Browser = b.Browser }},
+	}
+	for _, g := range groups {
+		orig := draft
+		g.apply(&draft, bad)
+		if err := draft.Validate(scopeIDs, strategies, menuIDs); err != nil {
+			draft = orig
+			dropped = append(dropped, g.name)
+		}
+	}
+	return draft, dropped
+}
+
 // ensureLoadedLocked 只在第一次读取时碰磁盘：缺文件用默认值、版本更高就报错并且绝不改写、
 // 内容坏了就备份后用默认值，并把原因写成用户可见的 notice。
 func (s *Store) ensureLoadedLocked() error {
@@ -490,6 +521,21 @@ func (s *Store) ensureLoadedLocked() error {
 			return nil
 		} else {
 			err = validateErr
+		}
+		// 版本相容才值得逐组抢救：结构版本不对的字段含义都变了，套进默认底稿
+		// 会把新字段的值错当旧语义收下来，这种整份隔离才是对的。
+		if c.SchemaVersion == SchemaVersion {
+			salvaged, dropped := salvageConfig(c, s.scopeIDs, s.strategies, s.menuIDs)
+			if len(dropped) > 0 {
+				if backupErr := s.quarantineLocked(); backupErr == nil {
+					s.notice = fmt.Sprintf("配置里这几组值不合法，已恢复默认：%s；其余设置照常生效，原文件已转到 %s。",
+						strings.Join(dropped, "、"), BackupPath(s.path))
+				} else {
+					s.notice = fmt.Sprintf("配置里有几组值不合法（已按默认处理），备份也失败（%v）。", backupErr)
+				}
+				s.cfg = salvaged
+				return nil
+			}
 		}
 	}
 	// 走到这里说明文件读不出可用内容：先隔离原件，再用默认值继续运行。

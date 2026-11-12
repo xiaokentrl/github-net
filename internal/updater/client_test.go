@@ -220,3 +220,24 @@ func TestDownloadRejectsCrossOriginRedirect(t *testing.T) {
 		t.Fatalf("跨域重定向该被白名单拦下（ErrBadData），实际 %v", err)
 	}
 }
+
+// 版本比较是数值逐段比，不是字符串比：两位数的次版本号排在一位数之后
+// （字符串比较会把 "0.10" 排在 "0.9" 前面，更新提示就错乱）。三段不齐按 0 补。
+func TestCompareVersionNumericOrder(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want int
+	}{
+		{"0.9", "0.10", -1},
+		{"0.10", "0.9", 1},
+		{"0.10", "0.10", 0},
+		{"1.0", "0.99", 1},
+		{"0.1.9", "0.2", -1},
+		{"1.2", "1.2.0", 0},
+	}
+	for _, c := range cases {
+		if got := compareVersion(c.a, c.b); got != c.want {
+			t.Errorf("compareVersion(%q, %q) = %d，该是 %d", c.a, c.b, got, c.want)
+		}
+	}
+}

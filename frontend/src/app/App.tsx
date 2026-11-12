@@ -574,16 +574,45 @@ export function App() {
   const { state: save, save: submit } = useSettingsSave(settings, applyConfig, loadSettings)
 
   // 勾选变化的防抖写回：和初始化时记录的那份一致就不写，避免白涨 revision。
+  // 这是「数据会丢的防抖」，按指南《防抖与节流方案》上三件套（对照复核 2026-11-13 中危）：
+  // ① maxWait——连续快速勾选不会把落盘无限推迟，最多 2 秒必须写一次；
+  // ② 卸载时冲刷而不是取消——clearTimeout 丢掉的可是真设置；
+  // ③ 后端保存原子性兜崩溃那一条（SaveSettings 本就是原子替换）。
+  const checkedIdsRef = useRef(checkedIds)
+  const checkedFlushRef = useRef<() => void>(() => {})
+  const checkedPendingRef = useRef(false)
+  const checkedMaxTimerRef = useRef<number | null>(null)
+  useEffect(() => {
+    checkedIdsRef.current = checkedIds
+  })
   useEffect(() => {
     if (!checkedInitializedRef.current) return
     const serialized = [...checkedIds].sort().join('\n')
     if (serialized === savedCheckedRef.current) return
-    const timer = window.setTimeout(() => {
-      savedCheckedRef.current = serialized
-      submit({ checkedItemIds: [...checkedIds] }, t('settings.subject.checkedItems'), 'checkedItems')
-    }, 400)
+    const flush = () => {
+      checkedPendingRef.current = false
+      if (checkedMaxTimerRef.current !== null) {
+        window.clearTimeout(checkedMaxTimerRef.current)
+        checkedMaxTimerRef.current = null
+      }
+      savedCheckedRef.current = [...checkedIdsRef.current].sort().join('\n')
+      submit({ checkedItemIds: [...checkedIdsRef.current] }, t('settings.subject.checkedItems'), 'checkedItems')
+    }
+    checkedFlushRef.current = flush
+    checkedPendingRef.current = true
+    const timer = window.setTimeout(flush, 400)
+    if (checkedMaxTimerRef.current === null) {
+      checkedMaxTimerRef.current = window.setTimeout(flush, 2000)
+    }
     return () => window.clearTimeout(timer)
   }, [checkedIds, submit])
+  // 卸载（含应用退出前的组件树拆除）：pending 的勾选冲刷一次再走。
+  useEffect(
+    () => () => {
+      if (checkedPendingRef.current) checkedFlushRef.current()
+    },
+    [],
+  )
 
   const changeProfile = useCallback(
     (profile: NetworkProfile) => {

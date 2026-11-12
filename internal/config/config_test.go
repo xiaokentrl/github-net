@@ -569,3 +569,52 @@ func TestZeroValuePatchFieldsAreDistinguishable(t *testing.T) {
 		t.Errorf("总上限 = %d，期望 1", got.Network.MaxCandidateProbesPerRun)
 	}
 }
+
+// 逐组抢救（《配置文件方案》验收清单「手改出错的文件：逐键降级，应用照常启动」的落地）：
+// 手改坏一组（网络档位写成不认得的值），其余组的非默认设置必须照常生效，不再整份归零。
+func TestSalvageKeepsGoodGroups(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	// 先存一份「外观=深色 + 布局改宽」的非默认配置。
+	s := NewStore(path, map[string]bool{"github": true}, nil, nil)
+	if _, err := s.Save(Patch{
+		Theme:        func(v string) *string { return &v }("midnight"),
+		SidebarWidth: func(v int) *int { return &v }(300),
+		Language:     func(v string) *string { return &v }("zh-TW"),
+	}, 0, "m1"); err != nil {
+		t.Fatalf("先存一份非默认配置: %v", err)
+	}
+	// 手改坏网络档位那一组，其余一个字不动。
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读配置: %v", err)
+	}
+	broken := strings.Replace(string(raw), `"profile": "`, `"profile": "turbo-`, 1)
+	if broken == string(raw) {
+		t.Fatal("替换没生效，测试夹具写错了")
+	}
+	if err := os.WriteFile(path, []byte(broken), 0o600); err != nil {
+		t.Fatalf("写坏配置: %v", err)
+	}
+
+	reopened := NewStore(path, map[string]bool{"github": true}, nil, nil)
+	cfg, err := reopened.Snapshot()
+	if err != nil {
+		t.Fatalf("抢救后应能正常启动: %v", err)
+	}
+	if cfg.Network.Profile != ProfileLow {
+		t.Errorf("坏掉的网络组该回默认档（省流），实际 %q", cfg.Network.Profile)
+	}
+	if cfg.Appearance.Theme != "midnight" {
+		t.Errorf("完好的外观组该保留（dark），实际 %q", cfg.Appearance.Theme)
+	}
+	if cfg.Appearance.Language != "zh-TW" {
+		t.Errorf("完好的语言该保留（zh-TW），实际 %q", cfg.Appearance.Language)
+	}
+	if cfg.Layout.SidebarWidth != 300 {
+		t.Errorf("完好的布局该保留（300），实际 %d", cfg.Layout.SidebarWidth)
+	}
+	if reopened.Notice() == "" || !strings.Contains(reopened.Notice(), "已恢复默认") {
+		t.Errorf("抢救要留一句 notice 说清哪些组退了默认，实际 %q", reopened.Notice())
+	}
+}

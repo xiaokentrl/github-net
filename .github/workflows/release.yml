@@ -87,6 +87,13 @@ jobs:
           else
             echo "版本核对通过：v$tag"
           fi
+          # 标签必须指向本次推送的 HEAD：标签打在旧提交上时，Release 里的版本号
+          # 对不齐仓库最新状态，用户装到的与看到的代码脱节（对照复核 2026-11-13）。
+          tagged="$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")"
+          if [ "$tagged" != "$GITHUB_SHA" ]; then
+            echo "::error::标签 $GITHUB_REF_NAME 指向 $tagged，本次推送 HEAD 是 $GITHUB_SHA；重打到当前提交"
+            exit 1
+          fi
       - name: 放行工作目录属主并核对 git 上下文
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE" 2>/dev/null || true
@@ -128,6 +135,14 @@ jobs:
           GIT_COMMITTER_EMAIL="$(git log -1 --format=%ce)" \
             wails3 tool package -name github-net -format deb -config ./build/linux/nfpm/nfpm.yaml -out ./bin
           test -f bin/github-net.deb || { echo "::error::deb 没打出来"; exit 1; }
+          # 产物级身份验证（对照复核 2026-11-13）：不只验版本，包名与桌面项文件也要
+          # 从产物里读出来与 identity 权威值比对——身份漂了源码门未必能拦住。
+          # 权威值现场从 cmd/identity 取（只取两个键 eval），不在 YAML 里抄写。
+          eval "$(go run ./cmd/identity --shell | grep -E '^IDENTITY_(PACKAGE_NAME|DESKTOP_FILE)=')"
+          pkg="$(dpkg-deb -f bin/github-net.deb Package)"
+          test "$pkg" = "$IDENTITY_PACKAGE_NAME" || { echo "::error::产物包名 $pkg 与 identity 的 PackageName（$IDENTITY_PACKAGE_NAME）不一致"; exit 1; }
+          dpkg-deb -c bin/github-net.deb | grep -q "$IDENTITY_DESKTOP_FILE" \
+            || { echo "::error::产物里没有 identity 的桌面项文件（$IDENTITY_DESKTOP_FILE）"; exit 1; }
           # 产物级兜底：直接读打出来的 deb 的控制文件，不信配置、不信文件名。
           actual="$(dpkg-deb -f bin/github-net.deb Version)"
           echo "deb 包内版本：$actual，期望 ${ver}-1"

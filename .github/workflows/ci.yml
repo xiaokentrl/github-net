@@ -63,6 +63,16 @@ jobs:
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - name: 静态检查与测试
         run: go vet ./... && go test -count=1 ./...
+      - name: 绑定生成对账（指南《绑定层契约与生成物方案》硬性目标 1）
+        run: |
+          # bindings 是生成物：重新生成后与提交版必须一字不差，否则有人手改了生成物
+          # 或忘了跑生成就推送。wails3 版本与 release.yml 的 WAILS_VERSION 同源钉住；
+          # 升级两边要一起动。
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
+          export PATH="$HOME/go/bin:$PATH"
+          wails3 generate bindings -clean=true -ts -i
+          git diff --exit-code frontend/bindings \
+            || { echo "::error::bindings 与重新生成结果不一致：跑 wails3 generate bindings -clean=true -ts -i 后提交"; exit 1; }
 
   linux-x64:
     name: Linux x64 出包与门一（Ubuntu 26.04 宿主）

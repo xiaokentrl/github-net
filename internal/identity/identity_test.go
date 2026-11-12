@@ -167,6 +167,25 @@ func TestNotDuplicatedOutsideIdentity(t *testing.T) {
 		}
 	})
 
+	t.Run("nfpm.yaml 的包名与桌面项路径", func(t *testing.T) {
+		// 构建配置侧的衍生值也照金标准核对（对照复核 2026-11-13）：改一次户口要记得
+		// 改这里第三处，漏改的话打出来的包身份就漂了。
+		src := readFile(t, filepath.Join(root, "build/linux/nfpm/nfpm.yaml"))
+		if !strings.Contains(src, `name: "`+PackageName+`"`) {
+			t.Errorf("nfpm.yaml 的包名和 identity.PackageName=%q 不一致", PackageName)
+		}
+		if !strings.Contains(src, DesktopFile) {
+			t.Errorf("nfpm.yaml 里找不到 identity.DesktopFile=%q 的安装路径", DesktopFile)
+		}
+	})
+
+	t.Run("Taskfile 的桌面项文件名", func(t *testing.T) {
+		src := readFile(t, filepath.Join(root, "build/linux/Taskfile.yml"))
+		if !strings.Contains(src, DesktopFile) {
+			t.Errorf("build/linux/Taskfile.yml 里找不到 identity.DesktopFile=%q（appimage/快捷方式引用漂了）", DesktopFile)
+		}
+	})
+
 	t.Run("main.go 的显示名与应用 ID", func(t *testing.T) {
 		src := readFile(t, filepath.Join(root, "main.go"))
 		if !strings.Contains(src, `appID      = "`+AppID+`"`) {

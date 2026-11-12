@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-# pre-push 自动重装：打包 → 停旧进程 → 卸载旧包并装新包 → 删配置（新包从默认配置起步）。
+# pre-push 自动重装：验树干净 → 打包 → 停旧进程 → 卸载旧包并装新包 → 保留配置 → 装后三验 → 拉回。
 # 任何一步失败都中断推送，不带病上线。
 # 跳过一次（比如只改了文档）：GITHUB_NET_SKIP_REINSTALL=1 git push
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
+
+# 推送前验树干净（对照复核 2026-11-13 高危）：deb 从工作树构建——脏树的改动会被装上
+# 本机却不在推送内容里，「装过能跑」就成了假证据。要么先提交，要么显式跳过钩子。
+if [ -n "$(git status --porcelain)" ]; then
+  echo '工作区有未提交的改动：先提交（或 GITHUB_NET_SKIP_REINSTALL=1 显式跳过重装）再推' >&2
+  git status --short >&2
+  exit 1
+fi
 
 # 产品身份：包名、二进制名、产物路径、助手路径、配置目录名统统来自 internal/identity，
 # 这里只 eval 这一次；取不到值就中断推送，绝不带着空字符串往下删。
@@ -85,6 +93,10 @@ DEB="$(ls -t "${IDENTITY_DEB_PATH%.deb}"*.deb 2>/dev/null | head -n1 || true)"
 [ -n "$DEB" ] || { echo '打完包却没找到 deb，中断推送' >&2; exit 1; }
 echo "  产物：$DEB ($(stat -c %s "$DEB") 字节)"
 
+# 记住推送前应用在不在跑：装完要把它拉回来（关停与拉回对称，对照复核 2026-11-13）。
+WAS_RUNNING=0
+pgrep -x "$IDENTITY_BINARY_NAME" >/dev/null 2>&1 && WAS_RUNNING=1
+
 echo "== 2/4 停掉在跑的 $IDENTITY_BINARY_NAME =="
 # 装着的和 wails3 dev 起的都叫同一个二进制名，一并停掉，避免旧实例占着旧代码
 pkill -x "$IDENTITY_BINARY_NAME" 2>/dev/null || true
@@ -96,4 +108,22 @@ echo '== 4/4 保留配置 =='
 # 配置不再删除（拍板 2026-11-03）：重装后沿用 ~/.config/github-net 里已有的设置，
 # 模拟的是「升级」而不是「新用户起步」。要体验全新配置就手动删 ~/.config/github-net。
 
-echo "== 完成：$IDENTITY_PACKAGE_NAME 已重装，版本 $(dpkg-query -W -f='${Version}' "$IDENTITY_PACKAGE_NAME")，配置已保留 =="
+# 装后三验（对照复核 2026-11-13）：包状态装好、可执行文件在位、装的版本 == 源里声明
+# 的版本——「装完」要拿证据说话，不只看安装命令退出码。
+INSTALLED_VERSION="$(dpkg-query -W -f='${Version}' "$IDENTITY_PACKAGE_NAME")"
+dpkg-query -W -f='${Status}' "$IDENTITY_PACKAGE_NAME" | grep -q 'install ok installed' \
+  || { echo '装后验包状态失败：dpkg 不认为已安装' >&2; exit 1; }
+[ -x "$IDENTITY_BINARY_PATH" ] || { echo "装后验可执行文件失败：$IDENTITY_BINARY_PATH 不在或不可执行" >&2; exit 1; }
+SOURCE_VERSION="$(bash "$ROOT/scripts/version.sh")"
+if [ "$INSTALLED_VERSION" != "${SOURCE_VERSION}-1" ]; then
+  echo "装后验版本失败：装的是 $INSTALLED_VERSION，源里是 ${SOURCE_VERSION}-1" >&2
+  exit 1
+fi
+
+# 推送前在跑就拉回来：推送不该把用户的应用顺手关掉。
+if [ "$WAS_RUNNING" = "1" ]; then
+  echo '== 拉回应用 =='
+  setsid nohup "$IDENTITY_BINARY_PATH" >/dev/null 2>&1 < /dev/null &
+fi
+
+echo "== 完成：$IDENTITY_PACKAGE_NAME 已重装，版本 $INSTALLED_VERSION（装后三验过），配置已保留 =="
