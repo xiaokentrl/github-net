@@ -357,7 +357,7 @@
   "detail.detectBox.redetect": "重新偵測",
   "detail.detectBox.restoreIp": "還原可用IP",
   "detail.detectBox.writeIp": "寫入可用IP",
-  "detail.detectBox.redetectHint": "逐條重測上面這些支援還原的 IP 現在通不通",
+  "detail.detectBox.redetectHint": "逐條重測目前寫入的 IP（還原前確認舊位址還通不通）",
   "detail.detectBox.restoreHint": "把這一項寫進 Hosts 的映射退回套用前的狀態",
   "detail.detectBox.writeHint": "把測出來的可用 IP 寫進系統 Hosts",
   "detail.detectBox.redetecting": "重測中 {done}/{total}",
@@ -539,7 +539,7 @@
   "detail.detectBox.tierLabel": "檢測檔位",
   "detail.detectBox.detectRun": "開始檢測",
   "detail.detectBox.detectRunHint": "按上面選的方法與檔位，對這個專案跑一輪檢測",
-  "detail.detectAvailability": "檢測可用性",
+  "detail.detectAvailability": "檢測本選單",
   "detail.detectAvailability.title": "檢測本主選單下全部專案的候選可用性（先選檔位）",
   "strategy.tag": "加速方法"
 }

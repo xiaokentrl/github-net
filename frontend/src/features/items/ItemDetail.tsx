@@ -175,7 +175,10 @@ export function ItemDetail({
   const boxApplyRunning = restoreBox
     ? state.tasks.some((tk) => tk.itemId === restoreBox.itemId && tk.kind === 'apply' && (tk.status === 'waiting' || tk.status === 'running'))
     : false
-  const boxRestoreSettled = boxRestoreTask !== undefined && !boxRestoreRunning && isTerminalTask(boxRestoreTask.status)
+  // 还原落定分两态：成功（restored）→「立刻还原」禁用（已还原无可再还原）；
+  // 失败/已回滚 → 允许原位重试，按钮不锁死（审计修复：原来任何终态都禁，失败后无法重试）。
+  const boxRestoreSettledOk = boxRestoreTask !== undefined && !boxRestoreRunning && boxRestoreTask.status === 'restored'
+  const boxRestoreFailed = boxRestoreTask !== undefined && !boxRestoreRunning && (boxRestoreTask.status === 'failed' || boxRestoreTask.status === 'rolledback')
   const boxHosts = restoreBox ? hostsOf.get(restoreBox.itemId) : undefined
   // 检测弹框两张表都只列这一个二级菜单的真实数据：域名以目录为准，逐条状态取后端读回来的 Hosts。
   const boxItem = restoreBox ? (category?.items ?? []).find((it) => it.id === restoreBox.itemId) : undefined
@@ -636,13 +639,16 @@ export function ItemDetail({
             only={restoreBox.view}
             actions={{
               restoreIp: () => onRestore(restoreBox.itemId),
+              detectRun: (strategyId: string, profile: NetworkProfile) =>
+                onDetectRun(restoreBox.itemId, strategyId, profile),
               writeIp: () => onApply(restoreBox.itemId),
             }}
             busy={{
               detect: boxDetectRunning,
               restore: boxRestoreRunning,
               apply: boxApplyRunning,
-              restoreSettled: boxRestoreSettled,
+              restoreSettledOk: boxRestoreSettledOk,
+              restoreFailed: boxRestoreFailed,
             }}
             ready={{
               canDetectAll: boxItem !== undefined,

@@ -29,10 +29,11 @@ type Row = {
 
 type Actions = {
   restoreIp: () => void
+  detectRun: (strategyId: string, profile: NetworkProfile) => void
   writeIp: () => void
 }
 
-type Busy = { detect: boolean; restore: boolean; apply: boolean; restoreSettled: boolean }
+type Busy = { detect: boolean; restore: boolean; apply: boolean; restoreSettledOk?: boolean; restoreFailed?: boolean }
 
 // 「检测全部」要按目录里这一项去找域名；「写入可用IP」要有最近一轮的检测结论才能写，
 // 否则后端会在入口拒掉，按钮可点却失败就是骗人。
@@ -341,9 +342,16 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
         redetectDisabled, 'ghost',
         restorableCount === 0 ? 'detail.detectBox.noRestorable' : 'detail.box.detecting',
         redetectLabel)}
+      {button('detail.detectAvailability', 'detail.detectAvailability.title', () =>
+        actions.detectRun(pickedStrategyId, pickedProfile),
+        busy.detect || reprobe !== null, 'detect')}
       {button('detail.detectBox.restoreIp', 'detail.detectBox.restoreHint', actions.restoreIp,
-        busy.restore || busy.restoreSettled || restorableCount === 0, 'restore',
-        restorableCount === 0 ? 'detail.detectBox.noRestorable' : 'detail.box.restoring')}
+        busy.restore || busy.restoreSettledOk === true || restorableCount === 0, 'restore',
+        restorableCount === 0
+          ? 'detail.detectBox.noRestorable'
+          : busy.restore || busy.restoreFailed
+            ? 'detail.detectBox.restoreHint'
+            : 'detail.box.restored')}
     </div>
   )
 
@@ -431,6 +439,16 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
         tone="restore"
         extra={restoreLoading || restorePreviewError ? undefined : restoreSums}
       />
+      <div className={styles.runSetup}>
+        <div className={styles.runRow}>
+          <span className={styles.runLabel}>{t('detail.detectBox.methodLabel')}</span>
+          <MethodDetectPicker scopeId={scopeId} detecting={busy.detect} onPick={setPickedStrategyId} compact showButton={false} />
+        </div>
+        <div className={styles.runRow}>
+          <span className={styles.runLabel}>{t('detail.detectBox.tierLabel')}</span>
+          {tierButtons}
+        </div>
+      </div>
       <table className={styles.tbl}>
         <colgroup>
           <col className={styles.cMenu} />

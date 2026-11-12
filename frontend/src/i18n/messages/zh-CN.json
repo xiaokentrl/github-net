@@ -357,7 +357,7 @@
   "detail.detectBox.redetect": "重新检测",
   "detail.detectBox.restoreIp": "还原可用IP",
   "detail.detectBox.writeIp": "写入可用IP",
-  "detail.detectBox.redetectHint": "逐条重测上面这些支持还原的 IP 现在通不通",
+  "detail.detectBox.redetectHint": "逐条重测当前写入的 IP（还原前确认旧地址还通不通）",
   "detail.detectBox.restoreHint": "把这一项写进 Hosts 的映射退回应用前的状态",
   "detail.detectBox.writeHint": "把测出来的可用 IP 写进系统 Hosts",
   "detail.detectBox.redetecting": "重测中 {done}/{total}",
@@ -539,7 +539,7 @@
   "detail.detectBox.tierLabel": "检测档位",
   "detail.detectBox.detectRun": "开始检测",
   "detail.detectBox.detectRunHint": "按上面选的方法与档位，对这个项目跑一轮检测",
-  "detail.detectAvailability": "检测可用性",
+  "detail.detectAvailability": "检测本菜单",
   "detail.detectAvailability.title": "检测本主菜单下全部项目的候选可用性（先选档位）",
   "strategy.tag": "加速方法"
 }

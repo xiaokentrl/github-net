@@ -44,7 +44,7 @@ export function AppearancePane({
             disabled={save.kind === 'pending'}
             onChange={onLanguage}
           />
-          <InlineStatus kind={save.kind} text={save.text} />
+          <InlineStatus kind={saveStateFor(save, "language").kind} text={saveStateFor(save, "language").text} />
         </div>
       </div>
 

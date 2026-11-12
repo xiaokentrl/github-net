@@ -123,7 +123,7 @@ export function App() {
     const request = statusRequestRef.current + 1
     statusRequestRef.current = request
     setStatusLoad('loading')
-    getAppStatus()
+    return getAppStatus()
       .then((result) => {
         if (statusRequestRef.current !== request) return
         setStatus(result)
@@ -168,7 +168,7 @@ export function App() {
     const request = catalogRequestRef.current + 1
     catalogRequestRef.current = request
     setCatalogLoad('loading')
-    getItems()
+    return getItems()
       .then((result) => {
         if (catalogRequestRef.current !== request) return
         setSnapshot(result)
@@ -671,6 +671,11 @@ export function App() {
     [settings, submit],
   )
 
+  // 托盘胶囊切主题失败时，设置中心可能不在前台：失败落一条右下角通知，别无声。
+  useEffect(() => {
+    if (save.kind === 'failed' && save.subject === 'theme') pushNotice('error', save.text)
+  }, [save])
+
   const changeCloseToTray = useCallback(
     (enabled: boolean) => {
       if (!settings || settings.startup.closeToTray === enabled) return
@@ -1050,6 +1055,7 @@ export function App() {
   // 或者中途被别处并发请求挤掉，列表就会一直停在还原前的样子。
   const startRestoreItems = useCallback((itemIds: string[]) => {
     setHostsError('')
+    queueExpandRef.current?.()
     restoreItems(itemIds)
       .then((queued) => watchTasksSettled(queued))
       .catch((err: unknown) => reportRejection(setHostsError, err))
