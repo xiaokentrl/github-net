@@ -70,6 +70,9 @@ jobs:
           # 升级两边要一起动。
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
           export PATH="$HOME/go/bin:$PATH"
+          # 容器里的 checkout 目录属主与进程不同：不放行的话 git diff 直接报
+          # dubious ownership 非零退出，对账门会把「干净的 bindings」误判成漂移。
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           wails3 generate bindings -clean=true -ts -i
           if ! git diff --exit-code frontend/bindings; then
             # 对账红就把差异逐行编进 error 注解：注解匿名可读，不用鉴权就能定位。
