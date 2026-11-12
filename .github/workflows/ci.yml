@@ -71,8 +71,13 @@ jobs:
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
           export PATH="$HOME/go/bin:$PATH"
           wails3 generate bindings -clean=true -ts -i
-          git diff --exit-code frontend/bindings \
-            || { echo "::error::bindings 与重新生成结果不一致：跑 wails3 generate bindings -clean=true -ts -i 后提交"; exit 1; }
+          if ! git diff --exit-code frontend/bindings; then
+            # 对账红就把差异直接打出来：本机复现不了的环境差异（工具链/换行/产物路径）靠这段定位。
+            echo "::error::bindings 与重新生成结果不一致，差异如下："
+            git status --short frontend/bindings || true
+            git diff frontend/bindings | head -80 || true
+            exit 1
+          fi
 
   linux-x64:
     name: Linux x64 出包与门一（Ubuntu 26.04 宿主）
