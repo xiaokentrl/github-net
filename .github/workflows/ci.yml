@@ -72,12 +72,20 @@ jobs:
           export PATH="$HOME/go/bin:$PATH"
           wails3 generate bindings -clean=true -ts -i
           if ! git diff --exit-code frontend/bindings; then
-            # 对账红就把差异直接打出来：本机复现不了的环境差异（工具链/换行/产物路径）靠这段定位。
-            echo "::error::bindings 与重新生成结果不一致，差异如下："
-            git status --short frontend/bindings || true
-            git diff frontend/bindings | head -80 || true
+            # 对账红就把差异留档（工件）＋直接打出来：本机复现不了的环境差异靠这两路定位。
+            git diff frontend/bindings > bindings-diff.txt || true
+            git status --short frontend/bindings >> bindings-diff.txt || true
+            echo "::error::bindings 与重新生成结果不一致，差异已写入 bindings-diff.txt 工件"
+            head -60 bindings-diff.txt || true
             exit 1
           fi
+      - name: 上传 bindings 对账差异（仅红时）
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bindings-diff
+          path: bindings-diff.txt
+          if-no-files-found: ignore
 
   linux-x64:
     name: Linux x64 出包与门一（Ubuntu 26.04 宿主）
