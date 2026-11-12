@@ -254,9 +254,12 @@ export function App() {
       // 写系统 Hosts 的结果递进右下角面板：辅助服务没在跑、写失败被回滚这两种，
       // 光靠队列面板那一行很容易被划过去；检测类不递（一轮几十条，递出来就是刷屏）。
       // 文字里不带项目名，同一批的同一种失败自然并成一条。
+      // 检测类的 failed/rolledback 不递：批量检测执行期整批失败会逐项各递一条，刷屏，
+      // 且与轮聚合那条 warning 双报——检测失败的汇总只走轮聚合（2026-11-13 按钮审计中危）。
       const reason = settled.errorMsg || t('error.unknown')
-      if (settled.status === 'failed') pushNotice('error', t('hosts.task.failed', { reason }))
-      if (settled.status === 'rolledback') pushNotice('error', t('hosts.task.rolledback', { reason }))
+      const isDetectKind = settled.kind === 'detect'
+      if (settled.status === 'failed' && !isDetectKind) pushNotice('error', t('hosts.task.failed', { reason }))
+      if (settled.status === 'rolledback' && !isDetectKind) pushNotice('error', t('hosts.task.rolledback', { reason }))
       // 写入 Hosts 成功：按轮聚合一条 success，明确告诉用户「写进去了」。
       // 以前每条 done 都递一条 info「重开标签页」，勾 6 项就刷 6 条，还看不出成功与否。
       // 一轮全部落定的那一刻统计：全成功报 success，部分失败报 warning，全失败只留上面的错误条。
@@ -930,7 +933,7 @@ export function App() {
   // scopeId：只测此方法路径传入（这批项目同属的范围）——档位弹框据此显示方法下拉；
   // 工具栏批量路径不传（各用各的保存默认，弹框无下拉）。
   const [profileAsk, setProfileAsk] = useState<{ groups: string[][]; budgetCheck: boolean; scopeId?: string } | null>(null)
-  const [budgetAsk, setBudgetAsk] = useState<{ ids: string[]; needed: number; budget: number; shortfall: number; profile: NetworkProfile; strategyId?: string } | null>(null)
+  const [budgetAsk, setBudgetAsk] = useState<{ groups: string[][]; needed: number; budget: number; shortfall: number; profile: NetworkProfile; strategyId?: string } | null>(null)
 
   // 详情弹框一站式检测：按弹框里选的方法与档位，对这一个项目开一轮。
   const startDetectRun = useCallback((itemId: string, strategyId: string, profile: NetworkProfile) => {
@@ -954,23 +957,30 @@ export function App() {
       }
       return
     }
-    const ids = groups[0] ?? []
-    detectBudget(ids, profile)
+    // 预算按全部分组一起算（DetectBudget 本就支持跨范围批）；确认后逐分组重发，
+    // 不取 groups[0]——多分组时那样会把其余分组静默丢掉（2026-11-13 审计）。
+    const flat = groups.flat()
+    detectBudget(flat, pinned, profile)
       .then((budget) => {
         if (budget.shortfall > 0) {
-          setBudgetAsk({ ids, needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall, profile, strategyId: pinned })
+          setBudgetAsk({ groups, needed: budget.needed, budget: budget.budget, shortfall: budget.shortfall, profile, strategyId: pinned })
           return
         }
-        return detectItems(ids, pinned, profile).catch((err: unknown) => reportRejection(setDetectError, err))
+        for (const ids of groups) {
+          detectItems(ids, pinned, profile).catch((err: unknown) => reportRejection(setDetectError, err))
+        }
       })
       .catch((err: unknown) => reportRejection(setDetectError, err))
   }, [profileAsk])
 
-  const runDetectAll = useCallback((ids: string[], profile: NetworkProfile, strategyId?: string) => {
+  const runDetectAll = useCallback((groups: string[][], profile: NetworkProfile, strategyId?: string) => {
     setBudgetAsk(null)
     queueExpandRef.current?.()
     // 方法参数：预算差额确认后重发时带上弹框里钉住的方法；空＝默认方法链。
-    detectItems(ids, strategyId ?? '', profile).catch((err: unknown) => reportRejection(setDetectError, err))
+    // 逐分组发：DetectItems 按每项所在范围解析默认方法，pinned 只钉「弹框里选过的那一种」。
+    for (const ids of groups) {
+      detectItems(ids, strategyId ?? '', profile).catch((err: unknown) => reportRejection(setDetectError, err))
+    }
   }, [])
 
   // 头部「只测此方法」（拍板 2026-11-12）：一次性用下拉选的方法（选完即存为该范围默认，
@@ -1136,7 +1146,6 @@ export function App() {
           <SidebarTools
             allChecked={allChecked}
             allExpanded={allExpanded}
-            busy={save.kind === 'pending'}
             onCheckAll={checkAll}
             onInvertChecked={invertChecked}
             onFoldAll={foldAll}
@@ -1258,7 +1267,7 @@ export function App() {
       ) : null}
       {budgetAsk ? (
         <Dialog
-          title={t('detect.budget.ask.title', { count: budgetAsk.ids.length, shortfall: budgetAsk.shortfall })}
+          title={t('detect.budget.ask.title', { count: budgetAsk.groups.flat().length, shortfall: budgetAsk.shortfall })}
           onClose={() => setBudgetAsk(null)}
           footer={
             <>
@@ -1268,7 +1277,7 @@ export function App() {
               <button
                 type="button"
                 className={`${uiStyles.btn} ${uiStyles.primary}`}
-                onClick={() => runDetectAll(budgetAsk.ids, budgetAsk.profile, budgetAsk.strategyId)}
+                onClick={() => runDetectAll(budgetAsk.groups, budgetAsk.profile, budgetAsk.strategyId)}
               >
                 {t('detect.budget.ask.action')}
               </button>

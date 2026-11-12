@@ -647,15 +647,34 @@ func applyPatch(c *Config, p Patch) {
 
 // writeAtomic 在同目录建唯一临时文件、同步落盘再改名替换；目录 0700，文件 0600。
 func writeAtomic(path string, c Config) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
 	raw, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".config-*.json")
+	// 滚动备份（性能基线纪律）：替换成功前把当前文件复制一份 .1——
+	// 好文件被意外写坏时有一版可回退。必须复制而不是改名轮转：
+	// 改名会让 config.json 在「备份完成到替换完成」之间缺席，这个窗口里崩溃
+	// 就只剩 .1 而读盘把缺文件当首次安装静默用默认值，用户设置全丢（2026-11-13 审计）。
+	// 首次写入没有旧文件，跳过；目标不是普通文件（如占位目录）时不备份。
+	if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() && st.Size() > 0 {
+		if old, err := os.ReadFile(path); err == nil {
+			_ = WriteFileAtomic(path+".1", old, 0o600)
+		}
+	}
+	return WriteFileAtomic(path, append(raw, '\n'), 0o600)
+}
+
+// WriteFileAtomic 是通用的原子写文件：同目录建唯一临时文件、同步落盘再改名替换。
+// 好处是替换那一下不可分割——断电或崩溃时读者看到的要么是完整旧文件、要么是完整新文件，
+// 绝不会是半截。配置文件、窗口几何这类「每次都是全量覆盖的小 JSON」都该走它。
+// 不做滚动备份：那是配置文件特有的纪律，别的落盘文件（如 window.json）写坏一次
+// 只是丢一次偏好，下次保存自然覆盖回来。
+func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".atomic-*")
 	if err != nil {
 		return err
 	}
@@ -664,10 +683,10 @@ func writeAtomic(path string, c Config) error {
 		_ = tmp.Close()
 		_ = os.Remove(tmpName)
 	}()
-	if err := tmp.Chmod(0o600); err != nil {
+	if err := tmp.Chmod(perm); err != nil {
 		return err
 	}
-	if _, err := tmp.Write(append(raw, '\n')); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		return err
 	}
 	if err := tmp.Sync(); err != nil {
@@ -676,5 +695,15 @@ func writeAtomic(path string, c Config) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, path)
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	// 目录项也 fsync 一下：文件 Sync 只保证文件内容落盘，rename 这个动作本身
+	// 断电时可能没落——最坏情况退回旧版（少一次修改），不出现半截文件；
+	// 对 Hosts+元数据这种两文件联动尤其值得（2026-11-13 审计低危）。
+	if dir, err := os.Open(filepath.Dir(path)); err == nil {
+		_ = dir.Sync()
+		_ = dir.Close()
+	}
+	return nil
 }

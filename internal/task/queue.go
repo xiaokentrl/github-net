@@ -132,6 +132,16 @@ func (q *Queue) EnqueueSkipped(req NewRequest, reason string) (Task, error) {
 	if existing := q.findActiveLocked(req.Kind, req.ItemID); existing != nil {
 		return existing.task, nil
 	}
+	// 已有未剪除的 skipped 记录就复用它，不再追加一行（2026-11-13 按钮审计中危）：
+	// 双击「写入可用IP」时第二次调用里被挡的项会整批重新 skipped——队列出现两轮重复行、
+	// 通知双报、空轮还多发一条 noWritten。skipped 是终态事实「这项现在没法应用，原因 X」，
+	// 重复说一遍没有信息增量；同状态的 blocker 判定给出的原因也一致。
+	for _, id := range q.order {
+		e := q.entries[id]
+		if e.task.Kind == req.Kind && e.task.ItemID == req.ItemID && e.task.Status == StatusSkipped {
+			return e.task, nil
+		}
+	}
 	e := q.appendLocked(Task{
 		Kind:       req.Kind,
 		ItemID:     req.ItemID,

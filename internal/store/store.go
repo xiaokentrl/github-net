@@ -60,7 +60,13 @@ type CandidateRow struct {
 	Applied     bool
 }
 
-// Open 打开（或新建）path 指向的底账库，建好两张表。父目录不存在就一并创建。
+// schemaVersion 是本程序能驾驭的底账库结构版本（SQLite 的 user_version pragma）。
+// 每次改表结构（加列、改主键）都要 +1 并在这里补迁移；当前迁移只做 CREATE TABLE IF
+// NOT EXISTS，向前兼容，所以老库（0）直接补表升到当前版。
+// 库比程序新（v > schemaVersion）时拒绝打开：硬读只会得到 schema 对不上的怪错。
+const schemaVersion = 1
+
+// Open 打开（或新建）path 指向的底账库，建好表。父目录不存在就一并创建。
 // 外键和忙等在 DSN 里开：级联删候选靠外键，busy_timeout 兜住偶发的锁竞争。
 func Open(path string) (*Store, error) {
 	if filepath.Dir(path) != "." {
@@ -90,6 +96,15 @@ func (s *Store) useClock(now func() time.Time) {
 }
 
 func (s *Store) migrate() error {
+	// 版本守卫：先看库是哪一版再动手。库比程序新＝这台机器跑过更新的版本，
+	// 旧程序别碰（探测历史只是锦上添花的记录，拒绝打开也只损失这份记录）。
+	var v int
+	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+		return fmt.Errorf("store: 读不到底账库版本: %w", err)
+	}
+	if v > schemaVersion {
+		return fmt.Errorf("store: 底账库版本 v%d 比程序支持的 v%d 新，拒绝打开（这台机器跑过更新的版本）", v, schemaVersion)
+	}
 	for _, stmt := range []string{
 		`CREATE TABLE IF NOT EXISTS detect_rounds (
 			id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,6 +153,10 @@ func (s *Store) migrate() error {
 		if _, err := s.db.Exec(stmt); err != nil {
 			return fmt.Errorf("store: 建表失败: %w", err)
 		}
+	}
+	// 建表成功后把版本钉到当前版：下次打开就知道这库已经迁移过了。
+	if _, err := s.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion)); err != nil {
+		return fmt.Errorf("store: 写不进底账库版本: %w", err)
 	}
 	return nil
 }

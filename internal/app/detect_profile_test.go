@@ -69,11 +69,11 @@ func TestDetectItemsSelectedProfileAppliesOnlyToThisRound(t *testing.T) {
 
 func TestDetectBudgetUsesSelectedProfile(t *testing.T) {
 	svc := newDetectProfileService(t)
-	low, err := svc.DetectBudget([]string{"api"}, config.ProfileLow)
+	low, err := svc.DetectBudget([]string{"api"}, "", config.ProfileLow)
 	if err != nil {
 		t.Fatalf("省流档预估失败: %v", err)
 	}
-	full, err := svc.DetectBudget([]string{"api"}, config.ProfileFull)
+	full, err := svc.DetectBudget([]string{"api"}, "", config.ProfileFull)
 	if err != nil {
 		t.Fatalf("完整档预估失败: %v", err)
 	}
@@ -92,5 +92,44 @@ func TestDetectItemsRejectsUnknownProfile(t *testing.T) {
 	}
 	if got := len(svc.GetTasks().Tasks); got != 0 {
 		t.Fatalf("被拒的请求不该在队列里留下任务，实际 %d 条", got)
+	}
+}
+
+// 预算口径（2026-11-13 审计纠正）：「使用已有储存」只是不重新拉源，候选照样要真探测，
+// 域名照常计入预算；钉定的方法不存在/不适用时，预估也要整批拒绝——
+// 别出现「预估给得出数字、用户确认完执行却被拒」的两张皮。
+func TestDetectBudgetStoredIPsStillCounts(t *testing.T) {
+	svc := newDetectProfileService(t)
+	stored := strategies.Strategy{
+		ID:       strategies.StrategyIDStoredIPs,
+		Name:     "使用已有储存",
+		ScopeIDs: []string{detectScopeGitHub},
+	}
+	svc.strategyTable = fakeTable(t,
+		map[string][]strategies.Strategy{
+			detectScopeGitHub: {fakeStrategy("live.one", "还在的方法", detectScopeGitHub), stored},
+		},
+		map[string]strategies.Strategy{
+			"live.one":                     fakeStrategy("live.one", "还在的方法", detectScopeGitHub),
+			strategies.StrategyIDStoredIPs: stored,
+		})
+	// 钉定 stored-ips：照常计预算（两个去重域名，完整档 32 次）。
+	b, err := svc.DetectBudget([]string{"api"}, strategies.StrategyIDStoredIPs, config.ProfileFull)
+	if err != nil {
+		t.Fatalf("stored-ips 预估失败: %v", err)
+	}
+	if b.Needed != 32 {
+		t.Errorf("stored-ips 照样要真探测，完整档两个域名该要 32 次，实际 %d", b.Needed)
+	}
+	// 钉定不在注册表里的方法：预估就地拒绝。
+	if _, err := svc.DetectBudget([]string{"api"}, "ghost", config.ProfileFull); codeOf(t, err) != CodeNoStrategySelected {
+		t.Errorf("钉定不存在的方法该被拒为 CodeNoStrategySelected，实际 %v", err)
+	}
+	// 钉定不适用于该项目范围的方法：同样拒绝。
+	svc.strategyTable = fakeTable(t,
+		map[string][]strategies.Strategy{detectScopeSteam: {fakeStrategy("steam.only", "商店的方法", detectScopeSteam)}},
+		map[string]strategies.Strategy{"steam.only": fakeStrategy("steam.only", "商店的方法", detectScopeSteam)})
+	if _, err := svc.DetectBudget([]string{"api"}, "steam.only", config.ProfileFull); codeOf(t, err) != CodeNoStrategySelected {
+		t.Errorf("钉定不适用范围的方法该被拒为 CodeNoStrategySelected，实际 %v", err)
 	}
 }

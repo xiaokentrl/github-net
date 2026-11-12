@@ -228,9 +228,10 @@ export function clearFinishedTasks(): Promise<Snapshot> {
   return ClearFinishedTasks()
 }
 
-// 批量检测前的预算预估：按本次选中的档位算，Needed 盖不全时界面先请用户确认再发起。
-export function detectBudget(itemIds: string[], profile = ''): Promise<DetectBudgetPreview> {
-  return DetectBudget(itemIds, profile)
+// 批量检测前的预算预估：按本次钉定的方法与选中的档位算，Needed 盖不全时界面先请用户确认再发起。
+// strategyId 与 detectItems 同口径：「使用已有储存」不联网，预估为 0，不弹确认框。
+export function detectBudget(itemIds: string[], strategyId = '', profile = ''): Promise<DetectBudgetPreview> {
+  return DetectBudget(itemIds, strategyId, profile)
 }
 
 // ===== 应用与还原 =====

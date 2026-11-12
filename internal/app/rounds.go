@@ -32,9 +32,11 @@ func newRoundBudgets() *roundBudgets {
 	return &roundBudgets{byID: make(map[string]*int64), profileByID: make(map[string]string)}
 }
 
-// pruneOldestLocked 剪掉多余的轮记录到上限内；skip 是本轮正在登记的 ID，不许剪。
+// pruneExcessLocked 剪掉多余的轮记录到上限内；skip 是本轮正在登记的 ID，不许剪。
 // 调用方持有 r.mu。候选探测按预算走，被剪的轮等效「退役」，不再受预算约束。
-func (r *roundBudgets) pruneOldestLocked(skip string) {
+// 注意「剪哪一轮」不挑：byID 是 map，遍历无序，超限时删的是任意一轮，不是严格最老。
+// 兜底剪的目的是封顶内存，牺牲哪轮记录都只是少留一份历史，语义无损——名字不写「oldest」。
+func (r *roundBudgets) pruneExcessLocked(skip string) {
 	excess := len(r.byID) - roundBudgetsMax
 	if excess <= 0 {
 		return
@@ -67,7 +69,7 @@ func (r *roundBudgets) profileOf(roundID string) string {
 func (r *roundBudgets) put(roundID string, budget int) string {
 	b := int64(budget)
 	r.mu.Lock()
-	r.pruneOldestLocked(roundID) // 先剪后加：本轮刚登记的档位与预算不会被自己剪掉
+	r.pruneExcessLocked(roundID) // 先剪后加：本轮刚登记的档位与预算不会被自己剪掉
 	r.byID[roundID] = &b
 	r.mu.Unlock()
 	return roundID

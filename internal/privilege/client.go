@@ -41,7 +41,10 @@ type Client struct {
 }
 
 func NewClient() *Client {
-	return &Client{dialTimeout: 2 * time.Second, callTimeout: 20 * time.Second}
+	// callTimeout 要大于服务端的操作期限（server.go 的 30s）：客户端先到的话，
+	// 服务端可能还在继续写——用户被告知「失败」而写入实际已完成，账实两边的说法对不上
+	// （2026-11-13 审计低危）。客户端 40s：比服务端晚到，成功/失败都建立在服务端已收手之后。
+	return &Client{dialTimeout: 2 * time.Second, callTimeout: 40 * time.Second}
 }
 
 // NewClientAt 建一个连指定端点的客户端，只有测试用：生产代码一律 NewClient。

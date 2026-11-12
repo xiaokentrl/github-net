@@ -61,7 +61,7 @@ export function Toolbar({
         </option>
       </select>
 
-      <button type="button" className={styles.action} disabled={busy} title={t('toolbar.openHostsTitle')} onClick={onOpenHosts}>
+      <button type="button" className={styles.action} title={t('toolbar.openHostsTitle')} onClick={onOpenHosts}>
         {t('toolbar.openHosts')}
       </button>
 
@@ -71,7 +71,8 @@ export function Toolbar({
         type="button"
         className={styles.action}
         disabled={actionsBusy}
-        title={t(clearEnabled ? 'toolbar.clearCache.title' : 'toolbar.clearCache.needCheck')}
+        // 置灰说原因（纪律）：有任务在跑说这个，其次才是空勾选（2026-11-13 按钮审计低危）。
+        title={t(actionsBusy ? 'toolbar.busy.title' : clearEnabled ? 'toolbar.clearCache.title' : 'toolbar.clearCache.needCheck')}
         onClick={onClearCheckedCache}
       >
         {t('toolbar.clearCache')}
@@ -83,7 +84,7 @@ export function Toolbar({
         type="button"
         className={styles.action}
         disabled={actionsBusy}
-        title={t('toolbar.detectChecked.title')}
+        title={t(actionsBusy ? 'toolbar.busy.title' : 'toolbar.detectChecked.title')}
         onClick={onDetectChecked}
       >
         {t('toolbar.detectChecked')}
@@ -94,7 +95,7 @@ export function Toolbar({
         type="button"
         className={`${styles.action} ${uiStyles.primary}`}
         disabled={actionsBusy}
-        title={t('toolbar.applyChecked.title')}
+        title={t(actionsBusy ? 'toolbar.busy.title' : 'toolbar.applyChecked.title')}
         onClick={onApplyChecked}
       >
         {t('toolbar.applyChecked')}
@@ -103,7 +104,7 @@ export function Toolbar({
         type="button"
         className={`${styles.action} ${uiStyles.danger}`}
         disabled={actionsBusy}
-        title={t('toolbar.restoreTitle')}
+        title={t(actionsBusy ? 'toolbar.busy.title' : 'toolbar.restoreTitle')}
         onClick={onRestoreAll}
       >
         {t('toolbar.restore')}

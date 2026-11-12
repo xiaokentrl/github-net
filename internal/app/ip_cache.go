@@ -1,5 +1,9 @@
 package app
 
+import (
+	"github.com/xiaokentrl/github-net/internal/task"
+)
+
 // 这一条命令只管「检测出来的 IP 那一摊缓存」：SQLite 轮底账、每轮候选、
 // 按 IP 去重的地址池，以及本进程内存里每个项目最近一轮的结论。
 // 不碰配置、不碰系统 Hosts 里已生效的区段、不碰还原依据、也不碰任务队列——
@@ -31,6 +35,14 @@ type IPCachePreview struct {
 // ClearAllIPCache 清掉全部检测缓存。底账没打开（库没接上）时仍要清内存这一份：
 // 界面手上那份旧结论一样是缓存，留着就是「清完了却还看得到」。
 func (s *Service) ClearAllIPCache() (IPCacheClearResult, error) {
+	// 在途检测任务收尾会把结论重新写回内存与底账：跑着清缓存，回执说「清了 N 条」
+	// 却马上长回来（2026-11-13 按钮审计低危）。工具栏按钮被 queueBusy 挡住常规路径，
+	// 这里再如实拒绝一道。
+	for _, t := range s.queueTasks() {
+		if t.Kind == task.KindDetect && task.IsActive(t.Status) {
+			return IPCacheClearResult{}, NewError(CodeQueueBusy, "还有检测任务在跑，等它完成再清缓存——不然刚清完就会被检测结论填回来", nil)
+		}
+	}
 	if s.candidateStore != nil {
 		rounds, addresses, err := s.candidateStore.ClearAll()
 		if err != nil {

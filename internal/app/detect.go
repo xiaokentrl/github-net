@@ -139,6 +139,10 @@ func (e *detectExecutor) Execute(ctx context.Context, t task.Task, report task.R
 	// 从本轮批量动作的共享预算里取自己这份：规划说「单项、批量、服务范围共用预算执行路径」，
 	// 预算是每轮一份，不是每任务一份——54 项共享 108 次，不是各 108 次。
 	// 取到 0 说明预算被前面的项目用完了：明确标「预算不足，未检测」，不静默跳过。
+	// 已知口径差（2026-11-13 审计存档，现目录触发不到）：① 同一轮里两个项目共享同一域名时，
+	// 轮预算按全批去重只记 1 份，每个任务却按自己的域名数扣，靠后的项目可能被截断；
+	// ② 轮账本 500 上限剪除会把还在途的轮的档位记录一起剪掉（profileOf 退回设置档）。
+	// 两者都要改轮结构才能根治，先如实记账。
 	grant := len(item.hostnames) * budget.PerHostname
 	if e.rounds != nil && t.RoundID != "" {
 		grant = e.rounds.take(t.RoundID, grant)
@@ -160,7 +164,17 @@ func (e *detectExecutor) Execute(ctx context.Context, t task.Task, report task.R
 	runner := accelerator.NewRunnerGated(strategy.Lookup, e.probe, &progressBridge{report: report, pub: e.pub}, e.gate)
 	known := e.knownFor(item.hostnames)
 	result, err := runner.Run(ctx, accelerator.Input{ItemID: t.ItemID, Hostnames: item.hostnames, Applied: applied, Known: known}, budget)
+	// 轮收尾先把攒着的候选进度同步投完：候选进度走批量节流，任务终态是即时发布——
+	// 不收尾的话前端会先收到「轮完成」再收到最后一批候选行，看到倒着播的一轮。
+	if e.pub != nil {
+		e.pub.Flush()
+	}
 	if err != nil {
+		// 没跑起来的轮把预算全额还回去：取走不还的话，本轮后面的项目凭空少一份预算
+		// （2026-11-13 审计低危）。当前前置校验挡得住 Run 的四类错误，这是防御。
+		if e.rounds != nil && t.RoundID != "" {
+			e.rounds.release(t.RoundID, grant)
+		}
 		// 一轮没跑起来的错误都是「调用方给错了东西」那几类（预算与范围对不上、方法没实现），
 		// 原始错误里没有用户能用来下一步的信息，也不保证不含域名，所以这里只给人话不给 err.Error()。
 		return detectFailure("这一轮检测没能跑起来，检查设置后重试")
@@ -172,6 +186,13 @@ func (e *detectExecutor) Execute(ctx context.Context, t task.Task, report task.R
 	// 跑完的结论交给结果存储，详情页从那里取。取消的那轮也存：已完成的那部分候选
 	// 是真实测出来的东西，界面上该留着看。nil 结果（没跑起来）存储自己会拒收。
 	e.results.put(item.scopeID, strategyID, result)
+	// 按收尾那一刻的 Hosts 现状重标「当前生效」：这轮开跑时读过的 applied 已经过期——
+	// 检测期间用户可能点了应用（写入新映射），不重标的话新写入的地址在这份新结论里
+	// 会显示「没有当前写入 IP」，界面与 Hosts 不符（2026-11-13 审计中危）。
+	// 与应用收尾（dispatchExecutor.markApplied）同一动作，两种时序都收敛到正确值。
+	if e.appliedIPs != nil {
+		e.results.markApplied(t.ItemID, e.appliedIPs(item.hostnames))
+	}
 	// 同一笔结论抄进候选底账；底账写失败只少一行记录，不回改这一轮的结论。
 	if e.save != nil {
 		e.save(t.RoundID, item.scopeID, strategyID, result)

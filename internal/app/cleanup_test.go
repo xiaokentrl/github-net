@@ -97,7 +97,7 @@ func TestPruneCachesSweepsThreeLayersAndKeepsFresh(t *testing.T) {
 
 	settingsDir := t.TempDir()
 	settings := config.NewStore(filepath.Join(settingsDir, "cfg", "config.json"), nil, nil, nil)
-	updates := filepath.Join(settingsDir, "updates")
+	updates := filepath.Join(settingsDir, "cfg", "updates") // updatesDir = config.json 所在目录旁的 updates/
 	ageFile(t, filepath.Join(updates, "github-net_0.1.0_amd64.deb"), 4*24*time.Hour)
 	freshPkg := filepath.Join(updates, "github-net_0.1.1_amd64.deb")
 	ageFile(t, freshPkg, time.Hour)

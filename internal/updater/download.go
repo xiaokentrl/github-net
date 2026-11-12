@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,13 +68,26 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	if err := os.MkdirAll(destDir, 0o700); err != nil {
 		return "", fmt.Errorf("建下载目录失败：%w", err)
 	}
+	// 资产来源白名单（安全边界方案：更新信任根）：只接受白名单里的协议+域。
+	// 上游应答被污染或账号被攻破时，下载可指向任意域——验签挡「装坏包」，白名单挡「下载哪」。
+	// 生产白名单全是 https 的 GitHub 域，所以「必须是 https」由白名单本身兜住，
+	// 不再单独判 scheme（判了会把测试假服务器的 http 资产一并拦死）。
+	u, err := url.Parse(asset.URL)
+	if err != nil {
+		return "", fmt.Errorf("%w: 资产地址解析不了：%q", ErrBadData, asset.URL)
+	}
+	if !assetOriginAllowed(u, c.allowedAssetOrigins) {
+		return "", fmt.Errorf("%w: 资产来源 %q 不在白名单", ErrBadData, u.Scheme+"://"+u.Host)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
 	if err != nil {
 		return "", fmt.Errorf("%w：%v", ErrNetwork, err)
 	}
 	resp, err := c.download.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("%w：%v", ErrNetwork, err)
+		// 双 %w 保住错误链：重定向被白名单拦下的那个 ErrBadData 藏在 url.Error 里，
+		// 不保链的话上层 errors.Is 只认得到 ErrNetwork，认不出真实原因。
+		return "", fmt.Errorf("%w：%w", ErrNetwork, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -131,4 +145,19 @@ func (c *Client) FetchChecksums(ctx context.Context, asset UpdateAsset, name, de
 		}
 	}
 	return "", fmt.Errorf("checksums.txt 里没有 %s 这一行", name)
+}
+
+// assetOriginAllowed 判断一个 URL 是否落在白名单里（按协议+域比对）。
+// 首跳资产地址与重定向的每一跳都用它；白名单项坏了按「不允许」算，不按「放行」算。
+func assetOriginAllowed(u *url.URL, origins []string) bool {
+	for _, o := range origins {
+		parsed, err := url.Parse(o)
+		if err != nil {
+			continue
+		}
+		if parsed.Scheme == u.Scheme && parsed.Host == u.Host {
+			return true
+		}
+	}
+	return false
 }

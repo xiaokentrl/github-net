@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -85,7 +86,11 @@ func main() {
 			oldPid, _ := strconv.Atoi(strings.TrimSpace(string(data)))
 			stillAlive := oldPid > 0 && oldPid != os.Getpid() && (func() bool {
 				if p, err := os.FindProcess(oldPid); err == nil {
-					return p.Signal(syscall.Signal(0)) == nil
+					// nil＝能发信号；EPERM＝进程存在但属其他用户——两种都算「活着」，
+					// 只有 ESRCH（进程没了）才算异常退出。判的是 Signal 自己的返回值，
+					// 不是 FindProcess 的（那个在这一分支里恒为 nil，判它 EPERM 永远不成立）。
+					sigErr := p.Signal(syscall.Signal(0))
+					return sigErr == nil || errors.Is(sigErr, syscall.EPERM)
 				}
 				return false
 			})()
@@ -261,7 +266,9 @@ func main() {
 			return
 		}
 		if path, err := windowGeometryPath(service.SettingsStore()); err == nil {
-			_ = os.WriteFile(path, data, 0o600)
+			// 原子写（复用 config 的 WriteFileAtomic）：断电也只会留下完整旧文件或完整新文件，
+			// 不会是半截 JSON——半截会让下次启动的几何恢复静默失效。
+			_ = config.WriteFileAtomic(path, data, 0o600)
 		}
 	}
 	// 收进托盘用 Minimise 不用 Hide（拍板 2026-11-09）：Wayland 禁止应用自摆 toplevel 位置，

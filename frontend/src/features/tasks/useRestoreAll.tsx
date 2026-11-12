@@ -114,5 +114,8 @@ export function useRestoreAllTasks(onError: (err: unknown) => void, onRestored?:
     </Dialog>
   ) : null
 
-  return { busy, restoreAll, restoreAllNow: runRestoreAll, confirmDialog }
+  // busy 并入「还原命令在途」：还原不进队列，队列任务看不见它——
+  // 不并入的话，还原进行中工具栏「还原 Hosts」照样可点、清理弹框的 Hosts 项不置灰，
+  // 点了被 restoringRef 静默挡下，用户看到「点了没反应」（2026-11-13 按钮审计中危）。
+  return { busy: busy || restoringRef.current, restoreAll, restoreAllNow: runRestoreAll, confirmDialog }
 }

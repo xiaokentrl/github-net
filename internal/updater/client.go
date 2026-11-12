@@ -66,22 +66,48 @@ type Client struct {
 	// http 只用于元数据检查（8 秒上限）；download 是安装包下载专用（5 分钟上限）。
 	http     *http.Client
 	download *http.Client
-	now      func() time.Time
+	// allowedAssetOrigins 是资产下载的来源白名单（协议+域，安全边界方案：更新信任根）。
+	// 生产白名单全是 https 的 GitHub 发布域——「必须是 https」由白名单本身兜住；
+	// 测试把查询指到假服务器时一并替换成假服务器的 origin。
+	allowedAssetOrigins []string
+	now                 func() time.Time
 }
 
 func NewClient() *Client {
-	return &Client{
+	c := &Client{
 		baseURL: ReleasesAPI,
 		// 代理策略（网络与离线弹性方案纪律）：遵循环境变量代理（Go 默认
 		// ProxyFromEnvironment），不读桌面 GUI 代理设置；证书校验不降级。
 		http:     &http.Client{Timeout: checkTimeout},
 		download: &http.Client{Timeout: downloadTimeout},
 		now:      time.Now,
+		allowedAssetOrigins: []string{
+			"https://github.com",
+			"https://objects.githubusercontent.com",
+			"https://release-assets.githubusercontent.com",
+		},
 	}
+	// 白名单逐跳复验：GitHub 发布域常 302 到 CDN，默认跟随重定向的话，
+	// 白名单域把下载引到任意域就绕过了「白名单挡下载哪」这道闸（2026-11-13 审计）。
+	// 验签仍然兜底，但每一跳都得是白名单里的来源才算听话。
+	c.download.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("重定向超过 10 跳，不再跟随：%q", req.URL)
+		}
+		if !assetOriginAllowed(req.URL, c.allowedAssetOrigins) {
+			return fmt.Errorf("%w: 重定向后的来源 %q 不在白名单", ErrBadData, req.URL.Host)
+		}
+		return nil
+	}
+	return c
 }
 
 // SetBaseURL 只给测试用：把查询地址指到假服务器；生产代码一律 NewClient 的默认值。
 func (c *Client) SetBaseURL(url string) { c.baseURL = url }
+
+// SetAllowedAssetOrigins 只给测试用：把资产来源白名单指到假服务器——
+// 资产 URL 跟着查询地址走（都指向同一个假服务器），白名单不跟着换就全被拦。
+func (c *Client) SetAllowedAssetOrigins(origins []string) { c.allowedAssetOrigins = origins }
 
 // release 是 GitHub releases/latest 应答里本包关心的几个字段。
 type release struct {

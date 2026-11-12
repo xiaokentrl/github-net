@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/xiaokentrl/github-net/internal/config"
 	"github.com/xiaokentrl/github-net/internal/updater"
 )
 
@@ -185,8 +186,14 @@ func srvDirWith(t *testing.T, files map[string][]byte) string {
 func newUpdateService(t *testing.T, baseURL string, pub ed25519.PublicKey) *Service {
 	t.Helper()
 	c := updater.NewClient()
+	// 资产来源白名单跟着查询地址走：假应答里的 asset.URL 与 baseURL 同源（同一假服务器），
+	// 生产白名单（https+GitHub 域）在测试环境必须换成假服务器的来源。
+	c.SetAllowedAssetOrigins([]string{baseURL})
 	c.SetBaseURL(baseURL)
-	return &Service{updater: c, pubKey: pub}
+	// 升级包落点在 config.json 旁边（应用数据目录内），没有配置服务就没有落点——
+	// 测试服务也按生产形状配上（2026-11-13 审计把落点从 ~/.config/updates 收回应用目录内）。
+	settings := config.NewStore(filepath.Join(t.TempDir(), "config", "config.json"), nil, nil, nil)
+	return &Service{updater: c, pubKey: pub, settings: settings}
 }
 
 // withOpenSeam 把「请系统打开文件」换成记录函数：CI 容器里没有 xdg-open，

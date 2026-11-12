@@ -5,6 +5,8 @@ import { clearFinishedTasks, getTasks } from '../../api/client'
 import { getErrorMessage } from '../../api/errors'
 import { pickBestCandidate } from '../detect/candidateChoice'
 import { useBarResize } from '../../components/layout/useBarResize'
+import { isTerminalTask } from './taskStore'
+import { pushNotice } from '../../components/ui/toastStore'
 import { t } from '../../i18n'
 import { formatDateTime } from '../../i18n/formatters'
 import { clampQueueHeight, QUEUE_HEIGHT_DEFAULT, QUEUE_HEIGHT_MIN } from './queueHeight'
@@ -187,8 +189,15 @@ export function TaskPanel({
   }, [])
 
   const onClearFinished = useCallback(() => {
-    clearFinishedTasks().then(applyTaskSnapshot).catch(handleError)
-  }, [handleError])
+    // 全是进行中任务时清完是 0 条：不给提示就是「点了没反应」（操作反馈方案三态）。
+    const hadFinished = state.tasks.some((tk) => isTerminalTask(tk.status))
+    clearFinishedTasks()
+      .then(applyTaskSnapshot)
+      .then(() => {
+        if (!hadFinished) pushNotice('info', t('queue.clearFinished.none'))
+      })
+      .catch(handleError)
+  }, [handleError, state.tasks])
 
   const onRetryLoad = useCallback(() => {
     getTasks().then(applyTaskSnapshot).catch(markTaskLoadError)
@@ -383,7 +392,12 @@ export function TaskPanel({
             {heightLocked ? t('queue.heightLock.unlock') : t('queue.heightLock.lock')}
           </button>
           {lockSaveError ? <span className={styles.lockError} title={lockSaveError}>{lockSaveError}</span> : null}
-          <button type="button" onClick={onClearFinished} disabled={!state.loaded || state.loadError}>
+          <button
+            type="button"
+            onClick={onClearFinished}
+            disabled={!state.loaded || state.loadError}
+            title={state.loadError ? t('queue.clearFinished.loadFailed') : undefined}
+          >
             {t('queue.clearFinished')}
           </button>
           {/* 收起/展开：原型队列头最后那颗 toggle-btn。它会改高度，锁定时整颗禁用，避免点了没反应。 */}

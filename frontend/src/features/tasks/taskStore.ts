@@ -101,16 +101,20 @@ function refreshRounds() {
 }
 
 // applyTaskEvent 按水位收任务事件：旧序号丢弃（快照里已包含），新任务按 ID 覆盖。
-// 检测任务开跑（进入 running）意味着新一轮开始：把该项目上一轮的候选和计数清掉，
-// 免得上一轮的行和这一轮的行混在一张表里。
+// 检测任务「转入」running（从排队/终态/新任务进来的那一次）意味着新一轮开始：
+// 把该项目上一轮的候选和计数清掉，免得上一轮的行和这一轮的行混在一张表里。
+// 只在转入那一刻清一次：后端检测过程中每条候选进度都会重发 running 事件
+// （queue.go 的 reporter 每次 report 都发布），逐条清会把刚画出来的候选行反复抹掉，
+// 整轮检测期间详情页就只剩最后一个批次的行（2026-11-13 审计高危）。
 export function applyTaskEvent(payload: TaskProgressPayload) {
   if (payload.sequence <= state.sequence) return
+  const previousStatus = state.tasks.find((t) => t.id === payload.task.id)?.status
   const tasks = state.tasks.some((t) => t.id === payload.task.id)
     ? state.tasks.map((t) => (t.id === payload.task.id ? payload.task : t))
     : [...state.tasks, payload.task]
   const next: Partial<TaskState> = { sequence: payload.sequence, tasks }
   if (payload.task.roundId && !state.rounds.some((round) => round.id === payload.task.roundId)) refreshRounds()
-  if (payload.task.kind === 'detect' && payload.task.status === 'running') {
+  if (payload.task.kind === 'detect' && payload.task.status === 'running' && previousStatus !== 'running') {
     const results = { ...state.results }
     const live = { ...state.live }
     delete results[payload.task.itemId]

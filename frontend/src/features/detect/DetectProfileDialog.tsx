@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { getLastDetectProfile, setLastDetectProfile, type NetworkProfile } from '../../api/client'
 import { MethodDetectPicker } from '../strategies/MethodDetectPicker'
 import { Dialog } from '../../components/ui/Dialog'
+import { pushNotice } from '../../components/ui/toastStore'
 import uiStyles from '../../components/ui/ui.module.css'
 import { t } from '../../i18n'
 import { PROFILE_IDS, profileLabel, profileLimitText, profileNote, type ProfileID } from '../settings/profileOptions'
@@ -37,7 +38,9 @@ export function DetectProfileDialog({
   const [selected, setSelected] = useState<ProfileID>(cachedProfile ?? 'low')
   const [remember, setRemember] = useState(cachedProfile !== null)
   const touched = useRef(false)
-  // 方法下拉：默认预选「已保存的默认方法」；动了就钉住该方法，只作用于这一轮。
+  // 方法下拉：预选「使用已有储存」（无则退已保存默认）；动了就钉住该方法，只作用于这一轮。
+  // methodReady：方法清单读完才放开确认——没读完就点会静默走默认方法链（审计缺口 3）。
+  const [methodReady, setMethodReady] = useState(scopeId === undefined)
   const [strategyId, setStrategyId] = useState('')
 
 
@@ -65,9 +68,10 @@ export function DetectProfileDialog({
     const next = remember ? selected : null
     cachedProfile = next
     overriddenThisRun = true
-    // 写盘失败只降级成「本次运行记住」，不挡住这一轮检测。
-    void setLastDetectProfile(next ?? '').catch((err: unknown) => {
-      console.error('记住检测档位失败', err)
+    // 写盘失败如实递一条（2026-11-13 按钮审计低危）：用户以为记住了，重启后发现没记
+    // 会当成 bug。本次运行内缓存还在（只降级成「本次运行记住」），这一轮检测照常发起。
+    void setLastDetectProfile(next ?? '').catch(() => {
+      pushNotice('warning', t('detect.profile.rememberFailed'))
     })
     onConfirm(selected, strategyId === '' ? undefined : strategyId)
   }
@@ -84,6 +88,8 @@ export function DetectProfileDialog({
           <button
             type="button"
             className={`${uiStyles.btn} ${uiStyles.primary}`}
+            disabled={!methodReady}
+            title={!methodReady ? t('detect.profile.methodLoading') : undefined}
             onClick={confirm}
           >
             {t('detect.profile.ask.action')}
@@ -95,7 +101,20 @@ export function DetectProfileDialog({
       {scopeId ? (
         <div className={styles.methodRow}>
           <p className={styles.methodNote}>{t('detail.detectBox.pickerNote')}</p>
-          <MethodDetectPicker scopeId={scopeId} compact showButton={false} onPick={setStrategyId} />
+          <MethodDetectPicker
+            scopeId={scopeId}
+            compact
+            onPick={(id) => {
+              setStrategyId(id)
+              setMethodReady(true)
+            }}
+            onReady={(ready) => {
+              // 读失败/清单为空：也放开确认（退默认方法链）——别把用户卡死在弹框里（审计缺口 3）。
+              // 失败原因已由 picker 的 error 分支摆在框内。
+              setMethodReady(true)
+              if (!ready) setStrategyId('')
+            }}
+          />
         </div>
       ) : null}
       <div className={cardStyles.profileGrid}>

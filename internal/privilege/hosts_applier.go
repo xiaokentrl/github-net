@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/xiaokentrl/github-net/internal/hosts"
@@ -20,10 +22,34 @@ type HostsApplier struct {
 	// root 服务用 /var/lib/github-net；测试传临时目录。
 	dataDir string
 	now     func() time.Time
+	// writeMu 串行化全部写事务（对照《原子性提交方案》并发写防护）：
+	// 「还原全部」不走应用队列，没有这把锁时与在途应用并发 load→persist 会互相覆盖。
+	writeMu sync.Mutex
 }
 
 func NewHostsApplier(hostsPath, dataDir string) *HostsApplier {
 	return &HostsApplier{hostsPath: hostsPath, dataDir: dataDir, now: time.Now}
+}
+
+// lockFile 拿数据目录上的跨进程排它锁，返回解锁函数。
+// socket 启动防抖（helper 侧）挡住绝大多数双实例，这把 flock 兜住最后一路：
+// 防抖失效仍然双开时，两个进程的写事务在这里排队，不再 load→rename 互相覆盖丢更新。
+func (a *HostsApplier) lockFile() (func(), error) {
+	if err := os.MkdirAll(a.dataDir, 0o700); err != nil {
+		return nil, fmt.Errorf("%w：建数据目录失败：%v", ErrHostsWrite, err)
+	}
+	f, err := os.OpenFile(filepath.Join(a.dataDir, lockFileName), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("%w：开不了写互斥标记：%v", ErrHostsWrite, err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("%w：拿不到跨进程写锁：%v", ErrHostsWrite, err)
+	}
+	return func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+	}, nil
 }
 
 // 元数据与备份的固定文件名。备份最多一份当前有效恢复点：下一次「首次写入」会覆盖它。
@@ -31,6 +57,8 @@ const (
 	metaFileName   = "recovery.json"
 	backupDirName  = "backups"
 	backupFileName = "hosts-original.bak"
+	// lockFileName 是跨进程写互斥的标记文件：writeMu 只在单进程内有效（2026-11-13 审计中危）。
+	lockFileName = "write.lock"
 )
 
 var (
@@ -44,6 +72,13 @@ var (
 // Apply 把一个项目的一批映射写进 Hosts：算出新区段、备份（仅首次）、原子替换、重读校验、失败回滚。
 // 返回的 error 都带可直接展示的中文说明；原始错误串在 %w 链里，不外发。
 func (a *HostsApplier) Apply(itemID string, mappings []hosts.Mapping) error {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
+	unlock, lerr := a.lockFile()
+	if lerr != nil {
+		return lerr
+	}
+	defer unlock()
 	content, meta, err := a.load()
 	if err != nil {
 		return err
@@ -56,11 +91,18 @@ func (a *HostsApplier) Apply(itemID string, mappings []hosts.Mapping) error {
 	if err != nil {
 		return fmt.Errorf("这一批映射没能合并进管理区段：%v", err)
 	}
-	return a.persist(meta, newMeta, newContent)
+	return a.persist(meta, content, newMeta, newContent)
 }
 
 // RestoreItem 把一个项目退回它应用前的映射。
 func (a *HostsApplier) RestoreItem(itemID string) error {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
+	unlock, lerr := a.lockFile()
+	if lerr != nil {
+		return lerr
+	}
+	defer unlock()
 	content, meta, err := a.load()
 	if err != nil {
 		return err
@@ -72,12 +114,19 @@ func (a *HostsApplier) RestoreItem(itemID string) error {
 	if err != nil {
 		return fmt.Errorf("这个项目没能还原：%v", err)
 	}
-	return a.persist(meta, newMeta, newContent)
+	return a.persist(meta, content, newMeta, newContent)
 }
 
 // RestoreAll 把全部还由工具管理的项目退回应用前状态，返回实际还原的项目数。
 // 全部退光后元数据和备份一起清掉——那个恢复点已经没有要还原的东西了。
 func (a *HostsApplier) RestoreAll() (int, error) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
+	unlock, lerr := a.lockFile()
+	if lerr != nil {
+		return 0, lerr
+	}
+	defer unlock()
 	content, meta, err := a.load()
 	if err != nil {
 		return 0, err
@@ -89,7 +138,7 @@ func (a *HostsApplier) RestoreAll() (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("没能还原：%v", err)
 	}
-	if err := a.persist(meta, newMeta, newContent); err != nil {
+	if err := a.persist(meta, content, newMeta, newContent); err != nil {
 		return 0, err
 	}
 	return len(restored), nil
@@ -99,7 +148,11 @@ func (a *HostsApplier) RestoreAll() (int, error) {
 // 恢复元数据在 root 数据目录里、界面进程读不到，所以这一步放到特权服务侧做。
 // itemIDs 为空＝清除已写入的 Hosts（全量）；一个＝行级还原；多个＝「还原本菜单」按给定顺序一起还原。
 // 没写过（账本不存在）时返回空预览，不是错误。
+// 走 writeMu：写事务「先 rename Hosts、后 rename meta」分两步，不加锁的话
+// 两步之间读到的 Hosts 与 meta 是两代账本，界面可能闪一次假冲突（2026-11-13 审计低危）。
 func (a *HostsApplier) Preview(itemIDs []string) (hosts.RestorePreview, error) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
 	content, meta, err := a.load()
 	if err != nil {
 		return hosts.RestorePreview{}, err
@@ -117,7 +170,10 @@ func (a *HostsApplier) Preview(itemIDs []string) (hosts.RestorePreview, error) {
 // State 只读恢复元数据，回答「最后一次成功写入是哪批映射」。
 // 不改任何文件，也不读 Hosts 原文：界面拿它和现读的区段比对，判断已应用还是被改过。
 // 元数据不存在就是「没写过」，返回零值而不是错误——这两件事不能混。
+// 同 Preview 走 writeMu：别在写事务两步之间读走半代账本。
 func (a *HostsApplier) State() (hosts.Written, error) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
 	metaRaw, err := os.ReadFile(a.metaPath())
 	if errors.Is(err, os.ErrNotExist) {
 		return hosts.Written{}, nil
@@ -154,18 +210,26 @@ func (a *HostsApplier) load() (string, hosts.Recovery, error) {
 
 // persist 完成一次成功计算后的落盘三步：备份（仅首次）、原子替换、重读校验，失败即回滚。
 // before 是事务前的元数据：回滚时元数据也要退回去，账实两边一致。
-func (a *HostsApplier) persist(before, newMeta hosts.Recovery, newContent string) error {
+// preTxContent 是事务前的 Hosts 全文：回滚写回它（而不是首次原文）——
+// 非首次写入校验失败时，写回首次原文会把已应用的前几项映射一起抹掉，账实分裂、工具自锁。
+func (a *HostsApplier) persist(before hosts.Recovery, preTxContent string, newMeta hosts.Recovery, newContent string) error {
 	if err := a.backupOnce(before); err != nil {
 		return err
 	}
 	if err := a.writeHosts(newContent); err != nil {
 		return err
 	}
+	// 残余窗口（2026-11-13 审计存档）：writeHosts 成功后、saveMeta 之前进程崩溃/断电，
+	// Hosts 是新区段而 meta 是旧摘要，下一笔会被 Check 判冲突自锁——saveMeta「写失败」
+	// 已走下面的回滚出路，但「进程当场消失」挡不住，只能靠手工改 /etc/hosts 或删备份恢复。
+	// 要根治得加「按 Hosts 实况重建账本」的白名单协议操作，成本大于收益，先存档。
 	if err := a.verify(newMeta); err != nil {
-		rollbackErr := a.rollback(before)
+		rollbackErr := a.rollback(before, preTxContent, newContent)
 		if rollbackErr != nil {
 			return fmt.Errorf("%w，而且回滚也失败了（%v）；系统 Hosts 可能停在中间状态，请尽快检查 %s", ErrVerifyFailed, rollbackErr, a.hostsPath)
 		}
+		// 回滚成功：盘上已回到事务前内容，但新内容可能已被 resolver 缓存过——也刷一次。
+		flushDNSCache()
 		return fmt.Errorf("%w：已回滚到写入前内容，这次修改没有生效", ErrVerifyFailed)
 	}
 	if !newMeta.Exists() {
@@ -175,7 +239,15 @@ func (a *HostsApplier) persist(before, newMeta hosts.Recovery, newContent string
 		return nil
 	}
 	if err := a.saveMeta(newMeta); err != nil {
-		return fmt.Errorf("%w：内容已写入但元数据没能保存，还原能力受损：%v", ErrHostsWrite, err)
+		// 元数据写不进去（数据目录满/权限突变时真实可达）：不能停在「内容已写入、账本还是旧账」
+		// ——下一笔任何操作都会因区段摘要对不上被拒，工具自锁（2026-11-13 审计中危）。
+		// 与 verify 失败同一条出路：回滚到事务前内容，这笔事务整体算失败。
+		rollbackErr := a.rollback(before, preTxContent, newContent)
+		if rollbackErr != nil {
+			return fmt.Errorf("%w：内容已写入但元数据没能保存（%v），而且回滚也失败了（%v）；系统 Hosts 可能停在中间状态，请尽快检查 %s", ErrHostsWrite, err, rollbackErr, a.hostsPath)
+		}
+		flushDNSCache()
+		return fmt.Errorf("%w：元数据没能保存（%v），已回滚到写入前内容，这次修改没有生效", ErrHostsWrite, err)
 	}
 	// 全部退光就没有要还原的东西了：清掉恢复点，别留一份永远用不上的旧账本。
 	if !newMeta.InUse() && newMeta.Exists() {
@@ -261,12 +333,28 @@ func (a *HostsApplier) verify(meta hosts.Recovery) error {
 
 // rollback 把 Hosts 写回事务前的内容，元数据一并退回。任何一步失败都如实上抛：
 // 回滚失败必须大声说，不能装作「没事了」。
-func (a *HostsApplier) rollback(before hosts.Recovery) error {
-	if err := a.writeHosts(before.Original); err != nil {
+// preTxContent 为空（理论上只在首笔事务）时才写回 before.Original；
+// 写回前先确认现文件仍是本次事务写入的 newContent——已被外部改动拒绝覆盖；
+// 现文件读不出来也拒绝：fail-closed，宁可大声失败也不盲写盖掉未知内容（2026-11-13 审计低危）。
+func (a *HostsApplier) rollback(before hosts.Recovery, preTxContent string, expectedContent string) error {
+	raw, err := os.ReadFile(a.hostsPath)
+	if err != nil {
+		return fmt.Errorf("%w：写回前读不了系统 Hosts（%v），拒绝盲写覆盖", ErrVerifyFailed, err)
+	}
+	if string(raw) != expectedContent {
+		return fmt.Errorf("%w：写回前发现系统 Hosts 已被外部改动（与本次事务写入的内容不一致），拒绝覆盖", ErrVerifyFailed)
+	}
+	target := preTxContent
+	if !before.Exists() {
+		target = before.Original
+	}
+	if err := a.writeHosts(target); err != nil {
 		return err
 	}
-	if _, err := os.ReadFile(a.hostsPath); err != nil {
+	if after, err := os.ReadFile(a.hostsPath); err != nil {
 		return fmt.Errorf("回滚后重读失败：%v", err)
+	} else if string(after) != target {
+		return fmt.Errorf("%w：回滚后重读的内容与事务前不一致，请检查 %s", ErrVerifyFailed, a.hostsPath)
 	}
 	if before.Exists() {
 		return a.saveMeta(before)

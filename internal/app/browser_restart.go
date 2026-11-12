@@ -424,10 +424,21 @@ func (s *Service) restartBrowsersAfterApply(roundID string) {
 		return
 	}
 	written := 0
+	total := 0
 	for _, t := range s.tasks.Snapshot().Tasks {
-		if t.RoundID == roundID && t.Kind == task.KindApply && t.Status == task.StatusDone {
-			written++
+		if t.RoundID == roundID && t.Kind == task.KindApply {
+			total++
+			if t.Status == task.StatusDone {
+				written++
+			}
 		}
+	}
+	if total == 0 {
+		// 这轮一条任务都没有：双击第二次调用里所有项都被队列去重复用了已有行，
+		// 没有属于本轮的任何任务——第一轮已经报过结论，这里再报 noWritten 就是噪音
+		// （2026-11-13 按钮审计中危）。静默退出，不占重启窗口。
+		log.Printf("[browser-restart] 轮次 %s 快照里没有本轮任务，静默跳过", roundID)
+		return
 	}
 	if written == 0 {
 		// 全跳过、全失败，或用户点了「清空已完成」把本轮终态记录删掉，都会走到这里。

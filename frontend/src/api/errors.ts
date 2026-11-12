@@ -20,6 +20,7 @@ export const APP_ERROR_CODES = [
   // 队列
   'invalid_task_id',
   'queue_running',
+  'queue_busy',
   // 检测与应用/还原
   'invalid_item_id',
   'no_strategy_selected',

@@ -75,11 +75,13 @@ export function ClearSourcesCache(itemIDs: string[] | null): $CancellablePromise
 /**
  * DetectBudget 预估一批项目的共享预算，不排队、不发起检测。
  * 界面在 Shortfall > 0 时先请用户确认，再调 DetectItems。
+ * strategyID 与 DetectItems 同义：弹框里钉定的方法要算进预算口径——
+ * 选「使用已有储存」的批次不联网，探测预算为 0，不该被确认弹框白问。
  * profile 与 DetectItems 同义：弹框里选的档位也要算进这一轮的预算预估，
  * 否则「还差多少次」那句会按设置里的旧档位算，和真正开跑的那轮对不上。
  */
-export function DetectBudget(itemIDs: string[] | null, profile: string): $CancellablePromise<$models.DetectBudgetPreview> {
-    return $Call.ByID(1406865640, itemIDs, profile);
+export function DetectBudget(itemIDs: string[] | null, strategyID: string, profile: string): $CancellablePromise<$models.DetectBudgetPreview> {
+    return $Call.ByID(1406865640, itemIDs, strategyID, profile);
 }
 
 /**

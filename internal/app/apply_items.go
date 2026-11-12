@@ -311,6 +311,14 @@ func (s *Service) RestoreAllHosts() (int, error) {
 	if s.priv == nil {
 		return 0, NewError(CodeHelperUnavailable, "特权辅助服务没在运行，无法还原", nil)
 	}
+	// 队列在途的应用/还原任务会收尾时重标「当前生效」，与这里的 clearApplied 先后不定，
+	// 标记可能短暂说假话（2026-11-13 按钮审计低危）。前端 busy 挡得住常规操作，
+	// 后端再如实拒绝一道：有在途任务就说等它跑完。
+	for _, t := range s.queueTasks() {
+		if (t.Kind == task.KindApply || t.Kind == task.KindRestore) && task.IsActive(t.Status) {
+			return 0, NewError(CodeQueueBusy, "队列里还有应用/还原任务在跑，等它完成再还原全部", nil)
+		}
+	}
 	n, err := s.priv.RestoreAll()
 	if err != nil {
 		return 0, privilegePublicError(err)
@@ -410,8 +418,13 @@ func (s *Service) OpenHosts() error {
 		// 内部原因交给 Error() 追加一次，这里不再拼进消息：拼了界面上就是同一句两遍。
 		return NewError(CodeHostsFailed, "没能打开 Hosts 文件", err)
 	}
-	// 不等编辑器退出：打开成功就算完成，进程交给系统。
-	go func() { _ = cmd.Wait() }()
+	// 不等编辑器退出：打开成功就算完成，进程交给系统。启动了但立刻失败（无桌面会话等）
+	// 至少落一行日志——之前静默吞掉，「没反应」连排障线索都没有（2026-11-13 按钮审计低危）。
+	go func() {
+		if waitErr := cmd.Wait(); waitErr != nil {
+			log.Printf("[open-hosts] 编辑器进程退出异常：%v", waitErr)
+		}
+	}()
 	return nil
 }
 

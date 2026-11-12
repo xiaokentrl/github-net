@@ -239,9 +239,11 @@ type DetectBudgetPreview struct {
 
 // DetectBudget 预估一批项目的共享预算，不排队、不发起检测。
 // 界面在 Shortfall > 0 时先请用户确认，再调 DetectItems。
+// strategyID 与 DetectItems 同义：弹框里钉定的方法要算进预算口径——
+// 选「使用已有储存」的批次不联网，探测预算为 0，不该被确认弹框白问。
 // profile 与 DetectItems 同义：弹框里选的档位也要算进这一轮的预算预估，
 // 否则「还差多少次」那句会按设置里的旧档位算，和真正开跑的那轮对不上。
-func (s *Service) DetectBudget(itemIDs []string, profile string) (DetectBudgetPreview, error) {
+func (s *Service) DetectBudget(itemIDs []string, strategyID string, profile string) (DetectBudgetPreview, error) {
 	if s.productCatalogErr != nil {
 		return DetectBudgetPreview{}, ToPublicError(s.productCatalogErr)
 	}
@@ -259,15 +261,48 @@ func (s *Service) DetectBudget(itemIDs []string, profile string) (DetectBudgetPr
 	cfg.Network.Profile = roundProfile
 	seen := make(map[string]bool)
 	hostnames := make(map[string]bool)
+	pinned := strings.TrimSpace(strategyID)
+	if pinned != "" {
+		// 钉定方法先整体验一次存在性，报错文案与 DetectItems 逐字一致（同一动作同一说法）。
+		if _, ok := s.strategyTable.lookup(pinned); !ok {
+			return DetectBudgetPreview{}, NewError(CodeNoStrategySelected,
+				"要检测的方法已经不在注册表里，换一个方法再检测", nil)
+		}
+	}
 	for _, raw := range itemIDs {
 		id := strings.TrimSpace(raw)
 		if id == "" || seen[id] {
 			continue
 		}
 		seen[id] = true
-		_, _, item, ok := s.lookupItem(id)
+		_, scopeID, item, ok := s.lookupItem(id)
 		if !ok {
 			return DetectBudgetPreview{}, NewError(CodeInvalidItemID, "产品目录里没有这个项目，刷新界面后再试", nil)
+		}
+		// 方法解析与 DetectItems 同一条链、同一套校验：钉定→范围默认→出厂默认，
+		// 逐项 lookup＋适用范围校验。预算只算「联网探测」要花多少——注意「使用已有储存」
+		// 只是不重新拉源，候选照样要真探测（stored_ips.go 开头写明），域名照常计入，
+		// 不能因为方法名看着「省」就把它从预算里剔掉（2026-11-13 审计纠正）。
+		// 校验不照搬的话会出现「预估给得出数字、执行整批被拒」的两张皮。
+		used := pinned
+		if used == "" {
+			used = strings.TrimSpace(cfg.Accelerator.DefaultStrategyByScope[scopeID])
+		}
+		if used == "" {
+			used, _ = factoryDefaultStrategy(scopeID)
+		}
+		if used == "" {
+			return DetectBudgetPreview{}, NewError(CodeNoStrategySelected,
+				"这个项目所在的服务还没选检测方法，先在详情顶部的加速方法区选一个", nil)
+		}
+		strategy, ok := s.strategyTable.lookup(used)
+		if !ok {
+			return DetectBudgetPreview{}, NewError(CodeNoStrategySelected,
+				"之前选的那个检测方法已经不在注册表里，重新选一个方法再检测", nil)
+		}
+		if !strategyApplies(strategy, scopeID) {
+			return DetectBudgetPreview{}, NewError(CodeNoStrategySelected,
+				"选的方法不适用于这个项目所在的服务，换一个方法再检测", nil)
 		}
 		for _, h := range uniqueHostnames(item.Hostnames) {
 			hostnames[h] = true

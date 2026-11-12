@@ -73,7 +73,11 @@ export function TrayPill({
             role="menuitem"
             onClick={() => {
               setOpen(false)
-              runWindowAction(() => Window.Hide())
+              // 收托盘用 Minimise 不用 Hide（拍板 2026-11-09，main.go 系统托盘同款）：
+              // Wayland 禁止应用自摆 toplevel 位置，Hide 再 Show 会由合成器重新摆位（窗口跳回中间）；
+              // 最小化不销毁窗口映射，合成器记得原位置，唤回时原位恢复。
+              // 与系统托盘的差异只剩「这次没有顺手落盘窗口几何」——下次收进系统托盘或退出时会存。
+              runWindowAction(() => Window.Minimise())
             }}
           >
             {t('tray.minimize')}

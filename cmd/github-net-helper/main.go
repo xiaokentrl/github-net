@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	"github.com/xiaokentrl/github-net/internal/privilege"
 )
@@ -33,6 +34,13 @@ func run(hostsPath, dataDir string) error {
 		return fmt.Errorf("建端点目录 %s: %w", privilege.RootEndpointDir, err)
 	}
 	socket := privilege.RootEndpointDir + "/" + privilege.EndpointName
+	// 删旧 socket 前先试连一下：连得上＝已有活服务在跑（手动/脚本误拉起第二个实例），
+	// 退出而不是抢走它的 socket——盲删会让两个 root 进程并发写 /etc/hosts 丢更新
+	// （进程内的 writeMu 拦不住跨进程，2026-11-13 审计中危；数据目录 flock 兜最后一路）。
+	if c, dialErr := net.DialTimeout("unix", socket, time.Second); dialErr == nil {
+		_ = c.Close()
+		return fmt.Errorf("已有辅助服务在监听 %s，本实例退出", socket)
+	}
 	// 旧 socket 是上一次异常退出留下的：删掉重建，bind 才不会撞「地址已在使用」。
 	_ = os.Remove(socket)
 	ln, err := net.Listen("unix", socket)

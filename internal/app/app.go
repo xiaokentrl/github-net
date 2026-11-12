@@ -18,6 +18,7 @@ package app
 import (
 	"crypto/ed25519"
 	"errors"
+	"log"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -63,7 +64,10 @@ type Service struct {
 	// browserMu/browserLastRestart 给「应用后重启浏览器」去抖；browserWG 登记
 	// 在途的重启 goroutine——自动化链退出进程前要先等它，不然会出现
 	// 「Hosts 写成功了、浏览器被杀了、进程先退了谁都没拉起」。
-	browserMu          sync.Mutex
+	browserMu sync.Mutex
+	// downloadMu 串行化「下载并安装更新」：并发两次会互相 RemoveAll 掉对方在途的包
+	//（2026-11-13 按钮审计中危）。按钮侧有单点置灰，后端不依赖前端设防。
+	downloadMu         sync.Mutex
 	browserLastRestart time.Time
 	browserWG          sync.WaitGroup
 
@@ -152,6 +156,10 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	if p, perr := config.Path(); perr == nil {
 		if db, derr := store.Open(filepath.Join(filepath.Dir(p), "detect-history.db")); derr == nil {
 			candDB = db
+		} else {
+			// 降级要留痕（对照《应用状态与持久化技术方案》的「损坏降级预先选定+提示」）：
+			// 底账是锦上添花不拦启动，但用户该知道「不留历史」这件事发生了。
+			log.Printf("[底账] 候选库打不开，本轮降级为无底账运行（检测不受影响，只是不留历史）：%v", derr)
 		}
 		// 公共源的当天落盘缓存也接在这里（拍板 2026-11-02：一天只下一份）。
 		// 接的是检测共用的那一份 github.Default，所以「清理已选缓存」清完，下一轮检测才会真的重新下载。

@@ -53,8 +53,10 @@ const (
 
 	// 队列这一组的码：前端按码分支，不解析中文。
 	// invalid_task_id：排队请求缺必要信息；queue_running：队列已经不再收任务。
+	// queue_busy：队列里有在途任务挡住这笔直接命令（还原全部、清缓存）——等它跑完再试。
 	CodeInvalidTaskID = "invalid_task_id"
 	CodeQueueRunning  = "queue_running"
+	CodeQueueBusy     = "queue_busy"
 
 	// 检测入口这一组的码：前端按码分支，不解析中文。
 	// invalid_item_id：这次要检测的项目 ID 在目录里找不到（多半是过期界面发来的）。
@@ -64,7 +66,8 @@ const (
 	CodeNoStrategySelected = "no_strategy_selected"
 
 	// 应用与还原这一组的码：前端按码分支，不解析中文。
-	// no_detect_result：这个项目还没有检测结果或最近一轮没有可用候选，应用被入口挡下。
+	// no_detect_result：已退役（2026-11-13 审计）——应用入口的挡下项改为逐项 skipped 进队列，
+	// 不再整批报错。码表发布即冻结，保留登记防后人误当活路径。
 	// helper_unavailable：特权辅助服务连不上（直接命令场景；队列任务里同类失败进任务文案）。
 	// hosts_failed：服务拒绝或写失败，可展示原因在消息里。
 	CodeNoDetectResult    = "no_detect_result"
@@ -79,7 +82,10 @@ const (
 )
 
 // Error 带稳定错误码。cause 是不导出的字段：它只给日志和 errors.Is 用，
-// 不会进 JSON，也不会出现在 Wails 生成的绑定类型里，所以前端拿不到内部细节。
+// 不会进 JSON，也不会出现在 Wails 生成的绑定类型里。
+// 注意（2026-11-13 审计如实化）：cause 会进 Error() 字符串（「码: 消息: 内部原因」），
+// Wails 按这个字符串把错误传给界面——界面上会出现带本地路径/errno 的尾巴。
+// 前端按码前缀分支不受影响；内部细节当排障噪音看，别当安全保证。
 type Error struct {
 	Code    string
 	Message string

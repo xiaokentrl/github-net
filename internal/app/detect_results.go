@@ -153,9 +153,11 @@ func (s *detectResultStore) markProbe(itemID, hostname, ip string, status accele
 // view 把某项目最近一轮结果整理成给前端的 DTO。没有记录时 ok 为 false，
 // 调用方返回「还没有检测结果」的空形状，这不是错误。
 func (s *detectResultStore) view(itemID string) (DetectResultView, bool) {
+	// DTO 组装全程持锁：markProbe/markApplied 会原地改 Candidates/Hostnames，
+	// 解锁后遍历是真实数据竞争（对照复核 G1）。
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	rec, ok := s.byItem[itemID]
-	s.mu.Unlock()
 	if !ok {
 		return DetectResultView{}, false
 	}

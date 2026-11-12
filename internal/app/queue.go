@@ -30,6 +30,9 @@ func (pendingExecutor) Execute(_ context.Context, _ task.Task, _ task.Report) ta
 // Wails 会把 Service 的每个导出方法都当成命令绑给前端，而「停掉队列」不该是前端能点的东西。
 // 所以停止走下面那个包级函数，由 main.go 在退出时调用。
 func newTaskQueue(exec task.Executor, emit func(name string, payload any)) *task.Queue {
+	// 检测车道生产恒为 1：检测任务串行，网络并发由探测闸（accelerator.MaxConcurrency=8）
+	// 在网络上收口——车道机制（newTaskQueueLaned）保留给测试与将来调优，
+	// TECHNICAL_PLAN 里「车道上限 8」说的机制能力，不是生产参数。
 	return newTaskQueueLaned(exec, emit, 1)
 }
 
@@ -40,6 +43,16 @@ func newTaskQueueLaned(exec task.Executor, emit func(name string, payload any), 
 
 // GetTasks 返回队列快照和 sequence 水位。它只读内存里的一把锁，没有失败面，所以不返回错误。
 // 快照里的任务按入队顺序排列，tasks 为空时是空数组而不是 null。
+// queueTasks 是 nil 安全的任务清单：直接命令的互斥检查用它。
+// 生产 Service 的队列必在；测试夹具常只建要测的那几块，队列是 nil——
+// nil 就是没有任务在跑，直接命令的互斥检查放行。
+func (s *Service) queueTasks() []task.Task {
+	if s.tasks == nil {
+		return nil
+	}
+	return s.tasks.Snapshot().Tasks
+}
+
 func (s *Service) GetTasks() task.Snapshot {
 	return s.tasks.Snapshot()
 }

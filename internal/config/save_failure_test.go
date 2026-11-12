@@ -180,10 +180,11 @@ func TestFailedQuarantineKeepsOriginalFile(t *testing.T) {
 		t.Errorf("原件内容被动过: %q", raw)
 	}
 	// 保存同样不能把原件写坏，也不能在目录里留下第二个配置。
+	// config.json.1 是有意的滚动备份（性能基线纪律：给损坏降级留一版可回退），不算半成品。
 	if _, err := s.Save(Patch{Theme: str("forest")}, 0, "m1"); err != nil {
 		t.Fatalf("坏配置回退默认值后应能正常保存: %v", err)
 	}
-	if leftovers := residue(t, dir, "config.json", "config.json.bad"); len(leftovers) != 0 {
+	if leftovers := residue(t, dir, "config.json", "config.json.bad", "config.json.1"); len(leftovers) != 0 {
 		t.Errorf("保存后目录里留下半成品: %v", leftovers)
 	}
 }

@@ -360,8 +360,8 @@ export function ItemDetail({
           />
           <div className={styles.headActions}>
             <StatusBadge state={projectState(hosts, state.tasks, item.id, result)} />
-            {/* 检测可用性（拍板 2026-11-12）：用已保存的默认方法，检测本主菜单下全部项目，
-                先弹档位弹框选档；一次性动作，不改默认设置。 */}
+            {            /* 检测可用性（拍板 2026-11-12）：先弹档位弹框——方法下拉预选「使用已有储存」（可换），
+               档位三选一；确认后本主菜单下全部项目按确认的组合开跑；一次性动作，不改默认设置。 */}
             <button
               type="button"
               className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.detect}`}
@@ -506,7 +506,7 @@ export function ItemDetail({
                       type="button"
                       className={`${uiStyles.btn} ${uiStyles.small} ${uiStyles.restore}`}
                       disabled={!restorableItems.some((r) => r.id === it.id)}
-                      title={t('hosts.restoreRow')}
+                      title={restorableItems.some((r) => r.id === it.id) ? t('hosts.restoreRow') : t('detail.detectBox.noRestorable')}
                       onClick={(event) => {
                         event.stopPropagation()
                         openRestoreBox(it.id, it.name, claimed, 'restore')
@@ -518,7 +518,7 @@ export function ItemDetail({
                       type="button"
                       className={`${uiStyles.btn} ${uiStyles.small}`}
                       disabled={!selfDetectable}
-                      title={t('hosts.detectEntryHint')}
+                      title={selfDetectable ? t('hosts.detectEntryHint') : t('hosts.detectEntry.disabled')}
                       onClick={(event) => {
                         event.stopPropagation()
                         openRestoreBox(it.id, it.name, claimed, 'detect')
@@ -639,8 +639,6 @@ export function ItemDetail({
             only={restoreBox.view}
             actions={{
               restoreIp: () => onRestore(restoreBox.itemId),
-              detectRun: (strategyId: string, profile: NetworkProfile) =>
-                onDetectRun(restoreBox.itemId, strategyId, profile),
               writeIp: () => onApply(restoreBox.itemId),
             }}
             busy={{
@@ -651,7 +649,6 @@ export function ItemDetail({
               restoreFailed: boxRestoreFailed,
             }}
             ready={{
-              canDetectAll: boxItem !== undefined,
               hasDetectResult: boxConfirmReady,
             }}
             refreshKey={boxRefreshKey}
@@ -690,11 +687,17 @@ export function ItemDetail({
               <button
                 type="button"
                 className={`${uiStyles.btn} ${uiStyles.primary}`}
-                // 对照表读出来了而且是空的，就没有任何要还原的东西：置灰并说明原因，点了也只会空跑一趟。
-                disabled={menuPreview !== null && (menuPreview.rows ?? []).length === 0}
+                // 对照表读出来了而且是空的，就没有任何要还原的东西；预览没读出来（读取中/失败）
+                // 也不给点——什么都看不到却执行还原，等于拿着一句「读不出来」去动 Hosts。
+                // 与「还原 Hosts」确认框同一套门禁（2026-11-13 按钮审计中危：两套框之前不一致）。
+                disabled={menuPreview === null || (menuPreview.rows ?? []).length === 0}
                 title={menuPreview !== null && (menuPreview.rows ?? []).length === 0
                   ? t('hosts.restoreCategory.nothingToRestore')
-                  : undefined}
+                  : menuPreview === null
+                    ? menuPreviewError
+                      ? t('detail.detectBox.previewFailed', { reason: menuPreviewError })
+                      : t('detail.detectBox.previewLoading')
+                    : undefined}
                 onClick={() => {
                   setRestoreMenuOpen(false)
                   onRestoreCategory(restorableItems.map((it) => it.id))

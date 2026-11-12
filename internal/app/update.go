@@ -43,17 +43,26 @@ type UpdateDownloadResult struct {
 
 // updatesDir 是升级包的落点：应用数据目录下的 updates/。交给桌面安装器之后文件还要留在原地
 // 让用户完成安装，所以这里不即时删除；每次新的下载会先清掉上一轮的旧包。
+// 落点是 config.json 所在目录（~/.config/github-net）旁边——旧实现两层 Dir 跳到了 ~/.config，
+// 把装包扔进了应用目录外面还占了共享命名空间（2026-11-13 审计低危）。
+// settings 为 nil 时没有可靠落点：固定名 /tmp 目录可被本机其他用户抢占，
+// 宁可明确失败也不在可预测路径放安装包。
 func (s *Service) updatesDir() (string, error) {
-	if s.settings != nil {
-		return filepath.Join(filepath.Dir(filepath.Dir(s.settings.Path())), "updates"), nil
+	if s.settings == nil {
+		return "", NewError(CodeInternal, "配置服务没就绪，没有可靠的升级包落点，暂不能下载更新", nil)
 	}
-	return filepath.Join(os.TempDir(), "github-net-updates"), nil
+	return filepath.Join(filepath.Dir(s.settings.Path()), "updates"), nil
 }
 
 // DownloadUpdate 执行「下载并安装」的前半段：下载当前平台安装包 + 签名 + 校验清单，
 // 双校验（SHA256 摘要 + Ed25519 验签）通过后交给系统桌面安装流程（Linux 上唤起软件安装器）。
 // 签名校验用的公钥随包分发；应用里没有公钥就拒绝一切升级，绝不退回「不验签」。
 func (s *Service) DownloadUpdate(info updater.Info) (UpdateDownloadResult, error) {
+	// 后端互斥（按钮置灰只是前端设防）：已在下载中再来一次，如实拒绝而不是互相删包。
+	if !s.downloadMu.TryLock() {
+		return UpdateDownloadResult{}, NewError(CodeInternal, "上一次下载还在进行中，等它完成再试", nil)
+	}
+	defer s.downloadMu.Unlock()
 	if !info.UpdateAvailable {
 		return UpdateDownloadResult{}, NewError(CodeUpdateBadData, "这次检查的结论是「没有更新」，没有包可下", nil)
 	}
@@ -95,10 +104,15 @@ func (s *Service) DownloadUpdate(info updater.Info) (UpdateDownloadResult, error
 		return UpdateDownloadResult{}, NewError(CodeUpdateVerifyFailed, "校验清单读不出来，拒绝安装", err)
 	} else if want != "" {
 		if err := updater.VerifyChecksum(got, want); err != nil {
+			// 包已作废：当场删掉安装包与签名，别等 3 天清理（审计 G5）
+			_ = os.Remove(installerPath)
+			_ = os.Remove(sigPath)
 			return UpdateDownloadResult{}, NewError(CodeUpdateVerifyFailed, "安装包摘要和发布清单对不上，安装包已作废", err)
 		}
 	}
 	if err := updater.VerifySignature(s.pubKey, got, strings.TrimSpace(string(sigRaw))); err != nil {
+		_ = os.Remove(installerPath)
+		_ = os.Remove(sigPath)
 		return UpdateDownloadResult{}, NewError(CodeUpdateVerifyFailed, "安装包签名校验失败，安装包已作废", err)
 	}
 

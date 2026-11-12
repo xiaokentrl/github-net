@@ -1,7 +1,9 @@
 package store
 
 import (
+	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -345,5 +347,40 @@ func TestPruneKeepsRoundsWithinRetentionAge(t *testing.T) {
 	}
 	if pool, err := s.Pool("cdn.test"); err != nil || len(pool) != 1 || pool[0].IP != "9.9.9.9" {
 		t.Errorf("界内域名的地址行该留着，实际 %v（err=%v）", pool, err)
+	}
+}
+
+// 版本守卫：新程序建的库能正常重开并钉上版本；库比程序新时拒绝打开——
+// 硬读只会得到 schema 对不上的怪错，不如当场说清楚原因。
+func TestSchemaVersionGuard(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "detect.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("开库失败: %v", err)
+	}
+	s.Close()
+
+	// 重开：版本已钉到 schemaVersion，应该畅通。
+	if s, err = Open(path); err != nil {
+		t.Fatalf("同版本库重开失败: %v", err)
+	}
+	s.Close()
+
+	// 把版本拨到将来：模拟「这台机器跑过更新的版本」，旧程序必须拒绝。
+	upgrade := func() {
+		db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
+		if err != nil {
+			t.Fatalf("拨版本开库失败: %v", err)
+		}
+		defer db.Close()
+		if _, err := db.Exec(`PRAGMA user_version = 99`); err != nil {
+			t.Fatalf("拨版本失败: %v", err)
+		}
+	}
+	upgrade()
+	if _, err := Open(path); err == nil {
+		t.Fatal("库比程序新时应该拒绝打开")
+	} else if !strings.Contains(err.Error(), "拒绝打开") {
+		t.Fatalf("错误里该写明拒绝原因，实际 %v", err)
 	}
 }

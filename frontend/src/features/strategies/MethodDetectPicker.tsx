@@ -13,34 +13,29 @@ type Load = 'loading' | 'ready' | 'error'
  * 方法清单按传入的范围取（内容随菜单变化），选择只活在本组件里——
  * 不存默认方法、不写配置，结果通过 onPick / onDetect 交给调用方。
  *
- * 预选规则：默认选中「使用已有储存」——不联网、秒出结论，是最稳的起点；
+ * 预选规则：默认选中「使用已有储存」——不重新拉源，直接重验本机已存的可用地址
+ * （注意：候选照样要真探测联网，只是省了拉源那一步）；
  * 范围里没有这个方法时退回「已保存的默认方法」。用户手动选过就以用户的为准。
  * 预选解析完成时通过 onPick 上报一次：宿主的确认按钮要拿到与显示一致的方法 ID。
  *
- * 两种形态：
- * - showButton（缺省）：组件自带「用「X」测本项目」按钮；
- * - showButton=false + compact：纯下拉横排（档位弹框里用，宿主自己放确认按钮）。
+ * 组件只出下拉：执行按钮由宿主自己放（两个调用方——档位弹框与一站式检测台——
+ * 都有自己的确认按钮）。自带「用「X」测本项目」按钮的形态因零调用点已删
+ * （2026-11-13 按钮审计：矩阵死行「方法下拉旁的检测按钮」）。
  * 与页面头部的 ServiceStrategySelector 是两回事：头部那颗选完会存成默认。
  */
 export function MethodDetectPicker({
   scopeId,
-  detecting,
-  onDetect,
   compact,
-  showButton = true,
   onPick,
+  onReady,
 }: {
   scopeId: string
-  /** 检测进行中：按钮置灰用；showButton=false 的宿主可不传 */
-  detecting?: boolean
-  /** 检测回调（showButton=true 时必传） */
-  onDetect?: (strategyId: string) => void
-  /** 横排紧凑模式：下拉与按钮同一行；缺省纵排 */
+  /** 横排紧凑模式：下拉单独一行横排；缺省纵排 */
   compact?: boolean
-  /** 只要下拉不要按钮（宿主自己有确认按钮时） */
-  showButton?: boolean
-  /** 选择变化（含预选解析完成）时回调；showButton=false 的宿主靠它拿选中的方法 ID */
+  /** 选择变化（含预选解析完成）时回调；宿主靠它拿选中的方法 ID */
   onPick?: (strategyId: string) => void
+  /** 清单状态通知：true＝预选就绪可确认；false＝读失败/清单为空（宿主应退默认方法链并放开确认） */
+  onReady?: (ready: boolean) => void
 }) {
   const [snap, setSnap] = useState<StrategySnapshot | null>(null)
   const [load, setLoad] = useState<Load>('loading')
@@ -83,12 +78,17 @@ export function MethodDetectPicker({
     onPick?.(current)
   }, [load, pickedId, current, onPick])
 
+  // 清单状态通知（审计缺口 3）：读失败或清单为空时如实通知宿主——
+  // 别让「确认永久灰＋title 读取中」把用户卡死在弹框里。
+  useEffect(() => {
+    if (load === 'loading') return
+    onReady?.(load === 'ready' && current !== '')
+  }, [load, current, onReady])
+
   if (load === 'loading') return <p className={styles.note}>{t('strategy.loading')}</p>
   if (load === 'error') return <p className={styles.warn}>{t('strategy.error', { name: scopeId, reason })}</p>
 
   if (options.length === 0) return <p className={styles.warn}>{t('strategy.empty', { name: scopeId })}</p>
-
-  const picked = options.find((o) => o.id === current)
 
   const flatOptions = options.map((option) => ({ value: option.id, label: option.name }))
   const SOURCE_IDS = ['gitcdn', 'hellogithub', 'gitlab']
@@ -124,17 +124,6 @@ export function MethodDetectPicker({
         }
         onChange={pick}
       />
-      {showButton && current !== '' ? (
-        <button
-          type="button"
-          className={styles.detectBtn}
-          disabled={detecting}
-          title={t('strategy.detectHint', { name: picked?.name ?? current })}
-          onClick={() => onDetect?.(current)}
-        >
-          {detecting ? t('detect.running') : t('strategy.detectProject', { name: picked?.name ?? current })}
-        </button>
-      ) : null}
     </div>
   )
 }

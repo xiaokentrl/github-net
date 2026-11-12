@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -175,5 +176,47 @@ func TestCompareVersionSegments(t *testing.T) {
 	// 本地版本不是三段数（比如开发构建）：按 0 补齐比，不 panic。
 	if compareVersion("0.2.0", "dev") <= 0 {
 		t.Fatal("无法解析的本地版本按 0 补，0.2.0 应大于它")
+	}
+}
+
+// 资产来源白名单（安全边界方案）：上游应答被污染时，资产可指向任意域。
+// 默认白名单全是 https 的 GitHub 域，http 的假域必须被当场拒掉，不发任何请求。
+func TestDownloadRejectsOffWhitelistOrigin(t *testing.T) {
+	c := NewClient()
+	_, err := c.Download(context.Background(), UpdateAsset{
+		Name: "github-net_0.2.0_amd64.deb",
+		URL:  "http://evil.example/github-net_0.2.0_amd64.deb",
+		Size: 10,
+	}, t.TempDir())
+	if !errors.Is(err, ErrBadData) {
+		t.Fatalf("非白名单来源该归为 ErrBadData，实际 %v", err)
+	}
+	if !strings.Contains(err.Error(), "不在白名单") {
+		t.Fatalf("错误里该写明白名单原因，实际 %v", err)
+	}
+}
+
+// 重定向逐跳复验：白名单域 302 到任意域必须被拦，不白给「白名单挡下载哪」开口子。
+func TestDownloadRejectsCrossOriginRedirect(t *testing.T) {
+	var inner, outer *httptest.Server
+	inner = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, outer.URL+"/pkg.deb", http.StatusFound)
+	}))
+	defer inner.Close()
+	outer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("跨域重定向不该真的跟过来")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer outer.Close()
+
+	c := NewClient()
+	c.SetAllowedAssetOrigins([]string{inner.URL})
+	_, err := c.Download(context.Background(), UpdateAsset{
+		Name: "github-net_0.2.0_amd64.deb",
+		URL:  inner.URL + "/github-net_0.2.0_amd64.deb",
+		Size: 10,
+	}, t.TempDir())
+	if !errors.Is(err, ErrBadData) || !strings.Contains(err.Error(), "不在白名单") {
+		t.Fatalf("跨域重定向该被白名单拦下（ErrBadData），实际 %v", err)
 	}
 }

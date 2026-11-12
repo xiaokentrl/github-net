@@ -7,14 +7,12 @@ import styles from './AppShell.module.css'
 export function SidebarTools({
   allChecked,
   allExpanded,
-  busy,
   onCheckAll,
   onInvertChecked,
   onFoldAll,
 }: {
   allChecked: boolean
   allExpanded: boolean
-  busy: boolean
   onCheckAll: (checked: boolean) => void
   onInvertChecked: () => void
   onFoldAll: () => void
@@ -24,17 +22,16 @@ export function SidebarTools({
       <button
         type="button"
         className={styles.action}
-        disabled={busy}
         title={t('toolbar.checkAllTitle')}
         onClick={() => onCheckAll(!allChecked)}
       >
         {allChecked ? t('toolbar.uncheckAll') : t('toolbar.checkAll')}
       </button>
-      <button type="button" className={styles.action} disabled={busy} onClick={onInvertChecked}>
+      <button type="button" className={styles.action} onClick={onInvertChecked}>
         {t('toolbar.invertChecked')}
       </button>
       {/* 按钮写结果：全展开时点这颗是「折叠」，只要有一类收着点了就是「展开」。 */}
-      <button type="button" className={styles.action} disabled={busy} title={t('toolbar.foldTitle')} onClick={onFoldAll}>
+      <button type="button" className={styles.action} title={t('toolbar.foldTitle')} onClick={onFoldAll}>
         {allExpanded ? t('toolbar.fold') : t('toolbar.expand')}
       </button>
     </>

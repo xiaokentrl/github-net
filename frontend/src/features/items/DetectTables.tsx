@@ -29,7 +29,6 @@ type Row = {
 
 type Actions = {
   restoreIp: () => void
-  detectRun: (strategyId: string, profile: NetworkProfile) => void
   writeIp: () => void
 }
 
@@ -37,7 +36,7 @@ type Busy = { detect: boolean; restore: boolean; apply: boolean; restoreSettledO
 
 // 「检测全部」要按目录里这一项去找域名；「写入可用IP」要有最近一轮的检测结论才能写，
 // 否则后端会在入口拒掉，按钮可点却失败就是骗人。
-type Ready = { canDetectAll: boolean; hasDetectResult: boolean }
+type Ready = { hasDetectResult: boolean }
 
 type Variant = 'ghost' | 'restore' | 'detect' | 'write'
 
@@ -175,13 +174,21 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
   const [reprobe, setReprobe] = useState<{ done: number; total: number } | null>(null)
   // 一站式检测台（拍板 2026-11-12）：选源（方法）与档位都在弹框里定，执行走 detectRun。
   // pickedStrategyId 为空＝用默认方法链（已保存的默认方法）；档位初值读上次记住的那一档。
+  // 形态限定：本组件当前只渲染单表（宿主传 only），两个 picked 状态因此不会跨表错位。
+  // profileReady：记住的档位读完才放开两颗检测按钮——没读完就开跑会按初值省流档跑，
+  // 把用户记过的档位（如完整档）悄悄降级（审计缺口 2）。读失败也置 ready（按省流档跑是合法回退）。
+  const [profileReady, setProfileReady] = useState(false)
   const [pickedStrategyId, setPickedStrategyId] = useState('')
   const [pickedProfile, setPickedProfile] = useState<NetworkProfile>('low')
   useEffect(() => {
     let alive = true
     getLastDetectProfile().then((profile) => {
-      if (alive && (profile === 'low' || profile === 'standard' || profile === 'full')) setPickedProfile(profile)
-    }).catch(() => undefined)
+      if (!alive) return
+      if (profile === 'low' || profile === 'standard' || profile === 'full') setPickedProfile(profile)
+      setProfileReady(true)
+    }).catch(() => {
+      if (alive) setProfileReady(true)
+    })
     return () => { alive = false }
   }, [])
   const [reprobeError, setReprobeError] = useState('')
@@ -342,11 +349,6 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
         redetectDisabled, 'ghost',
         restorableCount === 0 ? 'detail.detectBox.noRestorable' : 'detail.box.detecting',
         redetectLabel)}
-      {/* 检测新候选：按上面选的方法与档位，对本项目取一轮新候选并实测——
-          与「重新检测」的差别是对象：这里测方法给出的新候选，那颗测还原表里已写入的 IP。 */}
-      {button('detail.detectAvailability', 'detail.detectAvailability.title', () =>
-        actions.detectRun(pickedStrategyId, pickedProfile),
-        busy.detect || reprobe !== null, 'detect')}
       {button('detail.detectBox.restoreIp', 'detail.detectBox.restoreHint', actions.restoreIp,
         busy.restore || busy.restoreSettledOk === true || restorableCount === 0, 'restore',
         restorableCount === 0
@@ -378,10 +380,21 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
     <div className={styles.actionStack}>
       {button('detail.detectBox.detectRun', 'detail.detectBox.detectRunHint', () =>
         detectRun(pickedStrategyId, pickedProfile),
-        busy.detect || reprobe !== null, 'detect', 'detail.box.detecting')}
+        busy.detect || reprobe !== null || !profileReady, 'detect',
+        profileReady ? 'detail.box.detecting' : 'detail.detectBox.profileLoading')}
       {button('detail.detectBox.writeIp', 'detail.detectBox.writeHint', actions.writeIp,
         busy.apply || !hasUsableIp || !ready.hasDetectResult, 'write',
-        !hasUsableIp || !ready.hasDetectResult ? 'detail.detectBox.noUsableIp' : 'detail.box.restoring')}
+        // 置灰原因分四种说清（2026-11-13 按钮审计中危：之前一律兜「还原中…」，答非所问）：
+        // 候选池读失败/读取中说读取，写入在途说写入在途，真没有可用 IP 才说先检测。
+        poolError
+          ? 'detail.detectBox.poolFailed'
+          : pool === null
+            ? 'detail.detectBox.poolLoading'
+            : busy.apply
+              ? 'detail.detectBox.writeRunning'
+              : !hasUsableIp || !ready.hasDetectResult
+                ? 'detail.detectBox.noUsableIp'
+                : 'detail.box.restoring')}
     </div>
   )
 
@@ -441,18 +454,6 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
         tone="restore"
         extra={restoreLoading || restorePreviewError ? undefined : restoreSums}
       />
-      {/* 选源选档台（还原视图）：方法与档位只管「检测新候选」这一颗——
-          测的对象是本项目的方法新候选，不是还原表里已写入的 IP（那颗是上面的重新检测）。 */}
-      <div className={styles.runSetup}>
-        <div className={styles.runRow}>
-          <span className={styles.runLabel}>{t('detail.detectBox.methodLabel')}</span>
-          <MethodDetectPicker scopeId={scopeId} detecting={busy.detect} onPick={setPickedStrategyId} compact showButton={false} />
-        </div>
-        <div className={styles.runRow}>
-          <span className={styles.runLabel}>{t('detail.detectBox.tierLabel')}</span>
-          {tierButtons}
-        </div>
-      </div>
       <table className={styles.tbl}>
         <colgroup>
           <col className={styles.cMenu} />
@@ -499,7 +500,7 @@ export function DetectTables({ name, itemId, hostnames, entries, actions, busy, 
       <div className={styles.runSetup}>
         <div className={styles.runRow}>
           <span className={styles.runLabel}>{t('detail.detectBox.methodLabel')}</span>
-          <MethodDetectPicker scopeId={scopeId} detecting={busy.detect} onPick={setPickedStrategyId} compact showButton={false} />
+          <MethodDetectPicker scopeId={scopeId} onPick={setPickedStrategyId} compact />
         </div>
         <div className={styles.runRow}>
           <span className={styles.runLabel}>{t('detail.detectBox.tierLabel')}</span>
