@@ -49,7 +49,7 @@ jobs:
     needs: frontend
     steps:
       - name: 装构建依赖
-        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git xz-utils gcc pkg-config binutils libgtk-4-dev libwebkitgtk-6.0-dev
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git xz-utils gcc pkg-config binutils libgtk-4-dev libwebkitgtk-6.0-dev nodejs npm
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
@@ -72,11 +72,10 @@ jobs:
           export PATH="$HOME/go/bin:$PATH"
           wails3 generate bindings -clean=true -ts -i
           if ! git diff --exit-code frontend/bindings; then
-            # 对账红就把差异留档（工件）＋直接打出来：本机复现不了的环境差异靠这两路定位。
-            git diff frontend/bindings > bindings-diff.txt || true
-            git status --short frontend/bindings >> bindings-diff.txt || true
-            echo "::error::bindings 与重新生成结果不一致，差异已写入 bindings-diff.txt 工件"
-            head -60 bindings-diff.txt || true
+            # 对账红就把差异逐行编进 error 注解：注解匿名可读，不用鉴权就能定位。
+            echo "::error::bindings 与重新生成结果不一致，环境：$(go version) / $(git --version)"
+            git status --short frontend/bindings | head -20 | while IFS= read -r line; do echo "::error::状态 $line"; done
+            git diff frontend/bindings | head -40 | while IFS= read -r line; do echo "::error::diff ${line:0:200}"; done
             exit 1
           fi
       - name: 上传 bindings 对账差异（仅红时）
