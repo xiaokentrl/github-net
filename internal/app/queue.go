@@ -41,8 +41,6 @@ func newTaskQueueLaned(exec task.Executor, emit func(name string, payload any), 
 	return task.NewQueueLaned(exec, event.NewTaskEmitter(emit), detectLane)
 }
 
-// GetTasks 返回队列快照和 sequence 水位。它只读内存里的一把锁，没有失败面，所以不返回错误。
-// 快照里的任务按入队顺序排列，tasks 为空时是空数组而不是 null。
 // queueTasks 是 nil 安全的任务清单：直接命令的互斥检查用它。
 // 生产 Service 的队列必在；测试夹具常只建要测的那几块，队列是 nil——
 // nil 就是没有任务在跑，直接命令的互斥检查放行。
@@ -53,6 +51,8 @@ func (s *Service) queueTasks() []task.Task {
 	return s.tasks.Snapshot().Tasks
 }
 
+// GetTasks 返回队列快照和 sequence 水位。它只读内存里的一把锁，没有失败面，所以不返回错误。
+// 快照里的任务按入队顺序排列，tasks 为空时是空数组而不是 null。
 func (s *Service) GetTasks() task.Snapshot {
 	return s.tasks.Snapshot()
 }
