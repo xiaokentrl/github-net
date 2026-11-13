@@ -44,6 +44,17 @@
   font-weight: 600;
 }
 
+/* 标题右侧的版本号：弱化字号与颜色，只作身份标识不作视觉重点；
+   与标题的间隔在这里给足（读起来是「GitHub Net v0.1.17」一句，不是两个挤在一起的词）。 */
+.version {
+  margin-left: 12px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-2);
+  white-space: nowrap;
+  user-select: none;
+}
+
 .spacer {
   flex: 1;
 }

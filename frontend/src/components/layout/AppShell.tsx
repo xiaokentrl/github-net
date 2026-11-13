@@ -120,6 +120,8 @@ export function AppShell({
           GN
         </span>
         <h1 className={styles.title}>{appName}</h1>
+        {/* 版本号贴着标题：设置没读回来（status 还没到）就不显示，避免闪一个空壳。 */}
+        {status?.version ? <span className={styles.version}>v{status.version}</span> : null}
         <span className={styles.spacer} />
         {/* 标题栏上的托盘胶囊（原型 #trayPill 同款）：主题色点快切 + 最小化到托盘 + 退出。 */}
         <TrayPill appName={appName} theme={theme} running={running} onTheme={onTheme} />
