@@ -1,0 +1,3 @@
+# 0.1.15 相对 0.1.14 的净变化；一条一行，格式「分类|语言|内容」
+fixed|zh|修复重打发布标签会触发本机打包重装的问题：纯标签推送不再动本机
+fixed|en|Re-pushing a release tag no longer triggers the local package-and-reinstall hook

@@ -38,7 +38,7 @@ var trayIcon []byte
 
 const (
 	appName    = "GitHub Net"
-	appVersion = "0.1.14"
+	appVersion = "0.1.15"
 	statusTick = 2 * time.Second
 	appID      = "io.github.xiaokentrl.githubnet"
 )
