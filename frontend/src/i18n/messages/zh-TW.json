@@ -544,5 +544,7 @@
   "error.code.update_rate_limited": "GitHub 限流了，稍等幾分鐘再檢查更新",
   "error.code.update_network": "網路不通或逾時，檢查網路後重試",
   "error.code.update_no_release": "沒有可用的正式發布版",
-  "error.code.update_verify_failed": "安裝包校驗沒通過，已作廢；請重新下載"
+  "error.code.update_verify_failed": "安裝包校驗沒通過，已作廢；請重新下載",
+  "settings.updates.progress": "已收 {received} / 共 {total}（{percent}%）",
+  "settings.updates.progressNoTotal": "已收 {received}"
 }

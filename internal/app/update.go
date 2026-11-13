@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/xiaokentrl/github-net/internal/event"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -82,11 +83,19 @@ func (s *Service) DownloadUpdate(info updater.Info) (UpdateDownloadResult, error
 		}
 	}
 
-	installerPath, err := s.updater.Download(context.Background(), installer, destDir)
+	// 下载进度经事件推给界面：命令本身要等下载完才返回，进度靠事件边下边报。
+	// 安装包大、弱网慢，没有进度用户就只能对着一行静态文案干等（升级实测的结论）。
+	progress := func(received, total int64) {
+		if s.emit == nil {
+			return
+		}
+		s.emit(event.UpdateProgressName, event.UpdateProgress{Name: installer.Name, Received: received, Total: total})
+	}
+	installerPath, err := s.updater.Download(context.Background(), installer, destDir, progress)
 	if err != nil {
 		return UpdateDownloadResult{}, updatePublicError(err)
 	}
-	sigPath, err := s.updater.Download(context.Background(), sig, destDir)
+	sigPath, err := s.updater.Download(context.Background(), sig, destDir, nil)
 	if err != nil {
 		return UpdateDownloadResult{}, updatePublicError(err)
 	}

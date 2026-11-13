@@ -10,6 +10,7 @@ const TASK_EVENT = 'task:progress'
 const DETECT_EVENT = 'detect:progress'
 const SETTINGS_EVENT = 'settings:changed'
 const UPDATE_EVENT = 'update:status'
+const UPDATE_PROGRESS_EVENT = 'update:download-progress'
 const AUTOMATION_EVENT = 'automation:status'
 // 事件名必须和 Go 侧 internal/app/browser_restart.go 的 browserRestartedEvent 一致。
 const BROWSER_EVENT = 'browser:restarted'
@@ -96,6 +97,22 @@ export type UpdateNoticePayload = {
     checkedAt: string
   }
   error?: string
+}
+
+// 下载进度事件（update:download-progress）：后端按 200ms 节拍报已收/总字节。
+// 挂在 UpdatesPane：下载期间把百分比写在那行静态文案的位置。
+export type UpdateProgressPayload = {
+  name: string
+  received: number
+  total: number
+}
+
+export function subscribeUpdateProgress(onPayload: (payload: UpdateProgressPayload) => void): () => void {
+  return Events.On(UPDATE_PROGRESS_EVENT, (event: Events.WailsEvent) => {
+    const payload = event.data as UpdateProgressPayload | undefined
+    if (!payload) return
+    onPayload(payload)
+  })
 }
 
 // 启动自动检查的结果走事件；设置页手动检查走命令返回值，两条路最终都落到同一块显示。

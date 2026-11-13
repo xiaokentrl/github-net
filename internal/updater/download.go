@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // 下载安全上限：正常安装包十几 MB，512MB 是防失控的闸，不是预期用量。
@@ -60,8 +61,12 @@ func installerSuffix(goos string) string {
 }
 
 // Download 把一个资产拉到 destDir，返回落盘路径。
-// 大小以资产声明的 Size 为预检、以上限为闸；写临时文件再改名，不留半截文件。
-func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string) (string, error) {
+// 大小以资产声明的 Size 为预检、以上限为闸；写 .part 文件再改名，不留半截成品。
+// 支持断点续传（2026-11-14 升级实测把这条从三四档升为必须）：.part 带着已收字节，
+// 下一次带 Range 从断点续；服务器不支持 Range（回 200 全量）就整段重来。
+// onProgress 非空时按节拍汇报（received/total，节流约 200ms 一条，完成时补一条终值），
+// 网络中断时保留 .part 供续传；摘要对不上（服务器给的段不对）才删掉重来。
+func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string, onProgress func(received, total int64)) (string, error) {
 	if asset.Size > maxDownloadSize {
 		return "", fmt.Errorf("资产 %s 声明大小 %d 字节，超过下载上限", asset.Name, maxDownloadSize)
 	}
@@ -79,9 +84,24 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	if !assetOriginAllowed(u, c.allowedAssetOrigins) {
 		return "", fmt.Errorf("%w: 资产来源 %q 不在白名单", ErrBadData, u.Scheme+"://"+u.Host)
 	}
+	// 断点续传：.part 是固定名（隐藏前缀，PruneCaches 的归属门认它），有已收字节就带 Range 续。
+	partPath := filepath.Join(destDir, "."+asset.Name+".part")
+	resumeFrom := int64(0)
+	if st, err := os.Stat(partPath); err == nil && st.Size() > 0 {
+		resumeFrom = st.Size()
+		if asset.Size > 0 && resumeFrom > asset.Size {
+			// 残片比声明还大：内容不可信，整段重来。
+			_ = os.Remove(partPath)
+			resumeFrom = 0
+		}
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
 	if err != nil {
 		return "", fmt.Errorf("%w：%v", ErrNetwork, err)
+	}
+	if resumeFrom > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeFrom))
 	}
 	resp, err := c.download.Do(req)
 	if err != nil {
@@ -90,36 +110,81 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 		return "", fmt.Errorf("%w：%w", ErrNetwork, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	// 206＝服务器答应续传；200＝不支持 Range 的全量响应，残片作废整段重来。
+	switch {
+	case resp.StatusCode == http.StatusPartialContent && resumeFrom > 0:
+		// 续传成立。
+	case resp.StatusCode == http.StatusOK:
+		resumeFrom = 0
+	default:
 		return "", fmt.Errorf("%w：下载 %s 得到 HTTP %d", ErrNetwork, asset.Name, resp.StatusCode)
 	}
 
-	tmp, err := os.CreateTemp(destDir, "."+asset.Name+".*")
-	if err != nil {
-		return "", fmt.Errorf("临时文件建不出来：%w", err)
+	flags := os.O_WRONLY | os.O_CREATE
+	if resumeFrom > 0 {
+		flags |= os.O_APPEND
+	} else {
+		flags |= os.O_TRUNC
 	}
-	tmpName := tmp.Name()
-	defer func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-	}()
-
-	written, err := io.Copy(tmp, io.LimitReader(resp.Body, maxDownloadSize))
+	part, err := os.OpenFile(partPath, flags, 0o600)
 	if err != nil {
+		return "", fmt.Errorf("续传文件建不出来：%w", err)
+	}
+
+	// 进度按节拍汇报：直发会随 Write 逐块刷屏；节流 200ms，完成时补一条终值。
+	var tick func(n int64)
+	if onProgress != nil {
+		var last time.Time
+		received := resumeFrom
+		total := asset.Size
+		if total <= 0 {
+			total = resumeFrom + resp.ContentLength
+		}
+		tick = func(n int64) {
+			received += n
+			if now := time.Now(); now.Sub(last) >= progressTick {
+				last = now
+				onProgress(received, total)
+			}
+		}
+	}
+	received, err := io.Copy(part, io.TeeReader(io.LimitReader(resp.Body, maxDownloadSize), countingWriter{onWrite: tick}))
+	if onProgress != nil {
+		onProgress(resumeFrom+received, asset.Size)
+	}
+	if err != nil {
+		// 中断保留 .part：下一次从断点接着收（这正是续传存在的意义）。
 		return "", fmt.Errorf("%w：下载 %s 中断：%v", ErrNetwork, asset.Name, err)
 	}
-	// 实收和声明对不上：要么传输断了，要么资产被人换过。两种都拒收。
-	if asset.Size > 0 && written != asset.Size {
-		return "", fmt.Errorf("资产 %s 实收 %d 字节，声明 %d 字节，拒收", asset.Name, written, asset.Size)
+	// 实收和声明对不上：要么传输断了，要么资产被人换过。两种都拒收；
+	// 残片内容不可信，删掉让下一次整段重来。
+	if asset.Size > 0 && resumeFrom+received != asset.Size {
+		_ = os.Remove(partPath)
+		return "", fmt.Errorf("资产 %s 实收 %d 字节，声明 %d 字节，拒收", asset.Name, resumeFrom+received, asset.Size)
 	}
-	if err := tmp.Close(); err != nil {
+	if err := part.Close(); err != nil {
 		return "", fmt.Errorf("临时文件关不上：%w", err)
 	}
 	dest := filepath.Join(destDir, asset.Name)
-	if err := os.Rename(tmpName, dest); err != nil {
+	if err := os.Rename(partPath, dest); err != nil {
 		return "", fmt.Errorf("落盘失败：%w", err)
 	}
 	return dest, nil
+}
+
+// progressTick 是进度汇报的节拍：再快界面也读不出来，只会刷事件。
+const progressTick = 200 * time.Millisecond
+
+// countingWriter 把经过的字节数喂给进度回调（回调为空时零开销路径）。
+type countingWriter struct {
+	onWrite func(n int64)
+}
+
+func (w countingWriter) Write(b []byte) (int, error) {
+	if w.onWrite != nil {
+		w.onWrite(int64(len(b)))
+	}
+	return len(b), nil
 }
 
 // FetchChecksums 把 checksums.txt 拉回来取某一行，返回该文件的期望摘要；没有清单就返回空串。
@@ -129,7 +194,7 @@ func (c *Client) FetchChecksums(ctx context.Context, asset UpdateAsset, name, de
 	if asset.Name == "" {
 		return "", nil
 	}
-	path, err := c.Download(ctx, asset, destDir)
+	path, err := c.Download(ctx, asset, destDir, nil)
 	if err != nil {
 		return "", err
 	}

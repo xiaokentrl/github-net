@@ -14,3 +14,16 @@ type UpdateNotice struct {
 	Info  *updater.Info `json:"info,omitempty"`
 	Error string        `json:"error,omitempty"`
 }
+
+// UpdateProgressName 是更新下载进度事件的名字。和检查结论（update:status）分开：
+// 一个说「这一轮下载收到多少了」，一个说「检查的结论是什么」，消费方和节奏都不同。
+// 下载可能持续几分钟，进度按 200ms 节拍来，不逐块刷。
+const UpdateProgressName = "update:download-progress"
+
+// UpdateProgress 是下载进度事件的载荷。Total 为 0 表示服务器没给总长（理论上不会，
+// GitHub 发布资产都带大小；真发生时界面按「已收 N 字节」显示，不算百分比）。
+type UpdateProgress struct {
+	Name     string `json:"name"`
+	Received int64  `json:"received"`
+	Total    int64  `json:"total"`
+}

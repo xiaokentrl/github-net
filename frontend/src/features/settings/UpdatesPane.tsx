@@ -3,7 +3,7 @@ import type { Info as UpdateInfo } from '../../../bindings/github.com/xiaokentrl
 import type { AppStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { checkForUpdates, downloadUpdate } from '../../api/client'
 import { getErrorMessage } from '../../api/errors'
-import { subscribeUpdateStatus } from '../../api/events'
+import { subscribeUpdateStatus, subscribeUpdateProgress } from '../../api/events'
 import { t } from '../../i18n'
 import styles from './UpdatesPane.module.css'
 
@@ -29,6 +29,8 @@ export function UpdatesPane({ status }: { status: AppStatus | null }) {
   // 下载安装流程：downloading 中不可重复点；handedOff 显示「已交给系统安装」和落盘位置。
   const [download, setDownload] = useState<'idle' | 'downloading' | 'handedOff' | 'error'>('idle')
   const [downloadText, setDownloadText] = useState('')
+  // 下载进度：后端 200ms 一条事件；显示「已收 X / 总 Y（N%）」，服务器没给总长就只报字节。
+  const [progress, setProgress] = useState<{ received: number; total: number } | null>(null)
 
   const check = useCallback(() => {
     setLoad('checking')
@@ -63,6 +65,14 @@ export function UpdatesPane({ status }: { status: AppStatus | null }) {
     check()
   }, [check])
 
+  // 订阅下载进度事件：只在 downloading 期间消费，退出下载态就清零。
+  useEffect(() => {
+    const unsubscribe = subscribeUpdateProgress((payload) => {
+      setProgress({ received: payload.received, total: payload.total })
+    })
+    return unsubscribe
+  }, [])
+
   return (
     <div className={styles.pane}>
       <p className={styles.current}>
@@ -94,6 +104,7 @@ export function UpdatesPane({ status }: { status: AppStatus | null }) {
                 onClick={() => {
                   setDownload('downloading')
                   setDownloadText('')
+                  setProgress(null)
                   downloadUpdate(info)
                     .then((result) => {
                       setDownload('handedOff')
@@ -109,6 +120,17 @@ export function UpdatesPane({ status }: { status: AppStatus | null }) {
               </button>
               {info.assets && info.assets.length > 0 ? (
                 <span className={styles.checkedAt}>{t('settings.updates.assetSize', { size: formatSize(info.assets[0].size) })}</span>
+              ) : null}
+              {download === 'downloading' && progress ? (
+                <span className={styles.checkedAt} role="status">
+                  {progress.total > 0
+                    ? t('settings.updates.progress', {
+                        received: formatSize(progress.received),
+                        total: formatSize(progress.total),
+                        percent: Math.floor((progress.received / progress.total) * 100),
+                      })
+                    : t('settings.updates.progressNoTotal', { received: formatSize(progress.received) })}
+                </span>
               ) : null}
             </div>
             {download === 'handedOff' && downloadText ? <p className={styles.plain}>{downloadText}</p> : null}

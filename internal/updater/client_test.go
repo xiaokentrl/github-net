@@ -3,8 +3,11 @@ package updater
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -187,7 +190,7 @@ func TestDownloadRejectsOffWhitelistOrigin(t *testing.T) {
 		Name: "github-net_0.2.0_amd64.deb",
 		URL:  "http://evil.example/github-net_0.2.0_amd64.deb",
 		Size: 10,
-	}, t.TempDir())
+	}, t.TempDir(), nil)
 	if !errors.Is(err, ErrBadData) {
 		t.Fatalf("非白名单来源该归为 ErrBadData，实际 %v", err)
 	}
@@ -215,7 +218,7 @@ func TestDownloadRejectsCrossOriginRedirect(t *testing.T) {
 		Name: "github-net_0.2.0_amd64.deb",
 		URL:  inner.URL + "/github-net_0.2.0_amd64.deb",
 		Size: 10,
-	}, t.TempDir())
+	}, t.TempDir(), nil)
 	if !errors.Is(err, ErrBadData) || !strings.Contains(err.Error(), "不在白名单") {
 		t.Fatalf("跨域重定向该被白名单拦下（ErrBadData），实际 %v", err)
 	}
@@ -239,5 +242,75 @@ func TestCompareVersionNumericOrder(t *testing.T) {
 		if got := compareVersion(c.a, c.b); got != c.want {
 			t.Errorf("compareVersion(%q, %q) = %d，该是 %d", c.a, c.b, got, c.want)
 		}
+	}
+}
+
+// 断点续传：第一次只给一半就断，第二次带 Range 从断点续，最终文件必须完整；
+// 服务器不支持 Range（回 200 全量）时整段重来，结果同样完整。
+func TestDownloadResumesFromPartial(t *testing.T) {
+	full := []byte(strings.Repeat("0123456789abcdef", 4096)) // 64KB，两段才收得完
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Range") == "" {
+			hits++
+		}
+		start := int64(0)
+		if r.Header.Get("Range") != "" {
+			fmt.Sscanf(r.Header.Get("Range"), "bytes=%d-", &start)
+			if start > 0 {
+				w.WriteHeader(http.StatusPartialContent)
+			}
+		}
+		w.Write(full[start:])
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	asset := UpdateAsset{Name: "pkg.deb", URL: srv.URL + "/pkg.deb", Size: int64(len(full))}
+
+	// 第一次收到一半就断：不依赖取消时机，直接手工造 .part 模拟「已收一半」。
+	c := NewClient()
+	c.SetAllowedAssetOrigins([]string{srv.URL})
+	os.WriteFile(filepath.Join(dir, ".pkg.deb.part"), full[:len(full)/2], 0o600)
+
+	path, err := c.Download(context.Background(), asset, dir, nil)
+	if err != nil {
+		t.Fatalf("续传下载失败: %v", err)
+	}
+	back, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读回失败: %v", err)
+	}
+	if string(back) != string(full) {
+		t.Errorf("续传后的文件和原文件不一致（%d / %d 字节）", len(back), len(full))
+	}
+}
+
+// 进度回调：总字节按收到的报，节拍内合并（至少收到首尾两条：0 前后与终值）。
+func TestDownloadReportsProgress(t *testing.T) {
+	full := []byte(strings.Repeat("x", 256*1024))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(full)
+	}))
+	defer srv.Close()
+
+	var lastReceived, lastTotal int64
+	calls := 0
+	c := NewClient()
+	c.SetAllowedAssetOrigins([]string{srv.URL})
+	_, err := c.Download(context.Background(), UpdateAsset{
+		Name: "pkg.deb", URL: srv.URL + "/pkg.deb", Size: int64(len(full)),
+	}, t.TempDir(), func(received, total int64) {
+		calls++
+		lastReceived, lastTotal = received, total
+	})
+	if err != nil {
+		t.Fatalf("下载失败: %v", err)
+	}
+	if calls == 0 {
+		t.Fatal("进度回调一次都没被调")
+	}
+	if lastReceived != int64(len(full)) || lastTotal != int64(len(full)) {
+		t.Errorf("终值该是完整长度，实际 received=%d total=%d", lastReceived, lastTotal)
 	}
 }
