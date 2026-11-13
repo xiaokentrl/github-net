@@ -1,0 +1,5 @@
+# 0.1.16 相对 0.1.15 的净变化；一条一行，格式「分类|语言|内容」
+updated|zh|升级包下载支持断点续传：弱网中断后重试从断点接着收，不再整包重来
+updated|en|Update downloads now resume from the breakpoint on retry instead of restarting in full
+updated|zh|下载进度可见：更新页实时显示「已收 X / 共 Y（N%）」
+updated|en|Download progress is now visible: the updates pane shows received bytes, total and percentage live

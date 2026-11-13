@@ -1,6 +1,6 @@
 ## English
 
-### github-net 0.1.15 Stable (0.1.14 → 0.1.15)
+### github-net 0.1.16 Stable (0.1.15 → 0.1.16)
 
 **Added**
 
@@ -8,15 +8,16 @@ None
 
 **Fixed**
 
-1. Re-pushing a release tag no longer triggers the local package-and-reinstall hook
+None
 
 **Updated**
 
-None
+1. Update downloads now resume from the breakpoint on retry instead of restarting in full
+2. Download progress is now visible: the updates pane shows received bytes, total and percentage live
 
 ## 中文
 
-### 0.1.15 稳定版（0.1.14 → 0.1.15）
+### 0.1.16 稳定版（0.1.15 → 0.1.16）
 
 **新增**
 
@@ -24,8 +25,9 @@ None
 
 **修复**
 
-1. 修复重打发布标签会触发本机打包重装的问题：纯标签推送不再动本机
+无
 
 **更新**
 
-无
+1. 升级包下载支持断点续传：弱网中断后重试从断点接着收，不再整包重来
+2. 下载进度可见：更新页实时显示「已收 X / 共 Y（N%）」
