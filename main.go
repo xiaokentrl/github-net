@@ -475,6 +475,7 @@ func main() {
 		if err != nil {
 			if appErr, ok := err.(*appsvc.Error); ok {
 				notice.Error = appErr.Message
+				notice.Code = appErr.Code // 前端按码出界面语言文案（简体用户看 Message 原文）。
 			} else {
 				notice.Error = "更新检查失败"
 			}

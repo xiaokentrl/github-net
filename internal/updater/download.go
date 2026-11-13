@@ -108,6 +108,7 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 			// 残片已经收满声明长度（收满后进程在改名前被杀是常见动作）：
 			// 直接改名成成品——再发 Range 会越界吃 416，重试永远失败成死锁。
 			if err := os.Rename(partPath, filepath.Join(destDir, asset.Name)); err == nil {
+				_ = os.Remove(etagPath) // 侧车一并清，别留孤儿等 3 天清理。
 				return filepath.Join(destDir, asset.Name), nil
 			}
 		}
@@ -119,63 +120,67 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
-	if err != nil {
-		return "", fmt.Errorf("%w：%v", ErrNetwork, err)
-	}
-	if resumeFrom > 0 {
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeFrom))
-		if resumeETag != "" {
-			// 校验器核对残片身份：内容变过就回 200 全量（走整段重来分支），不变才 206 续。
-			req.Header.Set("If-Range", resumeETag)
-		}
-	}
-	resp, err := c.download.Do(req)
-	if err != nil {
-		// 双 %w 保住错误链：重定向被白名单拦下的那个 ErrBadData 藏在 url.Error 里，
-		// 不保链的话上层 errors.Is 只认得到 ErrNetwork，认不出真实原因。
-		return "", fmt.Errorf("%w：%w", ErrNetwork, err)
-	}
-	defer resp.Body.Close()
-	// 206＝服务器答应续传——但起点要对：解析 Content-Range 的 start，与 resumeFrom
-	// 不一致（CDN/反代异常）就当整段重来，盲 O_APPEND 会拼出坏文件。
-	// 416＝残片越界（起点已被服务器认为无效）：残片作废整段重来，不再报网络错卡死重试。
-	// 200＝不支持 Range 的全量响应，残片作废整段重来。
-	switch {
-	case resp.StatusCode == http.StatusPartialContent && resumeFrom > 0:
-		if start, ok := contentRangeStart(resp.Header.Get("Content-Range")); ok && start != resumeFrom {
-			resumeFrom = 0
-		}
-	case resp.StatusCode == http.StatusOK, resp.StatusCode == http.StatusRequestedRangeNotSatisfiable:
-		if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
-			_ = os.Remove(partPath)
-			_ = os.Remove(etagPath)
-		}
-		resumeFrom = 0
-		// 416/200 都要重新请求（不带 Range）才能拿到全量。
-		resp.Body.Close()
-		req2, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
+	// 响应协商循环：带 Range 的首次请求可能被服务器以 200（不支持 Range 或 If-Range
+	// 判定内容变过）/416（残片越界）/206 错位三种方式拒绝续传——这三种都要作废残片、
+	// 不带 Range 重发一次拿全量；循环上限 3 次封顶，防反常服务器把这里变成死循环。
+	var resp *http.Response
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
 		if err != nil {
 			return "", fmt.Errorf("%w：%v", ErrNetwork, err)
 		}
-		resp, err = c.download.Do(req2)
+		if resumeFrom > 0 {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeFrom))
+			if resumeETag != "" {
+				// 校验器核对残片身份：内容变过就回 200 全量（走整段重来分支），不变才 206 续。
+				req.Header.Set("If-Range", resumeETag)
+			}
+		}
+		resp, err = c.download.Do(req)
 		if err != nil {
+			// 双 %w 保住错误链：重定向被白名单拦下的那个 ErrBadData 藏在 url.Error 里，
+			// 不保链的话上层 errors.Is 只认得到 ErrNetwork，认不出真实原因。
 			return "", fmt.Errorf("%w：%w", ErrNetwork, err)
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
+		restart := false
+		switch {
+		case resp.StatusCode == http.StatusPartialContent && resumeFrom > 0:
+			// 206＝续传成立——但起点要对：Content-Range 解析不出或起点错位（CDN/反代异常）
+			// 就当整段重来，盲 O_APPEND 会拼出坏文件（Size 未知时静默落坏盘，探针实测过）。
+			if start, ok := contentRangeStart(resp.Header.Get("Content-Range")); !ok || start != resumeFrom {
+				resp.Body.Close()
+				_ = os.Remove(partPath)
+				_ = os.Remove(etagPath)
+				resumeFrom = 0
+				restart = true
+			}
+		case resp.StatusCode == http.StatusOK:
+			if resumeFrom > 0 {
+				// 服务器不认残片（不支持 Range，或 If-Range 判定内容变过）：整段重来。
+				resp.Body.Close()
+				_ = os.Remove(etagPath)
+				resumeFrom = 0
+				restart = true
+			}
+			// resumeFrom==0 的全新请求回 200 就是全量，直接用。
+		case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && resumeFrom > 0:
+			// 416＝残片越界（收满声明后才被杀是常见动作）：残片作废整段重来。
+			resp.Body.Close()
+			_ = os.Remove(partPath)
+			_ = os.Remove(etagPath)
+			resumeFrom = 0
+			restart = true
+		default:
 			return "", fmt.Errorf("%w：下载 %s 得到 HTTP %d", ErrNetwork, asset.Name, resp.StatusCode)
 		}
-	default:
-		return "", fmt.Errorf("%w：下载 %s 得到 HTTP %d", ErrNetwork, asset.Name, resp.StatusCode)
-	}
-
-	if resumeFrom == 0 {
-		// 全量下载：记下这轮内容的校验器，残片将来续传时用 If-Range 核对身份。
-		if etag := resp.Header.Get("ETag"); etag != "" {
-			_ = os.WriteFile(etagPath, []byte(etag), 0o600)
+		if !restart {
+			break
+		}
+		if attempt >= 3 {
+			return "", fmt.Errorf("%w：下载 %s 反复被服务器拒绝续传，放弃", ErrNetwork, asset.Name)
 		}
 	}
+
 	flags := os.O_WRONLY | os.O_CREATE
 	if resumeFrom > 0 {
 		flags |= os.O_APPEND
@@ -185,6 +190,14 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	part, err := os.OpenFile(partPath, flags, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("续传文件建不出来：%w", err)
+	}
+	if resumeFrom == 0 {
+		// 全量下载：记下这轮内容的校验器，残片将来续传时用 If-Range 核对身份。
+		// 放在截断成功之后：两步间崩溃最多退化成「无侧车盲续」，不会留下
+		// 「侧车=新版本、残片=旧内容」这种校验器会放行的错位组合。
+		if etag := resp.Header.Get("ETag"); etag != "" {
+			_ = os.WriteFile(etagPath, []byte(etag), 0o600)
+		}
 	}
 	// 错误分支也要关：弱网反复重试每失败一次漏一个 fd。成功路径显式关在前，重复关无害。
 	defer func() { _ = part.Close() }()

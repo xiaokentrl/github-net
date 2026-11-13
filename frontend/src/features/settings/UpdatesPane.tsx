@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Info as UpdateInfo } from '../../../bindings/github.com/xiaokentrl/github-net/internal/updater/models'
 import type { AppStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { checkForUpdates, downloadUpdate } from '../../api/client'
-import { getErrorMessage } from '../../api/errors'
+import { getErrorMessage, errorText as localizedErrorText } from '../../api/errors'
 import { subscribeUpdateStatus, subscribeUpdateProgress } from '../../api/events'
 import { t } from '../../i18n'
 import styles from './UpdatesPane.module.css'
@@ -39,12 +39,19 @@ export function UpdatesPane({ status }: { status: AppStatus | null }) {
       .then((result) => {
         setInfo(result)
         setLoad('ready')
+        // 查出的是另一个新版本：上一版的下载/交接信息全部作废，别让「已交给系统安装」
+        // 挂在新版本的标题下面指代错位（对照复核 2026-11-14 低危）。
+        if (result.latestVersion && info && result.latestVersion !== info.latestVersion) {
+          setDownload('idle')
+          setDownloadText('')
+          setProgress(null)
+        }
       })
       .catch((err: unknown) => {
         setErrorText(getErrorMessage(err))
         setLoad('error')
       })
-  }, [])
+  }, [info])
 
   // 启动自动检查的结论经 update:status 事件进来，和手动检查显示在同一块。
   useEffect(() => {
@@ -53,7 +60,8 @@ export function UpdatesPane({ status }: { status: AppStatus | null }) {
         setInfo(payload.info)
         setLoad('ready')
       } else if (payload.error) {
-        setErrorText(payload.error)
+        // 繁体用户按码出文案（简体用户看后端原文），别在同屏混两种语言。
+        setErrorText(localizedErrorText(payload.code ?? '', payload.error))
         setLoad('error')
       }
     })
@@ -81,7 +89,12 @@ export function UpdatesPane({ status }: { status: AppStatus | null }) {
       </p>
 
       <div className={styles.actions}>
-        <button type="button" onClick={check} disabled={load === 'checking'}>
+        <button
+          type="button"
+          onClick={check}
+          disabled={load === 'checking' || download === 'downloading'}
+          title={download === 'downloading' ? t('settings.updates.busyDownloading') : undefined}
+        >
           {load === 'checking' ? t('settings.updates.checking') : t('settings.updates.check')}
         </button>
         {info?.checkedAt ? <span className={styles.checkedAt}>{t('settings.updates.checkedAt', { time: formatCheckedAt(info.checkedAt) })}</span> : null}

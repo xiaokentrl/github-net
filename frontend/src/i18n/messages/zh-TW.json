@@ -546,5 +546,7 @@
   "error.code.update_no_release": "沒有可用的正式發布版",
   "error.code.update_verify_failed": "安裝包校驗沒通過，已作廢；請重新下載",
   "settings.updates.progress": "已收 {received} / 共 {total}（{percent}%）",
-  "settings.updates.progressNoTotal": "已收 {received}"
+  "settings.updates.progressNoTotal": "已收 {received}",
+  "error.code.update_busy": "上一次下載還在進行中，等它完成；進度就在下方",
+  "settings.updates.busyDownloading": "下載進行中，先等它完成"
 }

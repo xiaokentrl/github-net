@@ -24,6 +24,8 @@ const (
 	// update_handoff_failed：包已下载并验签，但没能交给系统安装流程（多半是没有桌面会话）；
 	// 消息里带安装包路径，用户可以手动装。
 	CodeUpdateHandoffFailed = "update_handoff_failed"
+	// update_busy：上一次下载还在进行中（重复点「下载并安装」），等它完成再试。
+	CodeUpdateBusy = "update_busy"
 )
 
 // CheckForUpdates 查 GitHub 最新稳定版并与当前版本比较。
@@ -61,7 +63,7 @@ func (s *Service) updatesDir() (string, error) {
 func (s *Service) DownloadUpdate(info updater.Info) (UpdateDownloadResult, error) {
 	// 后端互斥（按钮置灰只是前端设防）：已在下载中再来一次，如实拒绝而不是互相删包。
 	if !s.downloadMu.TryLock() {
-		return UpdateDownloadResult{}, NewError(CodeInternal, "上一次下载还在进行中，等它完成再试", nil)
+		return UpdateDownloadResult{}, NewError(CodeUpdateBusy, "上一次下载还在进行中，等它完成再试", nil)
 	}
 	defer s.downloadMu.Unlock()
 	if !info.UpdateAvailable {
@@ -84,6 +86,9 @@ func (s *Service) DownloadUpdate(info updater.Info) (UpdateDownloadResult, error
 		sig.Name:                       true,
 		checksums.Name:                 true,
 		"." + installer.Name + ".part": true,
+		// 残片身份校验器：漏了它的话每次清扫都会删掉侧车，If-Range 加固在生产路径失效
+		//（对照复核 2026-11-14 高危）。
+		"." + installer.Name + ".part.etag": true,
 	}
 	if entries, _ := os.ReadDir(destDir); len(entries) > 0 {
 		for _, e := range entries {

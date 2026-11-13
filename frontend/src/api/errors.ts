@@ -37,6 +37,7 @@ export const APP_ERROR_CODES = [
   'update_network',
   'update_no_release',
   'update_verify_failed',
+  'update_busy',
 ] as const
 
 export type AppErrorCode = (typeof APP_ERROR_CODES)[number] | 'unknown'
@@ -79,6 +80,14 @@ export function toAppError(value: unknown): AppError {
 // getErrorMessage 按界面语言给一句可展示的话（对照《多语言实现方案》「用户可见错误从语言包出」）：
 // 简体用户直接看后端带细节的原文（后端文案本就是简体，且同一码多种细节，转写反而丢信息）；
 // 其余语言查 error.code.<码> 的语言包文案，缺键时回退后端原文——绝不显示「缺文案:」。
+// errorText 给「只有码没有错误值」的场景（自动检查失败事件）按语言出文案：
+// 简体直接用后端给的原文（同 getErrorMessage 的口径），其余语言查语言包，缺键回原文。
+export function errorText(code: string, fallback: string): string {
+  if (getLocale() === 'zh-CN' || code === '') return fallback
+  const localized = t(`error.code.${code}`)
+  return isMissingTranslation(localized) ? fallback : localized
+}
+
 export function getErrorMessage(value: unknown): string {
   const app = toAppError(value)
   if (app.code === 'unknown' || getLocale() === 'zh-CN') return app.message

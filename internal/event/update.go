@@ -13,6 +13,9 @@ const UpdateStatusName = "update:status"
 type UpdateNotice struct {
 	Info  *updater.Info `json:"info,omitempty"`
 	Error string        `json:"error,omitempty"`
+	// Code 是失败时的稳定错误码：前端按码出界面语言文案（自动检查失败不走命令
+	// 返回值，没有这一条繁体用户就只能看简体原文）。
+	Code string `json:"code,omitempty"`
 }
 
 // UpdateProgressName 是更新下载进度事件的名字。和检查结论（update:status）分开：

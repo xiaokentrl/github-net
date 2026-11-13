@@ -97,6 +97,7 @@ export type UpdateNoticePayload = {
     checkedAt: string
   }
   error?: string
+  code?: string
 }
 
 // 下载进度事件（update:download-progress）：后端按 200ms 节拍报已收/总字节。
