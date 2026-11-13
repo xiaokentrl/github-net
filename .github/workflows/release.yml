@@ -75,6 +75,8 @@ jobs:
           go-version-file: go.mod
       - name: 校验标签与版本一致
         run: |
+          # 容器里 checkout 目录属主与进程不同，git 命令先放行再跑（同 release 下一步）。
+          git config --global --add safe.directory "$GITHUB_WORKSPACE" 2>/dev/null || true
           # 版本单一来源是 main.go 的 appVersion；标签和它对不上，装出来的应用
           # 自报版本和 Release 页对不齐，更新比较也会乱。
           declared="$(bash scripts/version.sh)"
