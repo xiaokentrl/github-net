@@ -3,4 +3,11 @@
 # root 侧优先交给免密的 root 助手，没配助手时才弹图形密码框要一次密码。
 # 跳过一次：GITHUB_NET_SKIP_REINSTALL=1 git push
 [ "${GITHUB_NET_SKIP_REINSTALL:-0}" = "1" ] && exit 0
+# 纯标签推送不打包重装（2026-11-14 升级实测踩中）：重打标签的两次 push 会
+# 用工作树（可能已是新版本号）打包装上本机，把「待升级测试」的本机悄悄变成新版本。
+# 打包重装的对象是分支代码；标签 push 的 stdin 里全是 refs/tags/ 就直接放行。
+refs="$(cat)"
+if ! printf '%s\n' "$refs" | grep -qv '^refs/tags/'; then
+  exit 0
+fi
 bash "$(dirname "$0")/../scripts/pre-push-reinstall.sh"
