@@ -1,6 +1,6 @@
 // 后端错误的唯一整理出口：稳定错误码来自 Go 侧 internal/app/errors.go，
 // 线上文本形状是 `code: 可展示消息[: 内部原因]`，前端按码判断，不解析中文。
-import { t } from '../i18n'
+import { getLocale, t } from '../i18n'
 
 // 后端 internal/app 声明的稳定错误码，整份抄一遍——漏登的码摘不掉前缀，
 // 界面上就会直接印出「hosts_failed: 没能打开 Hosts 文件」这种机器话。
@@ -67,6 +67,12 @@ export function toAppError(value: unknown): AppError {
   return { code: 'unknown', message: text === '' ? t('error.unknown') : text, cause: value }
 }
 
+// getErrorMessage 按界面语言给一句可展示的话（对照《多语言实现方案》「用户可见错误从语言包出」）：
+// 简体用户直接看后端带细节的原文（后端文案本就是简体，且同一码多种细节，转写反而丢信息）；
+// 其余语言查 error.code.<码> 的语言包文案，缺键时回退后端原文——绝不显示「缺文案:」。
 export function getErrorMessage(value: unknown): string {
-  return toAppError(value).message
+  const app = toAppError(value)
+  if (app.code === 'unknown' || getLocale() === 'zh-CN') return app.message
+  const localized = t(`error.code.${app.code}`)
+  return localized.startsWith('缺文案:') ? app.message : localized
 }

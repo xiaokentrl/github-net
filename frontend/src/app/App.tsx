@@ -140,6 +140,8 @@ export function App() {
   // 读回来的和保存成功返回的都走这里，省得两条链路对同一份配置处理得不一样。
   const applyConfig = useCallback((next: Config) => {
     setLocale(next.appearance.language)
+    // lang 属性跟着语言走（对照《多语言实现方案》）：屏幕阅读器、拼写与字体渲染都读它。
+    document.documentElement.lang = next.appearance.language
     applyTheme(next.appearance.theme)
     applyZoom(next.appearance.zoom)
     setSettings(next)

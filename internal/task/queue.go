@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,9 @@ import (
 // 所有可导方法都能并发调用。事件投递在队列锁内完成：发布器只做一次总线投递、
 // 不会回头调本包的方法，所以不会自锁；换来的是「状态变更和它的事件序号严格同序」，
 // 慢订阅者会拖慢队列，这是已知取舍。
+// queueShutdownTimeout 是关停等待的上限：执行器没在期限内收尾就继续退出，不拖死进程。
+const queueShutdownTimeout = 5 * time.Second
+
 type Queue struct {
 	exec Executor
 	pub  Publisher
@@ -317,7 +321,21 @@ func (q *Queue) Shutdown() {
 	}
 	q.broadcastLocked()
 	q.mu.Unlock()
-	q.wg.Wait()
+	// 等待有上限（对照《依赖顺序方案》「一个服务关不掉不能拖死整个退出」）：
+	// 执行器不响应取消时，超时后标记并继续退出，宁可少一次体面收尾也不挂死整个进程。
+	done := make(chan struct{})
+	go func() {
+		q.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(queueShutdownTimeout):
+		q.mu.Lock()
+		q.stopped = true
+		q.mu.Unlock()
+		log.Printf("[queue] 关停等待超时（%v），执行器没在期限内收尾，继续退出", queueShutdownTimeout)
+	}
 }
 
 // WaitRound 阻塞到 roundID 这一轮不再有在途任务（等待中、执行中、恢复中都算在途）。

@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react'
+import { Status } from '../../api/client'
 import type { Round, Snapshot, Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { getDetectResult, getTasks } from '../../api/client'
-import { Status } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { DetectProgressPayload, TaskProgressPayload } from '../../api/events'
 
 // 队列与检测结果是跨页面共享的状态：详情页和队列面板读同一份，这里就是那唯一一份。

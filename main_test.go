@@ -2,7 +2,9 @@ package main
 
 import (
 	"errors"
+	"github.com/xiaokentrl/github-net/internal/config"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 
@@ -53,5 +55,20 @@ func TestTrayTooltipFollowsRunningTasks(t *testing.T) {
 	}}
 	if got := runningTasks(snap); got != 2 {
 		t.Errorf("只该数执行中的任务，实际 %d", got)
+	}
+}
+
+// 托盘主题子菜单要盖满 config 支持的全部主题：allowedThemes 加了新主题而托盘忘了，
+// 用户就切不到那个主题。齐性对照《主题与色彩方案》的验收清单（对照复核 2026-11-13 中危）。
+func TestTrayThemesCoverAllAllowedThemes(t *testing.T) {
+	want := config.AllowedThemeIDs()
+	got := make([]string, 0, len(trayThemes))
+	for _, th := range trayThemes {
+		got = append(got, th.id)
+	}
+	sort.Strings(got)
+	sort.Strings(want)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("托盘主题清单 %v 与 config 支持的主题 %v 不一致", got, want)
 	}
 }

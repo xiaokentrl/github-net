@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -71,6 +72,17 @@ var (
 	allowedZooms     = map[float64]bool{0.9: true, 1: true, 1.1: true, 1.25: true}
 	allowedLanguages = map[string]bool{"zh-CN": true, "zh-TW": true}
 )
+
+// AllowedThemeIDs 返回支持的主题 id 清单：托盘菜单等外部清单要和它对齐
+// （齐性由 main_test 的用例钉住，漏一个主题托盘就切换不到）。
+func AllowedThemeIDs() []string {
+	ids := make([]string, 0, len(allowedThemes))
+	for id := range allowedThemes {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
 
 // NetworkConfig 是网络与流量设置。
 type NetworkConfig struct {

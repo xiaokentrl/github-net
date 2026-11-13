@@ -31,7 +31,7 @@ permissions:
 env:
   GLIBC_LIMIT: "2.41"
   RUNTIME_LIBS: "libgtk-4.so.1 libwebkitgtk-6.0.so.4 libjavascriptcoregtk-6.0.so.1"
-  WAILS_VERSION: "v3.0.0"
+  WAILS_VERSION: "v3.1.0"
 
 jobs:
   verify-guard:

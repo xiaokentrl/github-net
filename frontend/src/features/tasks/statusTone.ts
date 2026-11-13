@@ -9,8 +9,8 @@
 // 实测结论有两个来源（同名同址，缺一个就认另一个）：后端从候选池贴回的 entries[].probeStatus（重启也还在）
 // 和最近一轮检测里每条候选的定格。没测过不等于连不通——一点证据都没有时不降级，照文件事实给档。
 // 另外，本轮检测跑完却一个可用候选都没有：没有可写 Hosts，直接判失败档（红），四处一起红。
-import { Status } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import type { Task } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
+import { Status } from '../../api/client'
 import type { DetectResultView, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 
 export type Tone = 'working' | 'failed' | 'written' | 'unwritten'

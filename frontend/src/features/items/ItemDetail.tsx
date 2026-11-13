@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import { HostsStatus } from '../../api/client'
 import type { Candidate } from '../../../bindings/github.com/xiaokentrl/github-net/internal/accelerator/models'
 import { formatInteger, formatRelativeTime } from '../../i18n/formatters'
 import type { CatalogCategory, CatalogItem, DetectResultView, HostsRestorePreview, HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'

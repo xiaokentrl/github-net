@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -41,6 +42,35 @@ const (
 	appID      = "io.github.xiaokentrl.githubnet"
 )
 
+// injectThemeAndLang 把首页 HTML 的 <html> 标签补上配置里的 data-theme 与 lang，
+// 返回改写后的字节。主题读不到（配置服务没就绪）就原样放行——白闪一次总好过打不开。
+// 头（Content-Type 等）经包装的 ResponseWriter 原样透传，内容留在 buffer 里改写后重发。
+func injectThemeAndLang(theme, lang string, next http.Handler, w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	capture := &bytes.Buffer{}
+	next.ServeHTTP(&captureResponseWriter{ResponseWriter: w, buf: capture}, r)
+	html := capture.String()
+	at := strings.Index(html, "<html")
+	if at < 0 {
+		return capture.Bytes(), errors.New("找不到 <html 标签")
+	}
+	end := strings.Index(html[at:], ">")
+	if end < 0 {
+		return capture.Bytes(), errors.New("<html 标签不完整")
+	}
+	tag := html[at : at+end+1]
+	// 同名属性以后者为准：追加在标签尾，稳压 Vite 模板写死的 data-theme="light" lang="zh-CN"。
+	newTag := fmt.Sprintf(`<html data-theme=%q lang=%q`, theme, lang) + strings.TrimPrefix(tag, "<html")
+	return []byte(html[:at] + newTag + html[at+end+1:]), nil
+}
+
+// captureResponseWriter 拦下正文写入供改写；Header 与状态码透传给真 ResponseWriter。
+type captureResponseWriter struct {
+	http.ResponseWriter
+	buf *bytes.Buffer
+}
+
+func (n *captureResponseWriter) Write(b []byte) (int, error) { return n.buf.Write(b) }
+
 // windowGeometryPath 给窗口几何落盘文件的路径：与用户配置同目录的 window.json。
 // 单独一个文件不走 config 的 revision 语义——拖窗口不该和设置保存抢版本号。
 func windowGeometryPath(store *config.Store) (string, error) {
@@ -48,8 +78,9 @@ func windowGeometryPath(store *config.Store) (string, error) {
 	return filepath.Join(dir, "window.json"), nil
 }
 
-// trayThemes 是托盘「主题」子菜单的六套配色（id 与前端 themes.ts、config 校验同一份口径；
+// trayThemes 是托盘「主题」子菜单的七套配色（id 与前端 themes.ts、config 校验同一份口径；
 // 显示名跟着前端 themes.ts 的中文名，改名字两边一起改）。
+// 齐性由 theme_tray_test 钉住：config 的 allowedThemes 加了新主题而这里忘了，测试红。
 var trayThemes = []struct{ id, name string }{
 	{"light", "晨光白"},
 	{"sakura", "樱花粉"},
@@ -57,6 +88,7 @@ var trayThemes = []struct{ id, name string }{
 	{"ocean", "深海蓝"},
 	{"midnight", "午夜蓝"},
 	{"oled", "极夜黑"},
+	{"warm-yellow", "暖阳黄"},
 }
 
 func main() {
@@ -144,6 +176,8 @@ func main() {
 	// cleanup 在窗口、托盘和事件订阅建好之后才被赋值，OnShutdown 只能提前捕获这个变量。
 	var cleanup func()
 
+	// service 声明在资产中间件之前：FOUC 注入的闭包在建窗时就引用它（运行期才赋值）。
+	var service *appsvc.Service
 	platformApp := application.New(application.Options{
 		Name:        appName,
 		Description: "GitHub 和 Steam 网络加速工具",
@@ -169,6 +203,22 @@ func main() {
 					w.Header().Set("Content-Security-Policy",
 						"default-src 'none'; script-src 'self'; style-src 'self'; "+
 							"img-src 'self'; connect-src 'self'; font-src 'self'")
+					// 首帧前注入主题与语言（对照《主题与色彩方案》「冷启动无主题闪烁」）：
+					// 只拦首页 HTML，把 <html> 的 data-theme/lang 换成配置里的现值——
+					// CSS 按属性选择器取色，页面渲染第一帧就是对的，不再白闪后跳深色。
+					// CSP 禁行内脚本，所以走服务端改写而不是前端 bootstrap。
+					if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+						theme, lang := "light", "zh-CN"
+						if service != nil {
+							if cfg, err := service.GetSettings(); err == nil {
+								theme, lang = cfg.Appearance.Theme, cfg.Appearance.Language
+							}
+						}
+						if b, err := injectThemeAndLang(theme, lang, next, w, r); err == nil {
+							_, _ = w.Write(b)
+							return
+						}
+					}
 					next.ServeHTTP(w, r)
 				})
 			},
@@ -188,7 +238,7 @@ func main() {
 	// 服务在应用建好之后才装配：任务队列的进度事件要投递到已经存在的事件总线上。
 	// RegisterService 只在 Run 之前有效，这里仍在 Run 之前，注册顺序与原来写在 Options 里一致。
 	emitProgress := func(name string, payload any) { platformApp.Event.Emit(name, payload) }
-	service := appsvc.NewService(appName, appVersion, emitter.Sequence, emitProgress)
+	service = appsvc.NewService(appName, appVersion, emitter.Sequence, emitProgress)
 	// 启动时清一次本机落盘缓存（超过保留期限的一律删掉，拍板 2026-11-05）。放后台跑是因为它可能碰磁盘上
 	// 一个卡住的目录，而清缓存这件事不该拦住窗口起来；清失败不吭声也不影响任何功能。
 	go appsvc.PruneCaches(service)
@@ -363,14 +413,6 @@ func main() {
 		return menu
 	}
 	tray.SetMenu(buildTrayMenu())
-
-	tray.OnClick(func() {
-		if window.IsVisible() {
-			window.Hide()
-			return
-		}
-		requestWindowFocus()
-	})
 
 	// 托盘提示跟着队列走（原型胶囊那颗「运行中」小圆点的等价物：系统托盘图标是静态图，
 	// 颜色改不了，只能把「有没有在跑」写进提示文字）。只在句子变了才下发，免得每出一条

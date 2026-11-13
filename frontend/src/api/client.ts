@@ -47,6 +47,16 @@ import type {
 } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 // 预览相关的两个返回类型由组件直接使用，从 bindings 透出，组件只认这一层。
 export type { HostsRestorePreview, IPCachePreview, PoolEntryView, SourceCachePreview } from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+// 枚举常量在此统一再导出：组件层只认 api/ 这一个出口（《前端目录结构方案》——
+// 绑定的类型与枚举 import 都收在这里，值导入若散落组件层，生成物路径一变就要全仓改）。
+export {
+  HostsAccess,
+  HostsStatus,
+} from '../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+export { Kind, Status } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
+// 窗口/应用动作也收进来：组件不直接 import Wails 运行时（api/browser.ts 同一规矩）。
+export { Window, Application } from '@wailsio/runtime'
+
 import type { Config } from '../../bindings/github.com/xiaokentrl/github-net/internal/config/models'
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Snapshot, Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'

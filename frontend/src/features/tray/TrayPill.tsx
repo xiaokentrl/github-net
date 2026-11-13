@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Application, Window } from '@wailsio/runtime'
+import { Application, Window } from '../../api/client'
 import { THEMES, themeName } from '../theme/themes'
 import { t } from '../../i18n'
 import styles from './TrayPill.module.css'

@@ -31,8 +31,27 @@ for (const file of files) {
   }
 }
 
+// 占位符门（《多语言实现方案》CI 门禁第 3 条）：同键两语言用的占位符集合必须一致——
+// 简体写了 {count} 繁体没写，切到繁体那句就是残句。逐键比集合，不一致即红。
+function placeholders(template) {
+  return new Set([...String(template).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort())
+}
+
+for (const file of files) {
+  if (file === 'zh-CN.json') continue
+  const data = JSON.parse(readFileSync(join(root, file), 'utf8'))
+  for (const key of baseKeys) {
+    const basePh = placeholders(base[key])
+    const otherPh = placeholders(data[key] ?? '')
+    if (basePh.size !== otherPh.size || [...basePh].some((p) => !otherPh.has(p))) {
+      console.error(`[check-locales] ${file} 键 ${key} 的占位符集合与基准不一致：基准 {${[...basePh]}} vs 实际 {${[...otherPh]}}`)
+      failed = true
+    }
+  }
+}
+
 if (failed) {
-  console.error('[check-locales] 语言文件键集合不一致，构建失败。')
+  console.error('[check-locales] 语言文件不一致，构建失败。')
   process.exit(1)
 }
 console.log(`[check-locales] ${files.length} 个语言文件键集合一致（基准 ${baseKeys.size} 键）。`)

@@ -1,6 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { Window } from '@wailsio/runtime'
-import { HostsAccess } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
+import { HostsAccess, Window } from '../../api/client'
 import type { AppStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import { t } from '../../i18n'
 import { TrayPill } from '../../features/tray/TrayPill'

@@ -1,6 +1,5 @@
-import { HostsStatus } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 import type { HostsState } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
-import { Kind, Status } from '../../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
+import { HostsStatus, Kind, Status } from '../../api/client'
 import { PROGRESS_LABEL, TONE_LABEL, noAvailableThisRound, nothingAccelerates, type Tone } from '../../features/tasks/statusTone'
 import type { DetectResultView } from '../../../bindings/github.com/xiaokentrl/github-net/internal/app/models'
 
