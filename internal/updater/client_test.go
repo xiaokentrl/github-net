@@ -359,3 +359,62 @@ func TestDownloadSkipsNetworkWhenCompleteFileExists(t *testing.T) {
 		t.Error("大小不符时该发请求重新下载")
 	}
 }
+
+// 残片身份用 If-Range 核对（跨版本/同版本重发布的错位防线，用户质疑 2026-11-14）：
+// 校验器匹配→206 续传；不匹配→服务器回 200 全量，整段重来——不靠版本字符串比对，
+// 靠内容校验器。两种路径最终文件都必须完整正确。
+func TestDownloadResumeValidatesIdentityViaIfRange(t *testing.T) {
+	full := []byte(strings.Repeat("AB", 4096)) // 8KB
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ifRange := r.Header.Get("If-Range")
+		if r.Header.Get("Range") != "" && ifRange == "etag-current" {
+			start := int64(0)
+			fmt.Sscanf(r.Header.Get("Range"), "bytes=%d-", &start)
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, int64(len(full))-1, len(full)))
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(full[start:])
+			return
+		}
+		w.Header().Set("ETag", `"etag-current"`)
+		w.Write(full)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	asset := UpdateAsset{Name: "pkg.deb", URL: srv.URL + "/pkg.deb", Size: int64(len(full))}
+	c := NewClient()
+	c.SetAllowedAssetOrigins([]string{srv.URL})
+
+	// 残片＋匹配的校验器：206 续传，拼出完整文件。
+	if err := os.WriteFile(filepath.Join(dir, ".pkg.deb.part"), full[:len(full)/2], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".pkg.deb.part.etag"), []byte("etag-current"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path, err := c.Download(context.Background(), asset, dir, nil)
+	if err != nil {
+		t.Fatalf("匹配身份的续传失败: %v", err)
+	}
+	if back, _ := os.ReadFile(path); string(back) != string(full) {
+		t.Error("匹配身份续传后的文件该完整一致")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".pkg.deb.part.etag")); !os.IsNotExist(err) {
+		t.Error("成品就位后侧车校验器该被清掉")
+	}
+
+	// 残片＋不匹配的校验器（模拟同版本重发布）：服务器回 200 全量，整段重来。
+	if err := os.WriteFile(filepath.Join(dir, ".pkg.deb.part"), full[:len(full)/2], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".pkg.deb.part.etag"), []byte("etag-stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path, err = c.Download(context.Background(), asset, dir, nil)
+	if err != nil {
+		t.Fatalf("身份不匹配的整段重来失败: %v", err)
+	}
+	if back, _ := os.ReadFile(path); string(back) != string(full) {
+		t.Error("整段重来后的文件该完整一致")
+	}
+}

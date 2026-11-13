@@ -92,10 +92,18 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 		return dest, nil
 	}
 	// 断点续传：.part 是固定名（隐藏前缀，PruneCaches 的归属门认它），有已收字节就带 Range 续。
+	// 残片身份用 If-Range 校验器核对（侧车文件记当时的 ETag）：同版本重发布（同名不同内容）
+	// 时服务器回 200 全量，我们已有「200＝整段重来」的分支天然衔接——不靠版本字符串比对，
+	// 靠内容校验器，跨版本/重发布两种错位都盖住。
 	partPath := filepath.Join(destDir, "."+asset.Name+".part")
+	etagPath := partPath + ".etag"
 	resumeFrom := int64(0)
+	resumeETag := ""
 	if st, err := os.Stat(partPath); err == nil && st.Size() > 0 {
 		resumeFrom = st.Size()
+		if raw, err := os.ReadFile(etagPath); err == nil {
+			resumeETag = strings.TrimSpace(string(raw))
+		}
 		if asset.Size > 0 && resumeFrom == asset.Size {
 			// 残片已经收满声明长度（收满后进程在改名前被杀是常见动作）：
 			// 直接改名成成品——再发 Range 会越界吃 416，重试永远失败成死锁。
@@ -106,6 +114,7 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 		if asset.Size > 0 && resumeFrom > asset.Size {
 			// 残片比声明还大：内容不可信，整段重来。
 			_ = os.Remove(partPath)
+			_ = os.Remove(etagPath)
 			resumeFrom = 0
 		}
 	}
@@ -116,6 +125,10 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	}
 	if resumeFrom > 0 {
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeFrom))
+		if resumeETag != "" {
+			// 校验器核对残片身份：内容变过就回 200 全量（走整段重来分支），不变才 206 续。
+			req.Header.Set("If-Range", resumeETag)
+		}
 	}
 	resp, err := c.download.Do(req)
 	if err != nil {
@@ -136,6 +149,7 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	case resp.StatusCode == http.StatusOK, resp.StatusCode == http.StatusRequestedRangeNotSatisfiable:
 		if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
 			_ = os.Remove(partPath)
+			_ = os.Remove(etagPath)
 		}
 		resumeFrom = 0
 		// 416/200 都要重新请求（不带 Range）才能拿到全量。
@@ -156,6 +170,12 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 		return "", fmt.Errorf("%w：下载 %s 得到 HTTP %d", ErrNetwork, asset.Name, resp.StatusCode)
 	}
 
+	if resumeFrom == 0 {
+		// 全量下载：记下这轮内容的校验器，残片将来续传时用 If-Range 核对身份。
+		if etag := resp.Header.Get("ETag"); etag != "" {
+			_ = os.WriteFile(etagPath, []byte(etag), 0o600)
+		}
+	}
 	flags := os.O_WRONLY | os.O_CREATE
 	if resumeFrom > 0 {
 		flags |= os.O_APPEND
@@ -206,6 +226,7 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	// 残片内容不可信，删掉让下一次整段重来。
 	if asset.Size > 0 && resumeFrom+received != asset.Size {
 		_ = os.Remove(partPath)
+		_ = os.Remove(etagPath)
 		return "", fmt.Errorf("资产 %s 实收 %d 字节，声明 %d 字节，拒收", asset.Name, resumeFrom+received, asset.Size)
 	}
 	if err := part.Close(); err != nil {
@@ -214,6 +235,7 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	if err := os.Rename(partPath, dest); err != nil {
 		return "", fmt.Errorf("落盘失败：%w", err)
 	}
+	_ = os.Remove(etagPath) // 成品就位，残片身份校验器一并清掉。
 	return dest, nil
 }
 
