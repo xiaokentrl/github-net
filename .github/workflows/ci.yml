@@ -62,7 +62,15 @@ jobs:
       - name: 格式化检查
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - name: 静态检查与测试
-        run: go vet ./... && go test -count=1 ./...
+        run: |
+          go vet ./...
+          # 失败输出逐行编进 error 注解：日志要鉴权拉不到，注解匿名可读。
+          if ! go test -count=1 ./... 2>&1 | tee /tmp/test-out.txt; then
+            grep -E "^(--- FAIL|FAIL|panic|\s+.*_test\.go:[0-9]+)" /tmp/test-out.txt | head -25 | while IFS= read -r line; do
+              echo "::error::test ${line:0:180}"
+            done
+            exit 1
+          fi
       - name: 绑定生成对账（指南《绑定层契约与生成物方案》硬性目标 1）
         run: |
           # bindings 是生成物：重新生成后与提交版必须一字不差，否则有人手改了生成物
