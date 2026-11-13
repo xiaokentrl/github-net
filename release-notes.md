@@ -1,6 +1,6 @@
 ## English
 
-### github-net 0.1.13 Stable (0.1.12 → 0.1.13)
+### github-net 0.1.14 Stable (0.1.13 → 0.1.14)
 
 **Added**
 
@@ -8,26 +8,25 @@ None
 
 **Fixed**
 
-1. Fixed the candidate table being wiped repeatedly during a detection run: it now clears once when a new round starts instead of on every progress event
-2. Fixed stale detail results after re-probing a single IP: the probe outcome now writes back into the in-memory result immediately
-3. Fixed a race where applying during a detection dropped the "currently applied" mark: detection now re-marks from the live Hosts file when it finishes
-4. Fixed duplicate skipped rows and doubled notices when double-clicking "apply usable IPs": an existing skipped row is now reused with its reason refreshed
-5. Fixed a lock-up when metadata could not be saved: the transaction now rolls back instead of leaving Hosts and its ledger out of sync
-6. Reduced the risk of concurrent Hosts writes from two helper instances: startup probes for a live service and write transactions take a cross-process lock
-7. The per-menu restore dialog now requires its preview to load before confirming, matching the restore-all dialog
-8. Concurrent update downloads no longer delete each other's files: the backend serializes and rejects repeats explicitly
-9. Detection failures no longer spam one notice per item on top of the round summary; only the summary remains
+1. Dark-theme users no longer see a white flash on cold start: the first frame renders in the configured theme
+2. Traditional-Chinese users no longer see Simplified text in backend error notices: all 25 error codes are localized
+3. The tray left-click no longer hides a visible window; it restores/focuses as originally decided
+4. The tray theme menu now includes all seven themes (the missing warm-yellow added)
+5. Queue shutdown no longer waits forever if an executor ignores cancellation; it caps the wait at 5 seconds
+6. A single invalid key in a hand-edited config no longer resets every setting; per-group salvage keeps the rest
+7. Fast repeated checkbox toggles can no longer postpone the save indefinitely; it flushes within 2s and on exit
+8. Error codes referenced inside error messages are no longer mis-detected; matching prefers line starts
 
 **Updated**
 
-1. Detection progress events are now batched and coalesced per candidate, flushed at round end
-2. Window geometry and config writes use atomic file replacement with directory fsync; the ledger database now refuses files from a newer build
-3. Asset downloads re-validate the origin whitelist on every redirect; the tray pill now minimizes instead of hiding, keeping window position on Wayland
-4. The operation-feedback matrix now covers nine previously unregistered entries and fixes two stale declarations
+1. Hardened the update download chain: per-hop origin whitelist, rejected packages deleted, download mutex, package dir moved inside the app directory
+2. New automation gates: bindings regeneration diff, clean-tree push check, post-install assertions, app relaunch after upgrade
+3. Detection progress events are batched and coalesced per candidate, flushed at round end
+4. Re-probing a single IP updates the detail view immediately; the applied mark converges regardless of ordering
 
 ## 中文
 
-### 0.1.13 稳定版（0.1.12 → 0.1.13）
+### 0.1.14 稳定版（0.1.13 → 0.1.14）
 
 **新增**
 
@@ -35,19 +34,18 @@ None
 
 **修复**
 
-1. 修复检测进行中候选表被反复清空的缺陷：任务事件只在「新一轮开跑」那一刻清一次，不再逐条抹掉刚画出来的行
-2. 修复单条 IP 重新检测后详情页结论不更新的缺陷：复测结论同步回写内存结果，状态、延迟与「可用」计数立刻跟上
-3. 修复检测中点「应用」会丢「当前生效」标记的竞态：检测收尾按 Hosts 现状重标一次，两种先后顺序都收敛
-4. 修复双击「写入可用IP」产生重复跳过行与双份通知的问题：同项重复跳过复用已有行并刷新原因
-5. 修复元数据保存失败会让工具自锁的缺陷：内容已写入而账本没存时自动回滚到写入前状态
-6. 修复双开辅助服务可能并发写 Hosts 丢更新的风险：启动时探测已有服务、写事务加跨进程锁
-7. 修复还原弹框在对照表没读出来时也能点确认的问题，与全量还原弹框同一套门禁
-8. 修复下载更新并发会互相删包的问题：后端互斥，重复调用明确拒绝
-9. 修复批量检测失败时逐项刷屏通知与轮汇总双报的问题：检测类失败只走轮聚合一条
+1. 修复深色主题用户冷启动白闪的问题：窗口首帧即按配置主题渲染，不再先白后跳
+2. 修复繁体用户在后端错误提示上看到简体的问题：25 类错误按界面语言出文案
+3. 修复托盘左键会把已显示的窗口藏起来、与「幂等唤回」拍板相反的行为
+4. 修复托盘主题菜单缺「暖阳黄」第七套配色的问题
+5. 修复队列关停时执行器不响应取消会拖死整个退出的风险：关停等待加 5 秒上限
+6. 修复批量写 Hosts 时手改配置单个键会让全部设置归零的问题：逐组抢救，坏组退默认其余照常
+7. 修复「记住检测档位」在快速连续勾选后可能丢失的问题：防抖加 2 秒上限并在退出前冲刷
+8. 修复后端错误码在嵌套引用时可能认错码的问题：按行首优先匹配
 
 **更新**
 
-1. 检测进度事件批量节流（同候选合并＋单批上限），轮收尾同步投完，界面不再被事件洪峰冲刷
-2. 窗口几何、配置落盘统一原子写并补目录 fsync；底账库加版本守卫，库比程序新时明确拒绝
-3. 资产下载来源白名单逐跳复验（重定向也拦）；托盘胶囊收起改用最小化，Wayland 下不再丢窗口位置
-4. 操作反馈矩阵补齐九个漏登记入口并修正两处与实现不符的声明
+1. 更新安装包下载与交接整链加固：来源逐跳白名单、验签失败即删、下载互斥、升级包收回应用目录内
+2. 新增绑定生成对账门、推送前验树、装后三验与运行中拉回等自动化门
+3. 检测进度事件批量节流（同候选合并＋单批上限＋轮尾冲刷），界面不再被事件洪峰冲刷
+4. 单条 IP 重新检测后详情页结论立即更新；检测中应用「当前生效」标记两种时序都收敛
