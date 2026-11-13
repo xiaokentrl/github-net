@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -87,7 +88,7 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	// 已有同名且等长的成品：不重下（重复点击、交接后重试不再整包重来）。
 	// 内容对不对由调用方的验签闸把关——验不过会被删掉，下一次自然走正常下载。
 	dest := filepath.Join(destDir, asset.Name)
-	if st, err := os.Stat(dest); err == nil && (asset.Size <= 0 || st.Size() == asset.Size) {
+	if st, err := os.Stat(dest); err == nil && asset.Size > 0 && st.Size() == asset.Size {
 		return dest, nil
 	}
 	// 断点续传：.part 是固定名（隐藏前缀，PruneCaches 的归属门认它），有已收字节就带 Range 续。
@@ -95,6 +96,13 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	resumeFrom := int64(0)
 	if st, err := os.Stat(partPath); err == nil && st.Size() > 0 {
 		resumeFrom = st.Size()
+		if asset.Size > 0 && resumeFrom == asset.Size {
+			// 残片已经收满声明长度（收满后进程在改名前被杀是常见动作）：
+			// 直接改名成成品——再发 Range 会越界吃 416，重试永远失败成死锁。
+			if err := os.Rename(partPath, filepath.Join(destDir, asset.Name)); err == nil {
+				return filepath.Join(destDir, asset.Name), nil
+			}
+		}
 		if asset.Size > 0 && resumeFrom > asset.Size {
 			// 残片比声明还大：内容不可信，整段重来。
 			_ = os.Remove(partPath)
@@ -116,12 +124,34 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 		return "", fmt.Errorf("%w：%w", ErrNetwork, err)
 	}
 	defer resp.Body.Close()
-	// 206＝服务器答应续传；200＝不支持 Range 的全量响应，残片作废整段重来。
+	// 206＝服务器答应续传——但起点要对：解析 Content-Range 的 start，与 resumeFrom
+	// 不一致（CDN/反代异常）就当整段重来，盲 O_APPEND 会拼出坏文件。
+	// 416＝残片越界（起点已被服务器认为无效）：残片作废整段重来，不再报网络错卡死重试。
+	// 200＝不支持 Range 的全量响应，残片作废整段重来。
 	switch {
 	case resp.StatusCode == http.StatusPartialContent && resumeFrom > 0:
-		// 续传成立。
-	case resp.StatusCode == http.StatusOK:
+		if start, ok := contentRangeStart(resp.Header.Get("Content-Range")); ok && start != resumeFrom {
+			resumeFrom = 0
+		}
+	case resp.StatusCode == http.StatusOK, resp.StatusCode == http.StatusRequestedRangeNotSatisfiable:
+		if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
+			_ = os.Remove(partPath)
+		}
 		resumeFrom = 0
+		// 416/200 都要重新请求（不带 Range）才能拿到全量。
+		resp.Body.Close()
+		req2, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
+		if err != nil {
+			return "", fmt.Errorf("%w：%v", ErrNetwork, err)
+		}
+		resp, err = c.download.Do(req2)
+		if err != nil {
+			return "", fmt.Errorf("%w：%w", ErrNetwork, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("%w：下载 %s 得到 HTTP %d", ErrNetwork, asset.Name, resp.StatusCode)
+		}
 	default:
 		return "", fmt.Errorf("%w：下载 %s 得到 HTTP %d", ErrNetwork, asset.Name, resp.StatusCode)
 	}
@@ -136,6 +166,8 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	if err != nil {
 		return "", fmt.Errorf("续传文件建不出来：%w", err)
 	}
+	// 错误分支也要关：弱网反复重试每失败一次漏一个 fd。成功路径显式关在前，重复关无害。
+	defer func() { _ = part.Close() }()
 
 	// 进度按节拍汇报：直发会随 Write 逐块刷屏；节流 200ms，完成时补一条终值。
 	var tick func(n int64)
@@ -144,7 +176,11 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 		received := resumeFrom
 		total := asset.Size
 		if total <= 0 {
-			total = resumeFrom + resp.ContentLength
+			total = resp.ContentLength
+			if total < 0 {
+				// chunked 无总长：报 0，前端走「已收 N 字节」分支，不算假百分比。
+				total = 0
+			}
 		}
 		tick = func(n int64) {
 			received += n
@@ -156,7 +192,11 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	}
 	received, err := io.Copy(part, io.TeeReader(io.LimitReader(resp.Body, maxDownloadSize), countingWriter{onWrite: tick}))
 	if onProgress != nil {
-		onProgress(resumeFrom+received, asset.Size)
+		finalTotal := asset.Size
+		if finalTotal <= 0 && resp.ContentLength > 0 {
+			finalTotal = resp.ContentLength
+		}
+		onProgress(resumeFrom+received, finalTotal)
 	}
 	if err != nil {
 		// 中断保留 .part：下一次从断点接着收（这正是续传存在的意义）。
@@ -199,14 +239,25 @@ func (c *Client) FetchChecksums(ctx context.Context, asset UpdateAsset, name, de
 	if asset.Name == "" {
 		return "", nil
 	}
-	path, err := c.Download(ctx, asset, destDir, nil)
+	fetch := func() ([]byte, error) {
+		path, err := c.Download(ctx, asset, destDir, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer os.Remove(path) // 清单取完即删：落点只留当前这次下载的东西。
+		return os.ReadFile(path)
+	}
+	raw, err := fetch()
 	if err != nil {
 		return "", err
 	}
-	defer os.Remove(path)
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
+	// 复用的成品可能是上一个版本的同名清单（Size 撞车，keep 表按名留了它）：
+	// 目标行不在就删掉重下一次，不让用户吃一次假「清单读不出来」。
+	if !strings.Contains(string(raw), name) {
+		raw, err = fetch()
+		if err != nil {
+			return "", err
+		}
 	}
 	for _, line := range strings.Split(string(raw), "\n") {
 		fields := strings.Fields(strings.TrimSpace(line))
@@ -230,4 +281,21 @@ func assetOriginAllowed(u *url.URL, origins []string) bool {
 		}
 	}
 	return false
+}
+
+// contentRangeStart 解析 "bytes=start-end/total" 里的 start；解析不出按「对不上」处理（ok=false）。
+func contentRangeStart(header string) (int64, bool) {
+	rest, found := strings.CutPrefix(header, "bytes=")
+	if !found {
+		return 0, false
+	}
+	start, _, ok := strings.Cut(rest, "-")
+	if !ok {
+		return 0, false
+	}
+	v, err := strconv.ParseInt(start, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return v, true
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/xiaokentrl/github-net/internal/event"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -286,4 +287,40 @@ func fakeUpdateServerFor(t *testing.T, priv ed25519.PrivateKey, pub ed25519.Publ
 		}))).ServeHTTP(w, r)
 	}))
 	return srv
+}
+
+// 下载进度事件链的 emit 层（对照复核 2026-11-14：updater 回调有测、前端没基建，
+// 中间这层不能裸奔）：DownloadUpdate 全程至少 emit 过一次进度，终值 Received==Total
+// ==声明大小，事件名与 event.UpdateProgressName 一致。
+func TestDownloadUpdateEmitsProgress(t *testing.T) {
+	priv, pub := testSigner(t)
+	svc := newUpdateService(t, fakeUpdateServerFor(t, priv, pub).URL+"/releases/latest", pub)
+	type progressEvent struct {
+		name    string
+		payload event.UpdateProgress
+	}
+	emitted := make([]progressEvent, 0, 8)
+	svc.emit = func(name string, payload any) {
+		if p, ok := payload.(event.UpdateProgress); ok && name == event.UpdateProgressName {
+			emitted = append(emitted, progressEvent{name: name, payload: p})
+		}
+	}
+
+	info, err := svc.CheckForUpdates()
+	if err != nil {
+		t.Fatalf("检查更新: %v", err)
+	}
+	if _, err := svc.DownloadUpdate(info); err != nil {
+		t.Fatalf("下载并交接: %v", err)
+	}
+	if len(emitted) == 0 {
+		t.Fatal("下载全程没 emit 过任何进度事件")
+	}
+	final := emitted[len(emitted)-1]
+	if final.payload.Received != final.payload.Total {
+		t.Errorf("终值该是 received==total（22），实际 %+v", final.payload)
+	}
+	if final.payload.Total != 22 {
+		t.Errorf("终值 total 该等于声明的安装包大小 22，实际 %d", final.payload.Total)
+	}
 }

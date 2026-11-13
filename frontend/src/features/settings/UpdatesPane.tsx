@@ -65,7 +65,8 @@ export function UpdatesPane({ status }: { status: AppStatus | null }) {
     check()
   }, [check])
 
-  // 订阅下载进度事件：只在 downloading 期间消费，退出下载态就清零。
+  // 订阅下载进度事件：progress 允许在退出下载态后残留（渲染有 downloading 门挡着，
+  // 下一次点下载前会先清零），不做退出清零 effect。
   useEffect(() => {
     const unsubscribe = subscribeUpdateProgress((payload) => {
       setProgress({ received: payload.received, total: payload.total })
@@ -127,7 +128,7 @@ export function UpdatesPane({ status }: { status: AppStatus | null }) {
                     ? t('settings.updates.progress', {
                         received: formatSize(progress.received),
                         total: formatSize(progress.total),
-                        percent: Math.floor((progress.received / progress.total) * 100),
+                        percent: Math.min(100, Math.floor((progress.received / progress.total) * 100)),
                       })
                     : t('settings.updates.progressNoTotal', { received: formatSize(progress.received) })}
                 </span>

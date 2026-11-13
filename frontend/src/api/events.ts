@@ -110,7 +110,7 @@ export type UpdateProgressPayload = {
 export function subscribeUpdateProgress(onPayload: (payload: UpdateProgressPayload) => void): () => void {
   return Events.On(UPDATE_PROGRESS_EVENT, (event: Events.WailsEvent) => {
     const payload = event.data as UpdateProgressPayload | undefined
-    if (!payload) return
+    if (!payload || typeof payload.received !== 'number' || typeof payload.total !== 'number') return
     onPayload(payload)
   })
 }
