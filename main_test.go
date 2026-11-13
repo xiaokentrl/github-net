@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"github.com/xiaokentrl/github-net/internal/config"
+	"net/http"
+	"net/http/httptest"
 	"runtime"
 	"sort"
 	"strings"
@@ -70,5 +72,44 @@ func TestTrayThemesCoverAllAllowedThemes(t *testing.T) {
 	sort.Strings(want)
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("托盘主题清单 %v 与 config 支持的主题 %v 不一致", got, want)
+	}
+}
+
+// 首帧主题注入：模板写死的 data-theme/lang 被配置值原地替换，正文按新长度发、
+// 状态码透传。替换是稳的选择：不依赖「HTML 同名属性先到先得」这种解析器行为。
+func TestInjectThemeAndLangReplacesTemplateAttrs(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<!DOCTYPE html>\n<html lang=\"zh-CN\" data-theme=\"light\">\n  <head>"))
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	out, code := injectThemeAndLang("midnight", "zh-TW", next, w, r)
+	if code != http.StatusOK {
+		t.Fatalf("next 隐式 200 时注入后该发 200，实际 %d", code)
+	}
+	if !strings.Contains(string(out), `data-theme="midnight"`) {
+		t.Errorf("模板的 data-theme 该被替换成配置值，实际 %s", out)
+	}
+	if !strings.Contains(string(out), `lang="zh-TW"`) {
+		t.Errorf("模板的 lang 该被替换成配置值，实际 %s", out)
+	}
+	if strings.Contains(string(out), `data-theme="light"`) {
+		t.Error("不允许残留模板旧值：同名属性先到先得，残留的旧值会赢")
+	}
+	if w.Header().Get("Content-Type") != "text/html" {
+		t.Errorf("响应头要原样透传，实际 %v", w.Header())
+	}
+
+	// 模板没有这两个属性时（比如构建模板改了）要追加而不是丢掉。
+	next2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<html><head></head></html>"))
+	})
+	out2, code2 := injectThemeAndLang("forest", "zh-CN", next2, w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if code2 != http.StatusOK {
+		t.Fatalf("隐式 200 该归位，实际 %d", code2)
+	}
+	if !strings.Contains(string(out2), `data-theme="forest"`) || !strings.Contains(string(out2), `lang="zh-CN"`) {
+		t.Errorf("无属性模板该追加两个属性，实际 %s", out2)
 	}
 }

@@ -23,11 +23,19 @@ export function getLocale(): string {
   return currentLocale
 }
 
+// missingKeyPrefix 是缺键占位输出的前缀：错误翻译回退等消费方用 isMissingTranslation
+// 判断，不许各自硬抄这句话（前缀一改抄写处就静默失效）。
+const missingKeyPrefix = '缺文案:'
+
+export function isMissingTranslation(text: string): boolean {
+  return text.startsWith(missingKeyPrefix)
+}
+
 export function t(key: string, params?: Params): string {
   const bundle = bundles[currentLocale] ?? bundles['zh-CN']
   const template = bundle[key]
   // 缺键时把键名显示出来，不能显示成空文本或编一句兜底话。
-  if (template === undefined) return `缺文案:${key}`
+  if (template === undefined) return `${missingKeyPrefix}${key}`
   if (!params) return template
   return template.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
     name in params ? String(params[name]) : placeholder,

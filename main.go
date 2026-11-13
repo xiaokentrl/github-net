@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -43,30 +44,63 @@ const (
 )
 
 // injectThemeAndLang 把首页 HTML 的 <html> 标签补上配置里的 data-theme 与 lang，
-// 返回改写后的字节。主题读不到（配置服务没就绪）就原样放行——白闪一次总好过打不开。
-// 头（Content-Type 等）经包装的 ResponseWriter 原样透传，内容留在 buffer 里改写后重发。
-func injectThemeAndLang(theme, lang string, next http.Handler, w http.ResponseWriter, r *http.Request) ([]byte, error) {
-	capture := &bytes.Buffer{}
-	next.ServeHTTP(&captureResponseWriter{ResponseWriter: w, buf: capture}, r)
-	html := capture.String()
+// 返回（正文, 应发状态码；Content-Length 已按新正文设好）。主题读不到（配置服务
+// 没就绪）就用默认浅色——白闪一次总好过打不开。正文捕获不完整时返回原样字节——
+// 绝不回头重跑 next，那会叠写正文。
+func injectThemeAndLang(theme, lang string, next http.Handler, w http.ResponseWriter, r *http.Request) ([]byte, int) {
+	cap := &captureResponseWriter{ResponseWriter: w, buf: &bytes.Buffer{}}
+	next.ServeHTTP(cap, r)
+	html := cap.buf.String()
 	at := strings.Index(html, "<html")
 	if at < 0 {
-		return capture.Bytes(), errors.New("找不到 <html 标签")
+		// 找不到 <html（比如回了 404 页）：把捕获到的原样发出去，绝不再跑一遍 next——
+		// 重跑会叠写正文。
+		return cap.buf.Bytes(), statusOrDefault(cap.status)
 	}
 	end := strings.Index(html[at:], ">")
 	if end < 0 {
-		return capture.Bytes(), errors.New("<html 标签不完整")
+		return cap.buf.Bytes(), statusOrDefault(cap.status)
 	}
 	tag := html[at : at+end+1]
-	// 同名属性以后者为准：追加在标签尾，稳压 Vite 模板写死的 data-theme="light" lang="zh-CN"。
-	newTag := fmt.Sprintf(`<html data-theme=%q lang=%q`, theme, lang) + strings.TrimPrefix(tag, "<html")
-	return []byte(html[:at] + newTag + html[at+end+1:]), nil
+	// 原地替换模板写死的 data-theme/lang（没有才追加）：不依赖重复属性的解析语义，
+	// 替换完的一定生效。HTML 同名属性先到先得，追加在尾部会被模板旧值压住。
+	themeAttr := regexp.MustCompile(`data-theme="[^"]*"`)
+	langAttr := regexp.MustCompile(`lang="[^"]*"`)
+	newTag := themeAttr.ReplaceAllString(langAttr.ReplaceAllString(tag, fmt.Sprintf(`lang=%q`, lang)), fmt.Sprintf(`data-theme=%q`, theme))
+	if !strings.Contains(newTag, "data-theme=") {
+		newTag = strings.TrimSuffix(newTag, ">") + fmt.Sprintf(` data-theme=%q>`, theme)
+	}
+	if !strings.Contains(newTag, `lang="`) {
+		newTag = strings.TrimSuffix(newTag, ">") + fmt.Sprintf(` lang=%q>`, lang)
+	}
+	out := []byte(html[:at] + newTag + html[at+end+1:])
+	// 长度按改写后的正文重设，再按记录的状态码发——顺序不能反。
+	w.Header().Set("Content-Length", strconv.Itoa(len(out)))
+	return out, statusOrDefault(cap.status)
 }
 
-// captureResponseWriter 拦下正文写入供改写；Header 与状态码透传给真 ResponseWriter。
+// statusOrDefault 把「next 没显式写状态码」的 0 归位成 200：HTTP 隐式 200 的等价物。
+func statusOrDefault(status int) int {
+	if status == 0 {
+		return http.StatusOK
+	}
+	return status
+}
+
+// captureResponseWriter 拦下正文与状态码供改写；其余头透传给真 ResponseWriter。
+// 状态码不能透传：注入会改变正文长度，必须先改写、自设 Content-Length，
+// 再按记录的状态码发——WebKit 按先到的 Content-Length 框定正文，长度不改会把
+// 注入后的首页截断（对照复核 2026-11-14 高危）。
 type captureResponseWriter struct {
 	http.ResponseWriter
-	buf *bytes.Buffer
+	buf    *bytes.Buffer
+	status int
+}
+
+func (n *captureResponseWriter) WriteHeader(status int) {
+	if n.status == 0 {
+		n.status = status
+	}
 }
 
 func (n *captureResponseWriter) Write(b []byte) (int, error) { return n.buf.Write(b) }
@@ -80,7 +114,7 @@ func windowGeometryPath(store *config.Store) (string, error) {
 
 // trayThemes 是托盘「主题」子菜单的七套配色（id 与前端 themes.ts、config 校验同一份口径；
 // 显示名跟着前端 themes.ts 的中文名，改名字两边一起改）。
-// 齐性由 theme_tray_test 钉住：config 的 allowedThemes 加了新主题而这里忘了，测试红。
+// 齐性由 main_test 的 TestTrayThemesCoverAllAllowedThemes 钉住：config 的 allowedThemes 加了新主题而这里忘了，测试红。
 var trayThemes = []struct{ id, name string }{
 	{"light", "晨光白"},
 	{"sakura", "樱花粉"},
@@ -214,10 +248,10 @@ func main() {
 								theme, lang = cfg.Appearance.Theme, cfg.Appearance.Language
 							}
 						}
-						if b, err := injectThemeAndLang(theme, lang, next, w, r); err == nil {
-							_, _ = w.Write(b)
-							return
-						}
+						b, code := injectThemeAndLang(theme, lang, next, w, r)
+						w.WriteHeader(code)
+						_, _ = w.Write(b)
+						return
 					}
 					next.ServeHTTP(w, r)
 				})

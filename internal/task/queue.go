@@ -331,9 +331,8 @@ func (q *Queue) Shutdown() {
 	select {
 	case <-done:
 	case <-time.After(queueShutdownTimeout):
-		q.mu.Lock()
-		q.stopped = true
-		q.mu.Unlock()
+		// stopped 在 Shutdown 开头就已置真且无回翻路径；这里只留日志，别让读者以为
+		// 还有第二个写者（对照复核 2026-11-14 低危：重置是死代码）。
 		log.Printf("[queue] 关停等待超时（%v），执行器没在期限内收尾，继续退出", queueShutdownTimeout)
 	}
 }

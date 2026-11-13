@@ -1,6 +1,6 @@
 // 后端错误的唯一整理出口：稳定错误码来自 Go 侧 internal/app/errors.go，
 // 线上文本形状是 `code: 可展示消息[: 内部原因]`，前端按码判断，不解析中文。
-import { getLocale, t } from '../i18n'
+import { getLocale, isMissingTranslation, t } from '../i18n'
 
 // 后端 internal/app 声明的稳定错误码，整份抄一遍——漏登的码摘不掉前缀，
 // 界面上就会直接印出「hosts_failed: 没能打开 Hosts 文件」这种机器话。
@@ -57,6 +57,15 @@ function textOf(value: unknown): string {
 // 不能改成成功，也不能返回空对象假装没事。
 export function toAppError(value: unknown): AppError {
   const text = textOf(value)
+  // 先按行首匹配：码是这段文本的唯一开头，嵌在中间的「xxx: 」不该被认成码
+  // （否则正文里引用另一个码会串认，按码翻译还会放大这个错）。
+  // 全文兜底匹配留着接「外层包了一层前缀」的历史形状。
+  for (const code of APP_ERROR_CODES) {
+    if (text.startsWith(`${code}: `)) {
+      const message = text.slice(code.length + 2).trim()
+      return { code, message: message === '' ? code : message, cause: value }
+    }
+  }
   for (const code of APP_ERROR_CODES) {
     const at = text.indexOf(`${code}: `)
     if (at !== -1) {
@@ -74,5 +83,5 @@ export function getErrorMessage(value: unknown): string {
   const app = toAppError(value)
   if (app.code === 'unknown' || getLocale() === 'zh-CN') return app.message
   const localized = t(`error.code.${app.code}`)
-  return localized.startsWith('缺文案:') ? app.message : localized
+  return isMissingTranslation(localized) ? app.message : localized
 }
