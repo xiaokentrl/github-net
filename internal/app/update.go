@@ -76,10 +76,20 @@ func (s *Service) DownloadUpdate(info updater.Info) (UpdateDownloadResult, error
 	if err != nil {
 		return UpdateDownloadResult{}, NewError(CodeInternal, "拿不到升级包存放目录", err)
 	}
-	// 上一轮留下的旧包先清掉：落点永远只有当前这一次下载的东西。
+	// 旧产物按名清：只删「这次用不上」的（别的版本成品、无名残片），同版本的
+	// 成品/残片/签名/清单保留——重复点击不重复下载，中断重试从 .part 续传
+	// （升级实测＋用户追问 2026-11-14：无差别清空会把续传前提也一起删掉）。
+	keep := map[string]bool{
+		installer.Name:                 true,
+		sig.Name:                       true,
+		checksums.Name:                 true,
+		"." + installer.Name + ".part": true,
+	}
 	if entries, _ := os.ReadDir(destDir); len(entries) > 0 {
 		for _, e := range entries {
-			_ = os.RemoveAll(filepath.Join(destDir, e.Name()))
+			if !keep[e.Name()] {
+				_ = os.RemoveAll(filepath.Join(destDir, e.Name()))
+			}
 		}
 	}
 

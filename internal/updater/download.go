@@ -84,6 +84,12 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	if !assetOriginAllowed(u, c.allowedAssetOrigins) {
 		return "", fmt.Errorf("%w: 资产来源 %q 不在白名单", ErrBadData, u.Scheme+"://"+u.Host)
 	}
+	// 已有同名且等长的成品：不重下（重复点击、交接后重试不再整包重来）。
+	// 内容对不对由调用方的验签闸把关——验不过会被删掉，下一次自然走正常下载。
+	dest := filepath.Join(destDir, asset.Name)
+	if st, err := os.Stat(dest); err == nil && (asset.Size <= 0 || st.Size() == asset.Size) {
+		return dest, nil
+	}
 	// 断点续传：.part 是固定名（隐藏前缀，PruneCaches 的归属门认它），有已收字节就带 Range 续。
 	partPath := filepath.Join(destDir, "."+asset.Name+".part")
 	resumeFrom := int64(0)
@@ -165,7 +171,6 @@ func (c *Client) Download(ctx context.Context, asset UpdateAsset, destDir string
 	if err := part.Close(); err != nil {
 		return "", fmt.Errorf("临时文件关不上：%w", err)
 	}
-	dest := filepath.Join(destDir, asset.Name)
 	if err := os.Rename(partPath, dest); err != nil {
 		return "", fmt.Errorf("落盘失败：%w", err)
 	}

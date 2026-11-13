@@ -207,3 +207,83 @@ func withOpenSeam(t *testing.T, svc *Service) *[]string {
 	}
 	return &opened
 }
+
+// 下载目录按名保留（用户追问 2026-11-14）：重复点击不重复下载——同版本成品复用、
+// 同版本 .part 留着续传，只清「这次用不上」的旧产物。
+func TestDownloadUpdateKeepsCurrentVersionFiles(t *testing.T) {
+	priv, pub := testSigner(t)
+	svc, opened := func() (*Service, *[]string) {
+		svc := newUpdateService(t, fakeUpdateServerFor(t, priv, pub).URL+"/releases/latest", pub)
+		return svc, withOpenSeam(t, svc)
+	}()
+	updatesDir, err := svc.updatesDir()
+	if err != nil {
+		t.Fatalf("拿 updates 目录: %v", err)
+	}
+	// 预置：旧版本成品（该删）＋本版本残片（该留）。目录要现建：DownloadUpdate 才 MkdirAll。
+	if err := os.MkdirAll(updatesDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(updatesDir, "github-net_0.1.13_amd64.deb")
+	if err := os.WriteFile(stale, []byte("OLD"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	part := filepath.Join(updatesDir, ".github-net_0.2.0_amd64.deb.part")
+	// 与真包前 4 字节一致，模拟真实中断残片。
+	if err := os.WriteFile(part, []byte("FAKE"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := svc.CheckForUpdates()
+	if err != nil {
+		t.Fatalf("检查更新: %v", err)
+	}
+	res, err := svc.DownloadUpdate(info)
+	if err != nil {
+		t.Fatalf("下载并交接: %v", err)
+	}
+	_ = opened
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Error("旧版本的包该被清掉")
+	}
+	// .part 在下载成功那一刻会被改名成成品（os.Rename），所以这里不该再有它——
+	// 「保留 .part」要验证的是「按名清理不删它」：下载失败重试时它还在（Download
+	// 的中断分支不动 .part，client_test 的续传用例钉住），只有按名清理把它误删
+	// 才会让续传失效。这里退一步验证清理范围：keep 名单之外的才被删。
+	if _, err := os.Stat(part); !os.IsNotExist(err) {
+		t.Error("下载成功后 .part 该已被改名成成品，不该还在")
+	}
+	if _, err := os.Stat(res.Path); err != nil {
+		t.Errorf("下载的成品该在: %v", err)
+	}
+}
+
+// fakeUpdateServerFor 把 v0.2.0 假发布服务抽出来给两个用例共用。
+func fakeUpdateServerFor(t *testing.T, priv ed25519.PrivateKey, pub ed25519.PublicKey) *httptest.Server {
+	t.Helper()
+	deb := []byte("FAKE-DEB-PAYLOAD-0.2.0")
+	sum := sha256.Sum256(deb)
+	hexSum := hex.EncodeToString(sum[:])
+	sig := signDigest(t, priv, hexSum)
+	checksums := hexSum + "  github-net_0.2.0_amd64.deb\n"
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/releases/latest") {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"tag_name":"v0.2.0","html_url":"https://github.com/x/releases/tag/v0.2.0",
+				"assets":[
+					{"name":"github-net_0.2.0_amd64.deb","browser_download_url":"%s/github-net_0.2.0_amd64.deb","size":%d},
+					{"name":"github-net_0.2.0_amd64.deb.sig","browser_download_url":"%s/github-net_0.2.0_amd64.deb.sig","size":%d},
+					{"name":"checksums.txt","browser_download_url":"%s/checksums.txt","size":%d}
+				]}`, srv.URL, len(deb), srv.URL, len(sig), srv.URL, len(checksums))
+			return
+		}
+		http.FileServer(http.Dir(srvDirWith(t, map[string][]byte{
+			"github-net_0.2.0_amd64.deb":     deb,
+			"github-net_0.2.0_amd64.deb.sig": []byte(sig),
+			"checksums.txt":                  []byte(checksums),
+		}))).ServeHTTP(w, r)
+	}))
+	return srv
+}

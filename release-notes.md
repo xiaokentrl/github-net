@@ -1,6 +1,6 @@
 ## English
 
-### github-net 0.1.16 Stable (0.1.15 → 0.1.16)
+### github-net 0.1.17 Stable (0.1.16 → 0.1.17)
 
 **Added**
 
@@ -8,16 +8,15 @@ None
 
 **Fixed**
 
-None
+1. Clicking "download and install" again no longer re-downloads an already fetched package: complete files are reused and partial fragments are kept for resume
 
 **Updated**
 
-1. Update downloads now resume from the breakpoint on retry instead of restarting in full
-2. Download progress is now visible: the updates pane shows received bytes, total and percentage live
+None
 
 ## 中文
 
-### 0.1.16 稳定版（0.1.15 → 0.1.16）
+### 0.1.17 稳定版（0.1.16 → 0.1.17）
 
 **新增**
 
@@ -25,9 +24,8 @@ None
 
 **修复**
 
-无
+1. 修复重复点击「下载并安装」会把已收的安装包整包重下的问题：成品在位直接复用，中断残片按名保留供续传
 
 **更新**
 
-1. 升级包下载支持断点续传：弱网中断后重试从断点接着收，不再整包重来
-2. 下载进度可见：更新页实时显示「已收 X / 共 Y（N%）」
+无

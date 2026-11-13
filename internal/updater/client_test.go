@@ -314,3 +314,48 @@ func TestDownloadReportsProgress(t *testing.T) {
 		t.Errorf("终值该是完整长度，实际 received=%d total=%d", lastReceived, lastTotal)
 	}
 }
+
+// 已有同名且等长的成品就不重下：重复点击「下载并安装」不该把已收的包整包重来。
+// 内容对错由调用方验签闸把关，这里只保证「不命中网络」。
+func TestDownloadSkipsNetworkWhenCompleteFileExists(t *testing.T) {
+	var hits int
+	var served []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Write(served)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	content := []byte("ALREADY-DOWNLOADED")
+	served = []byte("SHOULD-NOT-BE-FETCHED")
+	if err := os.WriteFile(filepath.Join(dir, "pkg.deb"), content, 0o600); err != nil {
+		t.Fatalf("预置成品失败: %v", err)
+	}
+	c := NewClient()
+	c.SetAllowedAssetOrigins([]string{srv.URL})
+	path, err := c.Download(context.Background(), UpdateAsset{
+		Name: "pkg.deb", URL: srv.URL + "/pkg.deb", Size: int64(len(content)),
+	}, dir, nil)
+	if err != nil {
+		t.Fatalf("复用已下载文件失败: %v", err)
+	}
+	if hits != 0 {
+		t.Errorf("成品在位时不该发任何请求，实际命中 %d 次", hits)
+	}
+	back, _ := os.ReadFile(path)
+	if string(back) != string(content) {
+		t.Error("返回的应是已存在的那个文件")
+	}
+
+	// 大小对不上就不算成品：走正常下载（服务器这回给声明长度的真货）。
+	served = []byte("RE-DOWNLOADED-FRESH")
+	if _, err := c.Download(context.Background(), UpdateAsset{
+		Name: "pkg.deb", URL: srv.URL + "/pkg.deb", Size: int64(len(served)),
+	}, dir, nil); err != nil {
+		t.Fatalf("大小不符时应走下载: %v", err)
+	}
+	if hits == 0 {
+		t.Error("大小不符时该发请求重新下载")
+	}
+}
