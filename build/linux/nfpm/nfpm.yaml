@@ -28,9 +28,10 @@ contents:
     dst: "/usr/lib/systemd/system/github-net-helper.service"
   - src: "./build/appicon.png"
     dst: "/opt/github-net/share/icons/github-net.png"
-  # 桌面项本体在 /opt/share；用户级入口（~/.local/share/applications 软链）由首启自建。
+  # 桌面项本体在 /opt/share，文件名跟 AppID 走（identity.DesktopFile 单源；
+  # 用户级入口 ~/.local/share/applications 软链由首启自建指到这里）。
   - src: "./build/linux/io.github.xiaokentrl.githubnet.desktop"
-    dst: "/opt/github-net/share/github-net.desktop"
+    dst: "/opt/github-net/share/io.github.xiaokentrl.githubnet.desktop"
   # 目录登记：/var/opt/github-net（postinstall 建 backups 子目录并 chmod 700/chown root）。
   - dst: "/var/opt/github-net"
     type: dir

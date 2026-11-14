@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/xiaokentrl/github-net/internal/hosts"
@@ -117,6 +118,12 @@ func (c *Client) Preview(itemIDs []string) (hosts.RestorePreview, error) {
 func (c *Client) call(req Request) (*Response, error) {
 	conn, err := net.DialTimeout("unix", c.Endpoint(), c.dialTimeout)
 	if err != nil {
+		// socket 是 0660 root:github-net（2026-11-15 定稿）：EACCES 说明本进程还不在
+		// 组里——典型场景是 postinst 刚把用户加组、组资格要重新登录才生效。
+		// 这句话必须与「服务没装/没跑」区分开：前者重试没用，得重新登录。
+		if errors.Is(err, os.ErrPermission) {
+			return nil, fmt.Errorf("%w：socket 权限不足（本会话还不在 github-net 组）——注销后重新登录即生效", ErrHelperUnavailable)
+		}
 		return nil, fmt.Errorf("%w：%v（服务没装或没在跑）", ErrHelperUnavailable, err)
 	}
 	defer conn.Close()
