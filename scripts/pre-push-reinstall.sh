@@ -123,13 +123,13 @@ fi
 # 推送前在跑就拉回来：推送不该把用户的应用顺手关掉。
 # 用 sg 挂上 socket 访问组再启动：postinst 刚把用户加组时，当前会话的组凭证
 # 是旧的（重新登录才生效），不挂组的应用连不上 0660 的 socket（2026-11-15 目录重构）。
+# 推送前在跑就拉回来：推送不该把用户的应用顺手关掉。
+# 注：socket 0660 组模型的组资格要重新登录才生效（Linux 加组标准 UX）——
+# 刚升级完的这一次会话里应用连 helper 会报「socket 权限不足…重新登录即生效」，
+# 属预期行为；sg/newgrp 在新系统上已不存在，不做进程级绕路（root 代拉扩大免密面）。
 if [ "$WAS_RUNNING" = "1" ]; then
-  echo '== 拉回应用（挂 socket 访问组） =='
-  if getent group "$IDENTITY_GROUP_ID" >/dev/null; then
-    setsid nohup sg "$IDENTITY_GROUP_ID" -c "exec $IDENTITY_BINARY_PATH" >/dev/null 2>&1 < /dev/null &
-  else
-    setsid nohup "$IDENTITY_BINARY_PATH" >/dev/null 2>&1 < /dev/null &
-  fi
+  echo '== 拉回应用 =='
+  setsid nohup "$IDENTITY_BINARY_PATH" >/dev/null 2>&1 < /dev/null &
 fi
 
 echo "== 完成：$IDENTITY_PACKAGE_NAME 已重装，版本 $INSTALLED_VERSION（装后三验过），配置已保留 =="
