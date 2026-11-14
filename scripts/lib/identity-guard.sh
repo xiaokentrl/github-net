@@ -93,7 +93,7 @@ identity_guard() {
     esac
   done
 
-  _identity_under HELPER_PATH /usr/local/sbin/ || return 1
+  _identity_under HELPER_PATH /opt/github-net/libexec/ || return 1
   _identity_under SUDOERS_FILE /etc/sudoers.d/ || return 1
   _identity_under DEB_PATH bin/ || return 1
   case "$IDENTITY_DEB_PATH" in

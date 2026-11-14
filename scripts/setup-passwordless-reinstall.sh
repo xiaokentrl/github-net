@@ -3,7 +3,7 @@
 # 用法：sudo bash scripts/setup-passwordless-reinstall.sh
 #
 # 做三件事：
-#   1. 把 root 助手脚本装成 /usr/local/sbin/<产品>-root-install（root 所有，用户不可写）
+#   1. 把 root 助手脚本装成 /opt/github-net/libexec/<产品>-root-install（root 所有，用户不可写）
 #   2. 写 sudoers 免密规则 /etc/sudoers.d/<产品>-reinstall，只对这一个文件免密
 #   3. visudo 校验通过才落地，规则坏了当场撤销，不会把 sudo 搞挂
 #
@@ -29,7 +29,8 @@ HELPER_SRC="scripts/$IDENTITY_SLUG-root-install.sh"
 
 install -o root -g root -m 755 "$HELPER_SRC" "$IDENTITY_HELPER_PATH"
 
-RULE="$USER_NAME ALL=(root) NOPASSWD: $IDENTITY_HELPER_PATH"
+# 规则按组收口（定稿 v2）：sudo 组成员都能免密调这个 root 所有、只认固定 deb 路径的助手。
+RULE="%sudo ALL=(root) NOPASSWD: $IDENTITY_HELPER_PATH"
 TMP="$(mktemp)"
 printf '%s\n' "$RULE" > "$TMP"
 visudo -cf "$TMP" >/dev/null

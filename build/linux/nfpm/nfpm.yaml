@@ -20,16 +20,20 @@ release: "1"
 
 contents:
   - src: "./bin/github-net"
-    dst: "/usr/local/bin/github-net"
-  # 特权辅助服务：放私有目录不进 PATH——它是给主程序连的，不该让用户直接敲。
+    dst: "/opt/github-net/bin/github-net"
+  # 特权辅助服务：libexec 语义（systemd 拉起，不进 PATH——不该让用户直接敲）。
   - src: "./bin/github-net-helper"
-    dst: "/usr/local/lib/github-net/github-net-helper"
+    dst: "/opt/github-net/libexec/github-net-helper"
   - src: "./build/linux/systemd/github-net-helper.service"
     dst: "/usr/lib/systemd/system/github-net-helper.service"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/github-net.png"
+    dst: "/opt/github-net/share/icons/github-net.png"
+  # 桌面项本体在 /opt/share；用户级入口（~/.local/share/applications 软链）由首启自建。
   - src: "./build/linux/io.github.xiaokentrl.githubnet.desktop"
-    dst: "/usr/share/applications/io.github.xiaokentrl.githubnet.desktop"
+    dst: "/opt/github-net/share/github-net.desktop"
+  # 目录登记：/var/opt/github-net（postinstall 建 backups 子目录并 chmod 700/chown root）。
+  - dst: "/var/opt/github-net"
+    type: dir
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:

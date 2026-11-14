@@ -16,8 +16,12 @@ var (
 	beginMarker = markerFor("BEGIN", ManagedVersion)
 	endMarker   = markerFor("END", ManagedVersion)
 
-	beginLine = regexp.MustCompile(`^# BEGIN github-net managed hosts v([0-9]+)$`)
-	endLine   = regexp.MustCompile(`^# END github-net managed hosts v([0-9]+)$`)
+	// 标记行匹配泛化（2026-11-15 改名支持）：id 段接受任意值——产品改名后，
+	// 旧版写进 /etc/hosts 的区段（旧 id 标记）仍能被认出、正常还原；
+	// 写入（渲染）永远用当前 MarkerBegin/MarkerEnd，首次应用后区段自动换代。
+	// 摘要只算映射行不含标记行，所以「读旧标记→写新标记」账实零变化。
+	beginLine = regexp.MustCompile(`^# BEGIN [A-Za-z0-9._-]+ managed hosts v([0-9]+)$`)
+	endLine   = regexp.MustCompile(`^# END [A-Za-z0-9._-]+ managed hosts v([0-9]+)$`)
 )
 
 // MarkerBegin / MarkerEnd 给出标记原文，写入阶段和测试都用它们，不留第二份字符串。

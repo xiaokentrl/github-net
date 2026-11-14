@@ -11,15 +11,18 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/user"
+	"strconv"
 	"time"
 
+	"github.com/xiaokentrl/github-net/internal/identity"
 	"github.com/xiaokentrl/github-net/internal/privilege"
 )
 
 func main() {
 	// 默认值是生产形状；单元测试用 -hosts 和 -data 指到临时文件，不走真实系统。
 	hostsPath := flag.String("hosts", "/etc/hosts", "系统 Hosts 路径（仅测试覆盖）")
-	dataDir := flag.String("data", "/var/lib/github-net", "恢复元数据与备份目录（仅测试覆盖）")
+	dataDir := flag.String("data", identity.StateRoot, "恢复元数据与备份目录（仅测试覆盖）")
 	flag.Parse()
 
 	log.SetFlags(log.LstdFlags | log.LUTC)
@@ -47,8 +50,18 @@ func run(hostsPath, dataDir string) error {
 	if err != nil {
 		return fmt.Errorf("监听 %s: %w", socket, err)
 	}
-	// 普通权限的主界面要连得进来：0666 是权限模型拍板的那一档（见 internal/privilege 包注释）。
-	if err := os.Chmod(socket, 0o666); err != nil {
+	// socket 访问模型（2026-11-15 定稿）：0660 root:<GroupID>，内核在 connect 时
+	// 把关组成员资格——比 0666「本机任意进程可连」严一档，销掉那条审计残余风险。
+	// 组存在（生产：postinst 建组＋usermod）就 chown 到组；组不存在（开发/测试环境）
+	// 保持属主组，0660 的属主位让同用户进程照常连——测试环境不需要组也能跑。
+	if g, lookupErr := user.LookupGroup(identity.GroupID); lookupErr == nil {
+		if gid, parseErr := strconv.Atoi(g.Gid); parseErr == nil {
+			if chownErr := os.Chown(socket, 0, gid); chownErr != nil {
+				log.Printf("socket 组归属设置失败（不阻断，权限仍是 0660）：%v", chownErr)
+			}
+		}
+	}
+	if err := os.Chmod(socket, 0o660); err != nil {
 		return fmt.Errorf("设置 socket 权限: %w", err)
 	}
 

@@ -34,12 +34,17 @@ const (
 	wantHostsBegin = "# BEGIN github-net managed hosts v1"
 	wantHostsEnd   = "# END github-net managed hosts v1"
 	// 免密 root 助手与规则文件的位置，sudoers 只放行前者，改路径要连规则一起改。
-	wantHelperPath  = "/usr/local/sbin/github-net-root-install"
-	wantSudoersFile = "/etc/sudoers.d/github-net-reinstall"
-	wantDebPath     = "bin/github-net.deb"
-	wantBinaryPath  = "/usr/local/bin/github-net"
-	wantIconPath    = "/usr/share/icons/hicolor/128x128/apps/github-net.png"
-	wantDesktopFile = "io.github.xiaokentrl.githubnet.desktop"
+	// 目录重构 2026-11-15：程序本体集中 /opt/github-net，状态集中 /var/opt/github-net
+	// （迁移路径：dpkg 升级自动清旧路径；/var/lib/github-net 由 postinstall 迁入 /var/opt）。
+	wantHelperPath    = "/opt/github-net/libexec/github-net-root-install"
+	wantSudoersFile   = "/etc/sudoers.d/github-net-reinstall"
+	wantDebPath       = "bin/github-net.deb"
+	wantBinaryPath    = "/opt/github-net/bin/github-net"
+	wantIconPath      = "/opt/github-net/share/icons/github-net.png"
+	wantDesktopFile   = "io.github.xiaokentrl.githubnet.desktop"
+	wantHelperBinPath = "/opt/github-net/libexec/github-net-helper"
+	wantStateRoot     = "/var/opt/github-net"
+	wantGroupID       = "github-net"
 
 	// 脸层：换了只影响显示，随产品名改，不需要迁移。
 	wantDisplayName = "GitHub Net"
@@ -64,8 +69,11 @@ func TestGoldenValues(t *testing.T) {
 		{"HelperPath", HelperPath, wantHelperPath},
 		{"SudoersFile", SudoersFile, wantSudoersFile},
 		{"BinaryPath", BinaryPath, wantBinaryPath},
+		{"HelperBinPath", HelperBinPath, wantHelperBinPath},
+		{"StateRoot", StateRoot, wantStateRoot},
+		{"GroupID", GroupID, wantGroupID},
 		{"IconPath", IconPath, wantIconPath},
-		{"DesktopPath", DesktopPath, "/usr/share/applications/" + wantDesktopFile},
+		{"DesktopPath", DesktopPath, "/opt/github-net/share/" + wantDesktopFile},
 		{"DisplayName", DisplayName, wantDisplayName},
 		{"Description", Description, wantDescription},
 	}
@@ -84,8 +92,14 @@ func TestDerivedFromSlugs(t *testing.T) {
 	if DesktopID != AppID || DesktopFile != AppID+".desktop" {
 		t.Error("桌面项没有派生自 AppID")
 	}
-	if HelperPath != "/usr/local/sbin/"+Slug+"-root-install" || SudoersFile != "/etc/sudoers.d/"+Slug+"-reinstall" {
+	if HelperPath != "/opt/github-net/libexec/"+Slug+"-root-install" || SudoersFile != "/etc/sudoers.d/"+Slug+"-reinstall" {
 		t.Error("root 助手与 sudoers 路径没有派生自 Slug")
+	}
+	if BinaryPath != "/opt/github-net/bin/"+Slug || HelperBinPath != "/opt/github-net/libexec/"+Slug+"-helper" {
+		t.Error("主程序与服务二进制没有派生自 Slug")
+	}
+	if StateRoot != "/var/opt/"+Slug || GroupID != Slug {
+		t.Error("状态根与 socket 访问组没有派生自 Slug")
 	}
 }
 
@@ -129,7 +143,7 @@ func TestKeyNamesAreUniqueAndUnprefixed(t *testing.T) {
 			t.Errorf("键 %s 取不到值", k)
 		}
 	}
-	if len(Keys()) != 16 {
+	if len(Keys()) != 19 {
 		t.Errorf("键的数量变了（%d）：脚本取值点也要跟着核对", len(Keys()))
 	}
 	if _, ok := Value("不存在"); ok {

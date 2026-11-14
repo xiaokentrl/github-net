@@ -72,20 +72,31 @@ const (
 	// DebPath 是打包产物的固定路径（root 助手只认这一个路径）。
 	DebPath = "bin/" + Slug + ".deb"
 	// 🔴 不可手改：派生自 Slug。
-	// HelperPath 是免密 root 助手的安装位置。
-	HelperPath = "/usr/local/sbin/" + Slug + "-root-install"
+	// HelperPath 是免密 root 助手的安装位置（目录重构 2026-11-15：集中进 /opt/github-net）。
+	HelperPath = "/opt/github-net/libexec/" + Slug + "-root-install"
 	// 🔴 不可手改：派生自 Slug。
 	// SudoersFile 是免密规则文件。
 	SudoersFile = "/etc/sudoers.d/" + Slug + "-reinstall"
 	// 🔴 不可手改：派生自 Slug。
 	// BinaryPath 是包内二进制的落盘位置。
-	BinaryPath = "/usr/local/bin/" + Slug
+	BinaryPath = "/opt/github-net/bin/" + Slug
+	// 🔴 不可手改：派生自 Slug。
+	// HelperBinPath 是特权辅助服务二进制的落盘位置（systemd 拉起，不进 PATH）。
+	HelperBinPath = "/opt/github-net/libexec/" + Slug + "-helper"
+	// 🔴 不可手改：派生自 Slug。
+	// StateRoot 是特权辅助的机器级状态根（Hosts 恢复元数据/备份/写锁）。
+	// FHS：/opt 包的可变数据归 /var/opt/<包名>。
+	StateRoot = "/var/opt/" + Slug
+	// 🔴 不可手改：派生自 Slug。
+	// GroupID 是 socket 0660 模型的访问组名：主程序用户须在组内（postinst 加组，
+	// 重新登录生效）。helper 据此 chown/chmod socket，内核在 connect 时把关。
+	GroupID = Slug
 	// 🔴 不可手改：派生自 Slug。
 	// IconPath 是包内图标的落盘位置。
-	IconPath = "/usr/share/icons/hicolor/128x128/apps/" + Slug + ".png"
+	IconPath = "/opt/github-net/share/icons/" + Slug + ".png"
 	// 🔴 不可手改：派生自 AppID。
-	// DesktopPath 是桌面项的落盘位置。
-	DesktopPath = "/usr/share/applications/" + DesktopFile
+	// DesktopPath 是桌面项本体的落盘位置（用户级入口由首启软链指到这里）。
+	DesktopPath = "/opt/github-net/share/" + DesktopFile
 )
 
 // Entry 是一条「键名 + 值」，供 cmd/identity 输出。
@@ -108,6 +119,9 @@ func entries() []Entry {
 		{"PACKAGE_NAME", PackageName},
 		{"BINARY_NAME", BinaryName},
 		{"BINARY_PATH", BinaryPath},
+		{"HELPER_BIN_PATH", HelperBinPath},
+		{"STATE_ROOT", StateRoot},
+		{"GROUP_ID", GroupID},
 		{"DESKTOP_ID", DesktopID},
 		{"DESKTOP_FILE", DesktopFile},
 		{"DESKTOP_PATH", DesktopPath},

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/xiaokentrl/github-net/internal/identity"
 	"io"
 	"log"
 	"log/slog"
@@ -125,6 +126,46 @@ var trayThemes = []struct{ id, name string }{
 	{"warm-yellow", "暖阳黄"},
 }
 
+// integrateDesktopEntry 首启自建用户级桌面入口（对照《目录重构规划》配套机制②）：
+// 桌面项本体装在 /opt/github-net/share/，GNOME 扫的是 ~/.local/share/applications——
+// deb 是系统级安装装不了用户目录，应用首启自检补上这个软链。幂等、可关闭、不覆盖：
+// 已存在 → 不动（指向不对也不覆盖，提示一句留人判断）；环境变量可关闭；dev 运行
+// （/opt 本体不在）跳过。
+func integrateDesktopEntry() {
+	if os.Getenv("GITHUB_NET_NO_DESKTOP_INTEGRATION") == "1" {
+		return
+	}
+	if _, err := os.Stat(identity.DesktopPath); err != nil {
+		return // /opt 本体不在＝开发运行，不集成。
+	}
+	dataHome := os.Getenv("XDG_DATA_HOME")
+	if dataHome == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		dataHome = filepath.Join(home, ".local", "share")
+	}
+	appDir := filepath.Join(dataHome, "applications")
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		log.Printf("[desktop-integration] 建不了 %s（跳过桌面入口集成）：%v", appDir, err)
+		return
+	}
+	target := filepath.Join(appDir, identity.DesktopFile)
+	if _, err := os.Lstat(target); err == nil {
+		// 已存在：指向正确就完事；指向不对不覆盖（用户自己的改动优先），提示留人判断。
+		if real, err := os.Readlink(target); err == nil && real == identity.DesktopPath {
+			return
+		}
+		log.Printf("[desktop-integration] %s 已存在但指向不是 %s，不覆盖；如需修复请手动处理", target, identity.DesktopPath)
+		return
+	}
+	if err := os.Symlink(identity.DesktopPath, target); err != nil {
+		log.Printf("[desktop-integration] 软链创建失败：%v", err)
+		return
+	}
+	log.Printf("[desktop-integration] 桌面入口就绪：%s -> %s", target, identity.DesktopPath)
+}
 func main() {
 	// 统一走 XWayland（拍板 2026-11-09）：Wayland 原生会话禁止应用自摆 toplevel 位置，
 	// 收托盘、召回、重启后全靠合成器摆位，窗口位置永远保不住；X11 后端下
@@ -273,6 +314,7 @@ func main() {
 	// RegisterService 只在 Run 之前有效，这里仍在 Run 之前，注册顺序与原来写在 Options 里一致。
 	emitProgress := func(name string, payload any) { platformApp.Event.Emit(name, payload) }
 	service = appsvc.NewService(appName, appVersion, emitter.Sequence, emitProgress)
+	integrateDesktopEntry()
 	// 启动时清一次本机落盘缓存（超过保留期限的一律删掉，拍板 2026-11-05）。放后台跑是因为它可能碰磁盘上
 	// 一个卡住的目录，而清缓存这件事不该拦住窗口起来；清失败不吭声也不影响任何功能。
 	go appsvc.PruneCaches(service)
