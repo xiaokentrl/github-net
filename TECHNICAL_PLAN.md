@@ -406,3 +406,8 @@ Hosts 恢复元数据需保存原始文件事务快照、最后一次成功写�
 - **打包**：NSIS（build/windows/nsis 模板已有），安装器负责注册辅助服务与 WebView2 运行时。
 - **CI**：windows-latest runner 矩阵（Wails v3 Windows 不需要 CGO，可交叉构建 + 出包验证；实机验收另行安排）。
 - **限制声明**：无 Windows 实机前只保证「CI 编译通过 + 逻辑同构 + 静态检查」，实机验证单独安排。
+
+
+## 6.6 目录重构已落（2026-11-15，用户定稿）
+
+程序本体集中 `/opt/github-net/{bin,libexec,share}`，特权状态集中 `/var/opt/github-net`（FHS：/opt 包的可变数据归 /var/opt），用户配置维持 `~/.config/github-net`（XDG 标准位，零迁移）。身份单源机制全链同步：`identity.go` 派生路径改 /opt 结构并新增 `HELPER_BIN_PATH`/`STATE_ROOT`/`GROUP_ID` 三个条目（键数 16→19），金标准测试同步；nfpm dst 重排；systemd 单元加沙箱（NoNewPrivileges＋ProtectSystem=strict＋ReadWritePaths=/var/opt/github-net 与 /etc/hosts 两个写点——定稿 v2 漏了 /etc/hosts，复核补）；特权辅助二进制移进 `libexec`（systemd 拉起、不进 PATH）。**socket 访问模型升级 0660＋组制**：socket 0660 root:github-net，内核在 connect 时把关组成员资格（postinst 建组＋usermod，组资格需重新登录生效，客户端对 EACCES 给「重新登录即生效」提示）；2026-11-13 审计存档的「本机任意进程都能连 socket」残余风险正式销档，SO_PEERCRED 保留做审计留痕。桌面对接改用户级：桌面项本体装 /opt/share（文件名跟 AppID 走——identity.DesktopFile 单源），首启自建 `~/.local/share/applications` 软链（幂等/可关闭/不覆盖，dev 运行跳过）。`/etc/hosts` 管理区段标记匹配泛化（id 段任意值、摘要不含标记行）——为将来改名铺路（改名支持： DisplayName 独立改；Slug 改名走「Conflicts/Replaces/Breaks＋postinst 数据迁移」，详见 docs/目录重构规划.md「改名支持」节）。实施坑位：nfpm dir 条目不收 mode/owner/group（权限改 postinstall 负责）；桌面项命名两套约定（AppID vs Slug）统一到 AppID。真机验收：/opt 与 /var/opt 树形逐字一致、旧路径 dpkg 自动清干净、装后三验过、helper 以新单元参数运行（-data /var/opt/github-net）。遗留一次性动作：用户重新登录（组生效）＋重跑 setup-passwordless（sudoers 指向 /opt 新路径，按 %sudo 组收口）。Windows 三形态规范（system/user/portable，install.json 判定＋ACL/父目录链硬化）已定稿立档挂起，触发＝Windows 立项。
