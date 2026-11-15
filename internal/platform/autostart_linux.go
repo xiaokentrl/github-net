@@ -16,7 +16,7 @@ const autostartDesktopName = identity.AppID + ".desktop"
 
 // autostartBinary 是装好的主程序绝对路径（deb 安装位）。自启动需要绝对路径：
 // XDG autostart 不按 PATH 找。
-const autostartBinary = "/usr/local/bin/" + identity.Slug
+const autostartBinary = identity.BinaryPath
 
 // autostartDir 从 XDG 规范取自启动目录：$XDG_CONFIG_HOME/autostart，缺省 ~/.config/autostart。
 // 单独拎出来是为了测试能把根指到临时目录，不碰真实的自启动配置。

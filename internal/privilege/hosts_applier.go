@@ -19,7 +19,7 @@ import (
 type HostsApplier struct {
 	hostsPath string
 	// dataDir 存恢复元数据（recovery.json）和首次写入前的原文备份（backups/）。
-	// root 服务用 /var/lib/github-net；测试传临时目录。
+	// root 服务用 /var/opt/github-net（identity.StateRoot 单源）；测试传临时目录。
 	dataDir string
 	now     func() time.Time
 	// writeMu 串行化全部写事务（对照《原子性提交方案》并发写防护）：

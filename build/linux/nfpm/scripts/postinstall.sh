@@ -1,22 +1,8 @@
 #!/bin/sh
 
-# Update desktop database for .desktop file changes
-# This makes the application appear in application menus and registers its capabilities.
-if command -v update-desktop-database >/dev/null 2>&1; then
-  echo "Updating desktop database..."
-  update-desktop-database -q /usr/share/applications
-else
-  echo "Warning: update-desktop-database command not found. Desktop file may not be immediately recognized." >&2
-fi
-
-# Update MIME database for custom URL schemes (x-scheme-handler)
-# This ensures the system knows how to handle your custom protocols.
-if command -v update-mime-database >/dev/null 2>&1; then
-  echo "Updating MIME database..."
-  update-mime-database -n /usr/share/mime
-else
-  echo "Warning: update-mime-database command not found. Custom URL schemes may not be immediately recognized." >&2
-fi
+# 注：update-desktop-database / update-mime-database 对本应用是空转——桌面项本体
+# 装在 /opt/github-net/share（用户级入口走首启软链，GNOME 直接扫目录不用缓存刷新），
+# 也没有自定义 URL scheme（2026-11-15 目录重构复核）。
 
 # 特权辅助服务：装完即启用并（重）启动。deb 的 postinst 本来就以 root 跑，
 # 这是规划里「安装时一次性装好辅助服务、之后不再向用户要权限」的落点。

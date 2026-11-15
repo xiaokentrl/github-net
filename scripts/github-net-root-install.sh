@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # root 助手：只干两件事——卸载 github-net 旧包、安装仓库里打好的 deb。
 # 会被 /etc/sudoers.d/github-net-reinstall 设成免密 sudo 调用，所以：
-# 这个文件装到 /usr/local/sbin/ 后必须保持 root 所有、普通用户不可写；
+# 这个文件装到 /opt/github-net/libexec/ 后必须保持 root 所有、普通用户不可写；
 # 也别给它加别的功能——免密之下，给它加什么能力等于给用户开什么 root 权限。
 #
 # 这里不 source 仓库里的 scripts/lib/identity-guard.sh，也不调用 go 取值：

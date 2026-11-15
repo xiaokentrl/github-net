@@ -103,6 +103,25 @@ func TestDerivedFromSlugs(t *testing.T) {
 	}
 }
 
+// 桌面项内容断言（对照复核 2026-11-14 高危）：Exec/Icon 必须绝对路径指向 /opt——
+// 新布局二进制不在 PATH、图标不在 hicolor 搜索路径，裸名会让菜单启动失败、图标丢失。
+func TestDesktopEntryPointsToOpt(t *testing.T) {
+	root := repoRoot(t)
+	src := readFile(t, filepath.Join(root, "build/linux/io.github.xiaokentrl.githubnet.desktop"))
+	for _, want := range []string{
+		"Exec=/opt/github-net/bin/github-net",
+		"Icon=/opt/github-net/share/icons/github-net.png",
+		"StartupWMClass=" + AppID,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("桌面项缺 %q（生成模板 EXEC/ICON 或 Taskfile 变量漂了）", want)
+		}
+	}
+	if strings.Contains(src, "Exec=github-net\n") || strings.Contains(src, "Icon=github-net\n") {
+		t.Error("桌面项还在用裸名（旧布局形状），新布局下会启动失败")
+	}
+}
+
 // 形状断言：这些值会被拼进路径、命令和系统文件标记，坏形状是事故不是笔误。
 func TestShapes(t *testing.T) {
 	if DisplayName == "" || strings.ContainsAny(DisplayName, `/"*?`) || strings.Contains(DisplayName, "..") {

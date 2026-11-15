@@ -1,7 +1,7 @@
 // github-net-helper 是受限特权辅助服务：唯一被允许写系统 Hosts 的那一个进程。
 //
 // 权限模型见 internal/privilege 的包注释：root 常驻、固定端点 /run/github-net/helper.sock、
-// socket 0666、白名单操作。它不读用户配置、不知道前端存在、不执行命令——
+// socket 0660 root:github-net、白名单操作。它不读用户配置、不知道前端存在、不执行命令——
 // 只做「把客户端给的映射安全地写进 Hosts，或把它们还原」这一件事。
 package main
 

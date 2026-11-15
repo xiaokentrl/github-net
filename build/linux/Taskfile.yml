@@ -191,8 +191,10 @@ tasks:
     vars:
       APP_NAME: '{{.APP_NAME}}'
       DESKTOP_ID: 'io.github.xiaokentrl.githubnet'
-      EXEC: '{{.APP_NAME}}'
-      ICON: '{{.APP_NAME}}'
+      # 目录重构 2026-11-15：二进制在 /opt/github-net/bin（不在 PATH）、图标在 /opt/share/icons
+      # （不在 XDG 图标搜索路径）——Exec/Icon 必须绝对路径，裸名在 GNOME 菜单里启动失败。
+      EXEC: '/opt/github-net/bin/github-net'
+      ICON: '/opt/github-net/share/icons/github-net.png'
       CATEGORIES: 'Development;'
       OUTPUTFILE: '{{.ROOT_DIR}}/build/linux/{{.DESKTOP_ID}}.desktop'
 

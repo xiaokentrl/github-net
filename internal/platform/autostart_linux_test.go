@@ -40,7 +40,7 @@ func TestAutostartEnableDisableRoundTrip(t *testing.T) {
 		t.Fatalf("读自启动入口: %v", err)
 	}
 	content := string(raw)
-	for _, want := range []string{"[Desktop Entry]", "Exec=/usr/local/bin/" + identity.Slug, "X-GNOME-Autostart-enabled=true"} {
+	for _, want := range []string{"[Desktop Entry]", "Exec=" + identity.BinaryPath, "X-GNOME-Autostart-enabled=true"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("自启动入口缺 %q：%s", want, content)
 		}
