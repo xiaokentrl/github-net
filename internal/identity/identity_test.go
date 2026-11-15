@@ -112,6 +112,7 @@ func TestDesktopEntryPointsToOpt(t *testing.T) {
 		"Exec=/opt/github-net/bin/github-net",
 		"Icon=/opt/github-net/share/icons/github-net.png",
 		"StartupWMClass=" + AppID,
+		"Name=GitHub Net",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("桌面项缺 %q（生成模板 EXEC/ICON 或 Taskfile 变量漂了）", want)
