@@ -16,13 +16,15 @@ RuntimeDirectory=github-net
 RuntimeDirectoryMode=0755
 Restart=on-failure
 RestartSec=2
-# 沙箱：全盘只读，只开放 /var/opt/github-net（状态）与 /etc/hosts（正业）两个写点；
+# 沙箱：ProtectSystem=full 把 /usr、/boot、/efi 只读化（保护程序文件），
+# /etc 与 /var 保持可写——helper 的正业就是写它们，且写流程要在 /etc 里建临时文件
+# 再 rename 替换（真机教训 2026-11-15：ProtectSystem=strict＋ReadWritePaths=/etc/hosts
+# 只放行了那一个文件路径，helper 在 /etc 里建临时文件被 EROFS 拒，写 Hosts 全挂）。
 # NoNewPrivileges 防 helper 被诱导再提权；PrivateTmp 隔离临时目录。
 NoNewPrivileges=yes
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/var/opt/github-net /etc/hosts
 
 [Install]
 WantedBy=multi-user.target
