@@ -342,7 +342,7 @@
   "detail.detectBox.writeIp": "补充可用IP",
   "detail.detectBox.redetectHint": "逐条重测当前写入的 IP（还原前确认旧地址还通不通）",
   "detail.detectBox.restoreHint": "把这一项写进 Hosts 的映射退回应用前的状态",
-  "detail.detectBox.writeHint": "把检测后暂存的可用 IP 补充进系统 Hosts",
+  "detail.detectBox.writeHint": "把暂存的可用 IP 写进系统 Hosts（超过 10 分钟的先现场复验，已有映射随之更新）",
   "detail.detectBox.redetecting": "重测中 {done}/{total}",
   "detail.detectBox.reprobeFailed": "重测失败 {count} 条：{reason}",
   "detail.detectBox.notProbed": "还没测过",
