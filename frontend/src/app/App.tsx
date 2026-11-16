@@ -818,7 +818,7 @@ export function App() {
     [settings, submit],
   )
 
-  // 右下角提示面板（收起后是那颗「提示」胶囊）的启用/禁用。
+  // Toast 提示（2026-11-15 重写为浮动堆叠）的启用/禁用。
   // 界面开关说「显示」，配置里存的是「禁用」，这里翻一次，其余走同一条保存链路。
   const changeToastVisible = useCallback(
     (visible: boolean) => {
@@ -1357,9 +1357,9 @@ export function App() {
           </p>
         </Dialog>
       ) : null}
-      {/* 右下角提示面板：挂在应用根上、整应用只有一份，数据在 components/ui/toastStore 里。
-          出厂默认关掉，只有配置明确说「没被禁用」才渲染；配置还没读回来时不先闪一下面板或胶囊。 */}
-      {settings?.layout.toastDisabled === false ? <Toast /> : null}
+      {/* Toast 提示（2026-11-15 重写为浮动堆叠）：挂在应用根上、整应用只有一份。
+          出厂默认显示；配置明确禁用才不渲染。空堆栈渲染空 region，无闪烁风险。 */}
+      {settings?.layout.toastDisabled !== true ? <Toast /> : null}
     </>
   )
 }

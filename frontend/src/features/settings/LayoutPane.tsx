@@ -165,7 +165,7 @@ export function LayoutPane({
         <label className={styles.checkRow}>
           <input
             type="checkbox"
-            checked={settings.layout.toastDisabled === false}
+            checked={settings.layout.toastDisabled !== true}
             disabled={save.kind === 'pending'}
             onChange={(event) => onToastVisible(event.target.checked)}
           />
