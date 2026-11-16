@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"github.com/xiaokentrl/github-net/internal/event"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -206,3 +208,76 @@ func TestMaintenanceNeedsTwoConsecutiveFails(t *testing.T) {
 }
 
 func boolPtr(v bool) *bool { return &v }
+
+// 提醒去重（2026-11-16 复核中危修复的钉子）：补位失败/无货源时，同一个死 IP
+// 多轮只发**一条**「已失效」提醒——去重键读写错位曾导致每 15 分钟刷屏一条。
+func TestMaintenanceNotifiesOncePerDeadIP(t *testing.T) {
+	svc, _ := newMaintenanceService(t, map[string]bool{"api.github.com|3.3.3.3": false})
+	seedApplied(t, svc, "3.3.3.3")
+
+	var warnings []string
+	svc.emit = func(name string, payload any) {
+		if name == "notice:push" {
+			if p, ok := payload.(event.NoticePush); ok && p.Kind == "warning" {
+				warnings = append(warnings, p.Text)
+			}
+		}
+	}
+	svc.maintenanceCycle()
+	svc.maintenanceCycle()
+	svc.maintenanceCycle()
+
+	count := 0
+	for _, w := range warnings {
+		if strings.Contains(w, "已失效") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("同一死 IP 三轮只该发一条「已失效」提醒，实际 %d 条：%v", count, warnings)
+	}
+}
+
+// 共享认领（多项目同写一个主机名）时跳过补位并明示——自动补位单方面改写必然撞 ErrSharedOwner。
+func TestMaintenanceSkipsSharedClaim(t *testing.T) {
+	svc, _ := newMaintenanceService(t, map[string]bool{"api.github.com|3.3.3.3": false})
+	seedApplied(t, svc, "3.3.3.3")
+	// 制造共享认领：给区段条目再加一个项目认领者（item-b），Hosts 与元数据同步。
+	state, err := svc.priv.State()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = state
+	// 直接往元数据里塞第二个项目的认领（走 Apply 语义：item-b 应用同 IP＝并进认领者）。
+	if err := svc.priv.Apply("item-b", []hosts.Mapping{{IP: "3.3.3.3", Hostnames: []string{"api.github.com"}}}); err != nil {
+		t.Fatalf("制造共享认领失败: %v", err)
+	}
+
+	var shared bool
+	svc.emit = func(name string, payload any) {
+		if name == "notice:push" {
+			if p, ok := payload.(event.NoticePush); ok && strings.Contains(p.Text, "共同写入") {
+				shared = true
+			}
+		}
+	}
+	svc.maintenanceCycle()
+	svc.maintenanceCycle()
+	if !shared {
+		t.Error("共享认领的主机名该跳过补位并明示「请手动处理」")
+	}
+	// Hosts 不该被单方面改写（3.3.3.3 仍在）。
+	state2, err := svc.priv.State()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range state2.Entries {
+		if e.Hostname == "api.github.com" && e.IP == "3.3.3.3" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("共享认领的映射不该被自动补位改写")
+	}
+}

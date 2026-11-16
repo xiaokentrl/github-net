@@ -618,3 +618,38 @@ func TestSalvageKeepsGoodGroups(t *testing.T) {
 		t.Errorf("抢救要留一句 notice 说清哪些组退了默认，实际 %q", reopened.Notice())
 	}
 }
+
+// 老配置升级缺 maintenance 组：零值 false 会让升级用户静默失去巡检＋自动补位——
+// 缺整组按出厂默认补（2026-11-16 复核中危：与 toastDisabled 缺键兜底同一先例）。
+func TestOldConfigWithoutMaintenanceGetsDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	// 先存一份带 maintenance 的配置。
+	s := NewStore(path, map[string]bool{"github": true}, nil, nil)
+	if _, err := s.Save(Patch{AutoProbe: flag(true), AutoReplace: flag(true)}, 0, "m0"); err != nil {
+		t.Fatal(err)
+	}
+	// 手工抹掉 maintenance 组（模拟 0.1.19 之前写出的老配置）。
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	delete(doc, "maintenance")
+	stripped, _ := json.Marshal(doc)
+	if err := os.WriteFile(path, stripped, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened := NewStore(path, map[string]bool{"github": true}, nil, nil)
+	cfg, err := reopened.Snapshot()
+	if err != nil {
+		t.Fatalf("读老配置失败: %v", err)
+	}
+	if cfg.Maintenance.AutoProbe != true || cfg.Maintenance.AutoReplace != true {
+		t.Errorf("缺 maintenance 组该按出厂默认补（双 true），实际 %+v", cfg.Maintenance)
+	}
+}

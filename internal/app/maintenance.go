@@ -33,7 +33,10 @@ func startMaintenance(s *Service) {
 	if s.maintStop == nil {
 		return
 	}
+	done := make(chan struct{})
+	s.maintDone = done
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(s.maintInterval)
 		defer ticker.Stop()
 		for {
@@ -47,11 +50,17 @@ func startMaintenance(s *Service) {
 	}()
 }
 
-// StopMaintenance 停掉维护循环（退出时调用）。放包级不放方法：导出方法会被 Wails
-// 当成绑定命令暴露给前端（「停维护」不该是界面能点的），与 ShutdownTaskQueue 同一惯例。
+// StopMaintenance 停掉维护循环并等 goroutine 收尾（退出时调用）。
+// 放包级不放方法：导出方法会被 Wails 当成绑定命令暴露给前端（「停维护」不该是
+// 界面能点的），与 ShutdownTaskQueue 同一惯例。等待是为确保收尾期间不再有
+// 补位写盘（对照复核 2026-11-16 低危：不等就无法确定已停）。
 func StopMaintenance(s *Service) {
-	if s.maintStop != nil {
-		close(s.maintStop)
+	if s.maintStop == nil {
+		return
+	}
+	close(s.maintStop)
+	if s.maintDone != nil {
+		<-s.maintDone
 	}
 }
 
@@ -84,7 +93,12 @@ func (s *Service) maintenanceCycle() {
 			continue
 		}
 		probed[e.IP] = true
-		if s.maintProbeIP(e.IP, e.Hostname) {
+		alive, counted := s.maintProbeIP(e.IP, e.Hostname)
+		if !counted {
+			// 等闸超时：本轮跳过该条，不计失败（复核 2026-11-16 低危）。
+			continue
+		}
+		if alive {
 			// 活了：清掉失败计数与提醒标记（IP 恢复是常态——封锁窗口会过去）。
 			s.maintMu.Lock()
 			for k := range s.maintFails {
@@ -110,13 +124,16 @@ func (s *Service) maintenanceCycle() {
 		return
 	}
 
-	// 失效计数：连续两轮才行动（防单次抖动误报）。
+	// 失效计数：连续两轮才行动（防单次抖动误报）。判失效与「只提醒一次」的标记
+	// 都在计数处完成，键统一为 ip|hostname——提醒写、恢复清理、判重三处同键
+	//（2026-11-16 复核：曾出现写入键 hostname|ips 与读取键错位，去重完全失效）。
 	var actionable []deadEntry
 	s.maintMu.Lock()
 	for _, e := range dead {
 		key := e.IP + "|" + e.Hostname
 		s.maintFails[key]++
 		if s.maintFails[key] >= maintenanceFailThreshold && !s.maintNotified[key] {
+			s.maintNotified[key] = true
 			actionable = append(actionable, e)
 		}
 	}
@@ -132,60 +149,101 @@ func (s *Service) maintenanceCycle() {
 	}
 	for hostname, ips := range deadHosts {
 		text := fmt.Sprintf("%s 的 IP（%s）已失效", hostname, strings.Join(ips, "、"))
-		s.maintMu.Lock()
-		s.maintNotified[hostname+"|"+strings.Join(ips, ",")] = true
-		s.maintMu.Unlock()
 		s.emitNotice("warning", text+"（已写入的映射不再可用）")
 
 		if !cfg.Maintenance.AutoReplace {
 			continue
 		}
-		if itemID, ok := s.maintFindItem(hostname); ok {
+		itemID, ok, shared := s.maintFindItem(hostname)
+		if shared {
+			s.emitNotice("warning", fmt.Sprintf("%s 被多个项目共同写入，自动补位无法单方面完成——请手动重新检测后补充", hostname))
+			continue
+		}
+		if ok {
 			s.maintReplace(itemID, hostname, ips)
 		}
 	}
 }
 
-// maintProbeIP 探一个「主机名+IP」现在是否可用（走全进程网络闸）。
-func (s *Service) maintProbeIP(ip, hostname string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), maintenanceProbeTimeout)
-	defer cancel()
+// maintProbeIP 探一个「主机名+IP」现在是否可用。返回 (活着, 是否计入失败)：
+// 等网络闸超时＝本轮被大流量挤掉，不算 IP 死（不计失败，下一轮再看）；
+// 探测本身超时/失败＝真死，计失败。
+func (s *Service) maintProbeIP(ip, hostname string) (bool, bool) {
+	gateCtx, gateCancel := context.WithTimeout(context.Background(), maintenanceProbeTimeout)
+	defer gateCancel()
 	if s.netGate != nil {
 		select {
 		case s.netGate <- struct{}{}:
 			defer func() { <-s.netGate }()
-		case <-ctx.Done():
-			return false
+		case <-gateCtx.Done():
+			return false, false
 		}
 	}
+	probeCtx, probeCancel := context.WithTimeout(context.Background(), maintenanceProbeTimeout)
+	defer probeCancel()
 	probe := s.maintProbe
 	if probe == nil {
 		probe = detector.ProbeHTTPS
 	}
-	res, err := probe(ctx, detector.Target{IP: ip, Hostname: hostname})
+	res, err := probe(probeCtx, detector.Target{IP: ip, Hostname: hostname})
 	if err != nil {
-		return false
+		return false, true
 	}
 	status, _ := accelerator.Verdict(res)
-	return status == accelerator.StatusAvailable
+	return status == accelerator.StatusAvailable, true
 }
 
-// maintFindItem 按主机名找归属项目 ID（目录里同主机名归多个项目时取第一个）。
-func (s *Service) maintFindItem(hostname string) (string, bool) {
+// maintFindItem 按主机名找归属项目 ID。优先认「Hosts 区段里真正认领着这条映射」的
+// 项目（对照复核 2026-11-16：目录序取第一个会撞 ErrSharedOwner——项目 B 写的映射
+// 却拿目录序靠前的 A 去补位，永远失败）；共享认领（多个项目同写一个主机名）时
+// 自动补位在本版语义下不可能单方面成功，跳过并让上层发「请手动处理」。
+// 目录里有该主机名但 Hosts 里无认领（从未应用/已还原）→ 取目录序第一个。
+func (s *Service) maintFindItem(hostname string) (string, bool, bool) {
 	if s.productCatalog == nil {
-		return "", false
+		return "", false, false
 	}
 	n := hosts.NormalizeHostname(hostname)
-	for _, cat := range s.productCatalog.Categories {
-		for _, it := range cat.Items {
-			for _, hn := range it.Hostnames {
-				if hosts.NormalizeHostname(hn) == n {
-					return it.ID, true
+
+	// Hosts 里真正认领着这条主机名的项目集合（按 State 现读）。
+	claiming := map[string]bool{}
+	if s.priv != nil {
+		if state, err := s.priv.State(); err == nil {
+			for _, e := range state.Entries {
+				if hosts.NormalizeHostname(e.Hostname) == n && len(e.Owners) > 0 {
+					for _, owner := range e.Owners {
+						claiming[owner] = true
+					}
 				}
 			}
 		}
 	}
-	return "", false
+
+	var catalogMatches []string
+	for _, cat := range s.productCatalog.Categories {
+		for _, it := range cat.Items {
+			for _, hn := range it.Hostnames {
+				if hosts.NormalizeHostname(hn) == n {
+					catalogMatches = append(catalogMatches, it.ID)
+					break
+				}
+			}
+		}
+	}
+	if len(catalogMatches) == 0 {
+		return "", false, false
+	}
+	sort.Strings(catalogMatches)
+	// 目录序第一个且真正认领着的 → 唯一认领者，补位交给它。
+	if len(claiming) == 1 && claiming[catalogMatches[0]] {
+		return catalogMatches[0], true, false
+	}
+	// 多个项目共同认领（同一主机名被多个项目写入）→ 任何一方换 IP 都撞 ErrSharedOwner，
+	// 跳过补位并明示需要手动处理（shared=true）。
+	if len(claiming) > 1 {
+		return catalogMatches[0], true, true
+	}
+	// 没有认领者（Hosts 区段里这条主机名已不在或无主）→ 目录序第一个可补位。
+	return catalogMatches[0], true, false
 }
 
 // maintReplace 给一个项目做自动补位：从候选池挑活 IP（排除刚失效的），复验后重写

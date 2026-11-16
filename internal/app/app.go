@@ -94,6 +94,7 @@ type Service struct {
 	maintProbe    accelerator.ProbeFunc
 	maintInterval time.Duration
 	maintStop     chan struct{}
+	maintDone     chan struct{}
 	maintMu       sync.Mutex
 	maintFails    map[string]int
 	maintNotified map[string]bool

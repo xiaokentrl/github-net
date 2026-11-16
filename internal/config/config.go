@@ -436,6 +436,17 @@ func read(path string) (Config, readState, error) {
 	if probe.Layout.ToastDisabled == nil {
 		c.Layout.ToastDisabled = Default().Layout.ToastDisabled
 	}
+	// 老配置文件里没写过 maintenance 组（2026-11-15 新增）：零值 false 会让升级用户
+	// 静默失去巡检＋自动补位——缺整组按出厂默认补（默认开），用户显式写过的照旧尊重。
+	var probeMaintenance struct {
+		Maintenance *MaintenanceConfig `json:"maintenance"`
+	}
+	if err := json.Unmarshal(raw, &probeMaintenance); err != nil {
+		return Config{}, readBroken, fmt.Errorf("配置文件字段不合法: %v", err)
+	}
+	if probeMaintenance.Maintenance == nil {
+		c.Maintenance = Default().Maintenance
+	}
 	return c, readOK, nil
 }
 

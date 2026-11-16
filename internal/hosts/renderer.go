@@ -96,8 +96,9 @@ func managedLines(desired []Record) ([]string, error) {
 				return nil, fmt.Errorf("%w：主机名 %q 不能写进区段", ErrBadRecord, raw)
 			}
 			// 同一个 IP 的两种写法（::1 与 0:0:0:0:0:0:0:1）算同一条，不算冲突；
-			// 同一主机名指到多个不同 IP＝冗余写入（2026-11-15 拍板），各出一行——
-			// 解析按行序首条生效，冗余行的顺序由调用方（延迟序）保证。
+			// 同一主机名指到多个不同 IP＝冗余写入（2026-11-15 拍板），各出一行。
+			// 当前仓库内调用链只产单 IP（hosts 包「一主机名一规范 IP」语义未放开，
+			// P3 专项挂起），多 IP 渲染能力为该专项预置；顺序由调用方（延迟序）保证。
 			key := host + "|" + canonicalIP
 			if _, seen := seenPairs[key]; seen {
 				continue

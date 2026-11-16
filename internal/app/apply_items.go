@@ -244,7 +244,7 @@ func sortAllPicks(picks []usablePick) []usablePick {
 			return picks[i].latency < picks[j].latency
 		}
 		if picks[i].ipv6 != picks[j].ipv6 {
-			return !picks[j].ipv6 // IPv4 优先
+			return !picks[i].ipv6 // IPv4 优先（复核 2026-11-16：原写反，IPv6 反而排前）
 		}
 		return picks[i].ip < picks[j].ip
 	})
