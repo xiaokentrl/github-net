@@ -68,11 +68,8 @@ export function UpdatesPane({ status }: { status: AppStatus | null }) {
     return unsubscribe
   }, [])
 
-  // 进这屏就检查一次：用户不用先找按钮。
-  useEffect(() => {
-    check()
-  }, [check])
-
+  // 进屏不自动检测（2026-11-16 拍板）：检测只由「立即检查」按钮触发——
+  // 启动后的后台自动检查结论经 update:status 事件照常落到这一屏。
   // 订阅下载进度事件：progress 允许在退出下载态后残留（渲染有 downloading 门挡着，
   // 下一次点下载前会先清零），不做退出清零 effect。
   useEffect(() => {
