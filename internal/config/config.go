@@ -109,9 +109,11 @@ type LayoutConfig struct {
 	QueueHeight  int `json:"queueHeight"`
 	// QueueListWidth 是队列里左栏「任务列表」的宽度；右边任务明细占剩下的全部。
 	QueueListWidth int `json:"queueListWidth"`
-	// ToastDisabled 关掉右下角提示面板和它收起后的那颗「提示」胶囊。
-	// 出厂默认关掉（设置里那颗开关默认不勾选）。字段仍叫「禁用」是为了不改磁盘格式：
-	// 老配置没写过这个字段时，read() 按出厂默认补成 true；显式写过 false 的按用户选择保留。
+	// ToastDisabled 关掉 Toast 提示（2026-11-15 重写为浮动堆叠后，出厂默认改为**显示**：
+	// 失效提醒/自动补位结果全走这条通道，出厂关掉等于升级用户永远收不到维护通知——
+	// 复核 2026-11-17 高危：Default 翻转只翻了前端没翻这里，全新安装根本没有 Toast）。
+	// 字段仍叫「禁用」是为了不改磁盘格式：老配置没写过这个字段时，read() 按出厂默认补
+	// 成 false；显式写过 true（旧面板被手动关）的按用户选择保留尊重。
 	ToastDisabled bool `json:"toastDisabled"`
 	// QueueHeightLocked 锁住任务队列高度：锁上后拖动条、窗口自愈、布局预设都不再改 queueHeight，
 	// 磁盘上那份就停在锁定时的高度，重启自然恢复。零值＝不锁，老配置缺字段也按不锁走。
@@ -216,8 +218,8 @@ func Default() Config {
 		Accelerator: AcceleratorConfig{DefaultStrategyByScope: map[string]string{}},
 		Appearance:  AppearanceConfig{Language: "zh-CN", Theme: "light", Zoom: 1},
 		// 队列高度默认取「小」档（拍板 2026-10-31）：主区先让给项目树，要看队列再拖大。
-		// 提示面板出厂默认关掉（true＝被禁用）；队列高度出厂不锁，零值就是默认值。
-		Layout: LayoutConfig{SidebarWidth: 224, QueueHeight: QueueHeightSmall, QueueListWidth: 220, ToastDisabled: true, QueueHeightLocked: false},
+		// Toast 出厂默认显示（false＝不禁用）；队列高度出厂不锁，零值就是默认值。
+		Layout: LayoutConfig{SidebarWidth: 224, QueueHeight: QueueHeightSmall, QueueListWidth: 220, ToastDisabled: false, QueueHeightLocked: false},
 		// 两个焦点跟随出厂默认打开（拍板 2026-10-31）：队列跟着正在跑的项目走是这功能的本意。
 		TreeBehavior: TreeBehaviorConfig{DetectFocusFollow: true, ApplyFocusFollow: true},
 		// 浏览器重启出厂关闭：动用户正开着的程序必须用户点头。

@@ -281,14 +281,12 @@ export function App() {
                 ? t('hosts.apply.done.partial', { done, failed })
                 : t('hosts.apply.done', { total: done }),
             )
-            pushNotice('info', t('hosts.apply.doneHint'))
           }
         }
       }
       // 没有轮 ID 的单项写入（旧后端或单独排进来的任务）：按单条报，不漏反馈。
       if (settled.kind === 'apply' && !settled.roundId && settled.status === 'done') {
         pushNotice('success', t('hosts.apply.done', { total: 1 }))
-        pushNotice('info', t('hosts.apply.doneHint'))
       }
     })
 
@@ -1358,7 +1356,7 @@ export function App() {
         </Dialog>
       ) : null}
       {/* Toast 提示（2026-11-15 重写为浮动堆叠）：挂在应用根上、整应用只有一份。
-          出厂默认显示；配置明确禁用才不渲染。空堆栈渲染空 region，无闪烁风险。 */}
+          出厂默认显示；配置明确禁用才不渲染。空堆栈直接不渲染（return null）。 */}
       {settings?.layout.toastDisabled !== true ? <Toast /> : null}
     </>
   )

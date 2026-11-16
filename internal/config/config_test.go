@@ -35,12 +35,12 @@ func TestDefaultIsValidAndUnsaved(t *testing.T) {
 	if c.Layout.SidebarWidth != 224 || c.Layout.QueueHeight != QueueHeightSmall || c.Layout.QueueListWidth != 220 {
 		t.Errorf("布局默认值不对: %+v", c.Layout)
 	}
-	if !c.Layout.ToastDisabled {
-		t.Error("提示面板出厂默认应关闭（设置里那颗开关默认不勾选）")
+	if c.Layout.ToastDisabled {
+		t.Error("Toast 出厂默认应显示（false＝不禁用）")
 	}
 }
 
-// 提示面板出厂默认关掉；老配置里没写过这个字段时也要按默认走，
+// Toast 出厂默认显示；老配置里没写过这个字段时也要按默认走，
 // 显式写过 true/false 的则尊重用户自己选的。
 func TestToastDisabledDefaultAndMissingField(t *testing.T) {
 	for _, tc := range []struct {
@@ -48,7 +48,7 @@ func TestToastDisabledDefaultAndMissingField(t *testing.T) {
 		explicit *bool
 		want     bool
 	}{
-		{"缺字段按出厂默认关闭", nil, true},
+		{"缺字段按出厂默认显示", nil, false},
 		{"显式 false 尊重用户选择", flag(false), false},
 		{"显式 true 尊重用户选择", flag(true), true},
 	} {
