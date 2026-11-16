@@ -178,6 +178,84 @@ func withinFreshWindow(stamp string, now time.Time) bool {
 	return now.Sub(t.UTC()) <= applyFreshWindow
 }
 
+// usableAllAt 是 usableAllFor 的按时刻版本：与 usablePicksAt 同源同过滤器，但
+// 每个域名收集**全部**可用候选（不取最优），冗余写入（2026-11-15 拍板：写入全部）
+// 靠它——同域名多 IP 在 hosts 里天然合法，浏览器按序尝试，单 IP 被掐还有备选。
+func (s *Service) usableAllAt(itemID string, now time.Time) []usablePick {
+	var all []usablePick
+	seen := make(map[string]bool) // hostname|ip 去重：内存与池可能同条
+	add := func(p usablePick) {
+		key := p.hostname + "|" + p.ip
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		all = append(all, p)
+	}
+	if view, ok := s.detectResults.view(itemID); ok {
+		for _, h := range view.Hosts {
+			for _, c := range h.Candidates {
+				if c.Status == "available" {
+					roundFinished := s.detectResults.roundFinishedAt(itemID)
+					add(usablePick{
+						hostname: c.Hostname, ip: c.IP, latency: c.LatencyMS, ipv6: c.IPv6,
+						fresh: !roundFinished.IsZero() && now.Sub(roundFinished.UTC()) <= applyFreshWindow,
+					})
+				}
+			}
+		}
+	}
+	_, _, item, ok := s.lookupItem(itemID)
+	if !ok || len(item.Hostnames) == 0 || s.candidateStore == nil {
+		return sortAllPicks(all)
+	}
+	want := make(map[string]bool, len(item.Hostnames))
+	for _, h := range item.Hostnames {
+		if n := hosts.NormalizeHostname(h); n != "" {
+			want[n] = true
+		}
+	}
+	rows, err := s.candidateStore.Pool("")
+	if err != nil {
+		return sortAllPicks(all)
+	}
+	for _, r := range rows {
+		if r.Status != "available" || !want[r.Hostname] {
+			continue
+		}
+		add(usablePick{
+			hostname: r.Hostname, ip: r.IP, latency: r.LatencyMS, ipv6: r.IPv6,
+			fresh: withinFreshWindow(r.UpdatedAt, now), fromPool: true,
+		})
+	}
+	return sortAllPicks(all)
+}
+
+// sortAllPicks 稳定排序：按域名、再按延迟、并列 IPv4 优先——写盘顺序对同一批输入稳定。
+func sortAllPicks(picks []usablePick) []usablePick {
+	if len(picks) == 0 {
+		return nil
+	}
+	sort.Slice(picks, func(i, j int) bool {
+		if picks[i].hostname != picks[j].hostname {
+			return picks[i].hostname < picks[j].hostname
+		}
+		if picks[i].latency != picks[j].latency {
+			return picks[i].latency < picks[j].latency
+		}
+		if picks[i].ipv6 != picks[j].ipv6 {
+			return !picks[j].ipv6 // IPv4 优先
+		}
+		return picks[i].ip < picks[j].ip
+	})
+	return picks
+}
+
+// usableAllFor 是 usableAllAt 的按当前时刻版本。
+func (s *Service) usableAllFor(itemID string) []usablePick {
+	return s.usableAllAt(itemID, time.Now())
+}
+
 // picksOf 把「每个域名一个候选地址」摊成稳定顺序的切片（按域名排），
 // 执行器按它逐条复验、再把验通的收成写盘映射。
 func picksOf(best map[string]usablePick) []usablePick {

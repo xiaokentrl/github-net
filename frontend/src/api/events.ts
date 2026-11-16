@@ -10,6 +10,7 @@ const TASK_EVENT = 'task:progress'
 const DETECT_EVENT = 'detect:progress'
 const SETTINGS_EVENT = 'settings:changed'
 const UPDATE_EVENT = 'update:status'
+const NOTICE_PUSH_EVENT = 'notice:push'
 const UPDATE_PROGRESS_EVENT = 'update:download-progress'
 const AUTOMATION_EVENT = 'automation:status'
 // 事件名必须和 Go 侧 internal/app/browser_restart.go 的 browserRestartedEvent 一致。
@@ -121,6 +122,20 @@ export function subscribeUpdateStatus(onPayload: (payload: UpdateNoticePayload) 
   return Events.On(UPDATE_EVENT, (event: Events.WailsEvent) => {
     const payload = event.data as UpdateNoticePayload | undefined
     if (!payload) return
+    onPayload(payload)
+  })
+}
+
+// 后端维护循环（巡检/自动补位）主动推的用户提示：kind 是提示级别（warning/success/info）。
+export type NoticePushPayload = {
+  kind: string
+  text: string
+}
+
+export function subscribeNoticePush(onPayload: (payload: NoticePushPayload) => void): () => void {
+  return Events.On(NOTICE_PUSH_EVENT, (event: Events.WailsEvent) => {
+    const payload = event.data as NoticePushPayload | undefined
+    if (!payload || typeof payload.kind !== 'string' || typeof payload.text !== 'string') return
     onPayload(payload)
   })
 }

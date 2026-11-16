@@ -88,6 +88,8 @@ export type SettingsPatch = {
   applyFocusFollow?: boolean
   restartBrowserAfterApply?: boolean
   checkedItemIds?: string[]
+  autoProbe?: boolean
+  autoReplace?: boolean
 }
 
 export function getAppStatus(): Promise<AppStatus> {
@@ -139,6 +141,8 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     detectFocusFollow: patch.detectFocusFollow ?? null,
     applyFocusFollow: patch.applyFocusFollow ?? null,
     restartBrowserAfterApply: patch.restartBrowserAfterApply ?? null,
+    autoProbe: patch.autoProbe ?? null,
+    autoReplace: patch.autoReplace ?? null,
     checkedItemIds: patch.checkedItemIds ?? null,
     autoDetectMenus: patch.autoDetectMenus ?? null,
     autoApplyOnStartup: patch.autoApplyOnStartup ?? null,

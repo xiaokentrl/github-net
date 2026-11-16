@@ -84,7 +84,7 @@ func newApplyService(t *testing.T, priv privilege.Caller) *Service {
 		priv:          priv,
 		detectResults: results,
 	}
-	s.tasks = task.NewQueue(newDispatchExecutor(newGatedExecutor(), priv, results, nil, s.usablePicksFor, s.verifyCandidates), nil)
+	s.tasks = task.NewQueue(newDispatchExecutor(newGatedExecutor(), priv, results, nil, s.usablePicksFor, nil, s.verifyCandidates), nil)
 	return s
 }
 
@@ -422,5 +422,40 @@ func TestRestoreAllHostsFailureKeepsAppliedMarks(t *testing.T) {
 	}
 	if !hasAppliedMark(svc, "api") {
 		t.Fatal("还原失败时不该动现场：「当前生效」标记要留着")
+	}
+}
+
+// 冗余写入（2026-11-15 拍板「写入全部」）：usableAllAt 每个域名收**全部**可用候选，
+// 执行器把它们一起写成同域名多行映射——单 IP 被掐时浏览器还能落到备选。
+func TestUsableAllCollectsEveryCandidate(t *testing.T) {
+	svc := newDetectProfileService(t)
+	// 造一轮检测结果：github.com 三个候选全部可用（延迟不同）。
+	r := &accelerator.Result{
+		ItemID: "api",
+		Hostnames: []accelerator.HostOutcome{
+			{Hostname: "github.com", Resolved: true},
+		},
+		Candidates: []accelerator.Candidate{
+			{ID: "c1", Hostname: "github.com", IP: "20.27.177.113", Status: accelerator.StatusAvailable, LatencyMS: 90},
+			{ID: "c2", Hostname: "github.com", IP: "57.155.223.240", Status: accelerator.StatusAvailable, LatencyMS: 120},
+			{ID: "c3", Hostname: "github.com", IP: "140.82.121.4", Status: accelerator.StatusAvailable, LatencyMS: 200},
+		},
+		ProbesUsed: 3, Available: 3,
+		StartedAt: time.Date(2026, 11, 15, 8, 0, 0, 0, time.UTC), FinishedAt: time.Now(),
+	}
+	svc.detectResults.put(detectScopeGitHub, "live.one", r)
+
+	picks := svc.usableAllAt("api", time.Now())
+	if len(picks) != 3 {
+		t.Fatalf("全部可用候选该是 3 条（不取最优），实际 %d：%+v", len(picks), picks)
+	}
+	if picks[0].ip != "20.27.177.113" {
+		t.Errorf("排序该按延迟优先（90ms 最前），实际 %+v", picks[0])
+	}
+
+	// 对照：usablePicksAt 仍是「每域名取最优」（单条），两个接口语义各自成立。
+	best := svc.usablePicksAt("api", time.Now())
+	if len(best) != 1 || best[0].ip != "20.27.177.113" {
+		t.Errorf("可用Picks 该是每域名最优一条，实际 %+v", best)
 	}
 }

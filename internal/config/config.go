@@ -153,6 +153,15 @@ type Config struct {
 	TreeBehavior  TreeBehaviorConfig `json:"treeBehavior"`
 	Startup       StartupConfig      `json:"startup"`
 	Browser       BrowserConfig      `json:"browser"`
+	Maintenance   MaintenanceConfig  `json:"maintenance"`
+}
+
+// MaintenanceConfig 是「已写入 IP 的运维」开关（2026-11-15 拍板：巡检＋自动补位）。
+// AutoProbe：后台每 15 分钟探一轮已写入 Hosts 的 IP，失效进提醒与补位流程。
+// AutoReplace：巡检发现失效后自动从候选池挑活 IP 改写 Hosts（关掉则只提醒不改）。
+type MaintenanceConfig struct {
+	AutoProbe   bool `json:"autoProbe"`
+	AutoReplace bool `json:"autoReplace"`
 }
 
 // BrowserConfig 是浏览器相关行为。RestartAfterApply：应用队列把 Hosts 写完后，
@@ -181,6 +190,8 @@ type Patch struct {
 	ApplyFocusFollow               *bool              `json:"applyFocusFollow"`
 	CheckedItemIDs                 *[]string          `json:"checkedItemIds"`
 	RestartBrowserAfterApply       *bool              `json:"restartBrowserAfterApply"`
+	AutoProbe                      *bool              `json:"autoProbe"`
+	AutoReplace                    *bool              `json:"autoReplace"`
 	AutoStart                      *bool              `json:"autoStart"`
 	StartMinimized                 *bool              `json:"startMinimized"`
 	CloseToTray                    *bool              `json:"closeToTray"`
@@ -206,7 +217,8 @@ func Default() Config {
 		// 两个焦点跟随出厂默认打开（拍板 2026-10-31）：队列跟着正在跑的项目走是这功能的本意。
 		TreeBehavior: TreeBehaviorConfig{DetectFocusFollow: true, ApplyFocusFollow: true},
 		// 浏览器重启出厂关闭：动用户正开着的程序必须用户点头。
-		Browser: BrowserConfig{RestartAfterApply: false},
+		Browser:     BrowserConfig{RestartAfterApply: false},
+		Maintenance: MaintenanceConfig{AutoProbe: true, AutoReplace: true},
 	}
 }
 
@@ -661,6 +673,12 @@ func applyPatch(c *Config, p Patch) {
 	}
 	if p.RestartBrowserAfterApply != nil {
 		c.Browser.RestartAfterApply = *p.RestartBrowserAfterApply
+	}
+	if p.AutoProbe != nil {
+		c.Maintenance.AutoProbe = *p.AutoProbe
+	}
+	if p.AutoReplace != nil {
+		c.Maintenance.AutoReplace = *p.AutoReplace
 	}
 	if p.CheckedItemIDs != nil {
 		ids := *p.CheckedItemIDs

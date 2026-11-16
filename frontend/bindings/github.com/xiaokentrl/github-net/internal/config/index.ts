@@ -7,6 +7,7 @@ export type {
     BrowserConfig,
     Config,
     LayoutConfig,
+    MaintenanceConfig,
     NetworkConfig,
     Patch,
     StartupConfig,

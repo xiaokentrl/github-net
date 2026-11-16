@@ -89,6 +89,14 @@ type Service struct {
 
 	// netGate 是全进程那一道网络并发闸（检测和本轮新加的应用前复验共用同一个闸位池）。
 	netGate chan struct{}
+	// 维护循环（巡检＋自动补位）的字段：探针接缝（nil→detector.ProbeHTTPS）、
+	// 节拍（测试可调短）、停机开关、连续失败计数与已提醒去重。
+	maintProbe    accelerator.ProbeFunc
+	maintInterval time.Duration
+	maintStop     chan struct{}
+	maintMu       sync.Mutex
+	maintFails    map[string]int
+	maintNotified map[string]bool
 
 	// applyProbe 是应用前复验用的探测接缝：nil 就是 detector.ProbeHTTPS，和检测那条同一个默认。
 	// 测试注入假件，才能不碰外网跑遍「验通、验不通、目标不合法」三种分支。
@@ -200,6 +208,11 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 		detectResults:     results,
 		candidateStore:    candDB,
 		netGate:           probeGate,
+		maintProbe:        nil,
+		maintInterval:     15 * time.Minute,
+		maintStop:         make(chan struct{}),
+		maintFails:        map[string]int{},
+		maintNotified:     map[string]bool{},
 		rounds:            rounds,
 		stamp:             currentBuildStamp(),
 	}
@@ -218,7 +231,8 @@ func NewService(appName, version string, sequence func() int64, taskEmit func(na
 	s.updater = updater.NewClient()
 	s.pubKey = updater.PublicKey()
 	s.autostart = platform.NewAutostart()
-	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results, s.appliedIPsFor, s.usablePicksFor, s.verifyCandidates), taskEmit)
+	s.tasks = newTaskQueue(newDispatchExecutor(detectExec, s.priv, results, s.appliedIPsFor, s.usablePicksFor, s.usableAllFor, s.verifyCandidates), taskEmit)
+	startMaintenance(s)
 	return s
 }
 

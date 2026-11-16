@@ -39,6 +39,7 @@ export interface Config {
     "treeBehavior": TreeBehaviorConfig;
     "startup": StartupConfig;
     "browser": BrowserConfig;
+    "maintenance": MaintenanceConfig;
 }
 
 /**
@@ -65,6 +66,16 @@ export interface LayoutConfig {
      * 磁盘上那份就停在锁定时的高度，重启自然恢复。零值＝不锁，老配置缺字段也按不锁走。
      */
     "queueHeightLocked": boolean;
+}
+
+/**
+ * MaintenanceConfig 是「已写入 IP 的运维」开关（2026-11-15 拍板：巡检＋自动补位）。
+ * AutoProbe：后台每 15 分钟探一轮已写入 Hosts 的 IP，失效进提醒与补位流程。
+ * AutoReplace：巡检发现失效后自动从候选池挑活 IP 改写 Hosts（关掉则只提醒不改）。
+ */
+export interface MaintenanceConfig {
+    "autoProbe": boolean;
+    "autoReplace": boolean;
 }
 
 /**
@@ -97,6 +108,8 @@ export interface Patch {
     "applyFocusFollow": boolean | null;
     "checkedItemIds": string[] | null;
     "restartBrowserAfterApply": boolean | null;
+    "autoProbe": boolean | null;
+    "autoReplace": boolean | null;
     "autoStart": boolean | null;
     "startMinimized": boolean | null;
     "closeToTray": boolean | null;

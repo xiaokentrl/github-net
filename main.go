@@ -550,6 +550,7 @@ func main() {
 		saveWindowGeometry()
 		cancel()
 		appsvc.ShutdownTaskQueue(service)
+		appsvc.StopMaintenance(service)
 		unsubscribeTaskProgress()
 		unsubscribeStatus()
 		unsubscribeDockReopen()

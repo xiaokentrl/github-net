@@ -548,5 +548,10 @@
   "settings.updates.progress": "已收 {received} / 共 {total}（{percent}%）",
   "settings.updates.progressNoTotal": "已收 {received}",
   "error.code.update_busy": "上一次下载还在进行中，等它完成；进度就在下方",
-  "settings.updates.busyDownloading": "下载进行中，先等它完成"
+  "settings.updates.busyDownloading": "下载进行中，先等它完成",
+  "settings.maintenance.title": "已写入 IP 的维护",
+  "settings.maintenance.desc": "后台每 15 分钟探一轮已写进系统 Hosts 的 IP：被掐了会提醒你；开了自动补位还会从候选池挑活 IP 自动改写（候选池没有活 IP 时会提示重新检测）。",
+  "settings.maintenance.probeToggle": "巡检已写入的 IP（每 15 分钟）",
+  "settings.maintenance.replaceToggle": "发现失效后自动补位",
+  "settings.subject.maintenance": "已写入 IP 维护"
 }

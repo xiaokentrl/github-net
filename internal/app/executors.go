@@ -25,6 +25,9 @@ type dispatchExecutor struct {
 	// usablePicks 和入口的 applyBlocker 同源：内存优先、候选池兜底的候选地址，
 	// 每条带「结论新不新」。挑地址只有这一处，执行器不再自己写第二套标准。
 	usablePicks func(itemID string) []usablePick
+	// usableAll 是「写入全部冗余」（2026-11-15 拍板）：每域名收全部可用候选，
+	// 同域名多 IP 在 hosts 里天然合法，单 IP 被掐浏览器还能落到备选。nil 回退 usablePicks。
+	usableAll func(itemID string) []usablePick
 	// verify 是写盘前那道复验：现场把不新鲜的候选探一遍，验通才准写。
 	verify candidateVerifier
 }
@@ -36,8 +39,8 @@ type candidateVerifier func(ctx context.Context, itemID string, picks []usablePi
 
 func newDispatchExecutor(detect task.Executor, priv privilege.Caller, results *detectResultStore,
 	appliedIPs func(hostnames []string) map[string][]string,
-	usablePicks func(itemID string) []usablePick, verify candidateVerifier) *dispatchExecutor {
-	return &dispatchExecutor{detect: detect, priv: priv, results: results, appliedIPs: appliedIPs, usablePicks: usablePicks, verify: verify}
+	usablePicks func(itemID string) []usablePick, usableAll func(itemID string) []usablePick, verify candidateVerifier) *dispatchExecutor {
+	return &dispatchExecutor{detect: detect, priv: priv, results: results, appliedIPs: appliedIPs, usablePicks: usablePicks, usableAll: usableAll, verify: verify}
 }
 
 func (e *dispatchExecutor) Execute(ctx context.Context, t task.Task, report task.Report) task.Outcome {
@@ -70,6 +73,10 @@ func (e *dispatchExecutor) apply(ctx context.Context, t task.Task, report task.R
 		return task.Outcome{Status: task.StatusFailed, Message: "挑地址那一层还没接上，这一条没有开始"}
 	}
 	picks := e.usablePicks(t.ItemID)
+	if e.usableAll != nil {
+		// 冗余写入：全部可用候选一起写（同域名多 IP，浏览器按序尝试）。
+		picks = e.usableAll(t.ItemID)
+	}
 	if len(picks) == 0 {
 		return task.Outcome{Status: task.StatusFailed, Message: "内存和候选缓存里都没有可用的地址，先检测再应用"}
 	}

@@ -3,7 +3,7 @@ import type { AppStatus, CatalogCategory, CatalogItem, HostsState, ItemsSnapshot
 import type { AutomationStatus } from '../../bindings/github.com/xiaokentrl/github-net/internal/event/models'
 import type { Task } from '../../bindings/github.com/xiaokentrl/github-net/internal/task/models'
 import { applyItems, clearAllIPCache, clearSourcesCache, detectBudget, detectItems, getAutomationStatus, getAppStatus, getItems, getSettings, getTasks, openHosts, restoreItems, type NetworkProfile, type SettingsPatch } from '../api/client'
-import { subscribeAutomationStatus, subscribeBrowserRestarted, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
+import { subscribeAutomationStatus, subscribeBrowserRestarted, subscribeNoticePush, subscribeRuntimeStatus, subscribeSettingsChanged, subscribeUpdateStatus } from '../api/events'
 import { automationText } from '../components/layout/StatusBar'
 import { getErrorMessage } from '../api/errors'
 import { AppShell } from '../components/layout/AppShell'
@@ -295,6 +295,12 @@ export function App() {
     // 启动自动检查的结果落到顶栏徽标；详情看设置中心的检测升级屏。
     // 徽标只在「有新版本」时出现，检查失败在界面上本来完全无声——这里给一条会自己走的警告：
     // 更新检查不是主流程，不值得留一条常驻错误。
+    // 后端维护循环（巡检/自动补位）主动推的用户提示 → 右下角提示面板。
+    const unsubscribeNotice = subscribeNoticePush((payload) => {
+      const kind = (['warning', 'success', 'info', 'error'] as const).find((k) => k === payload.kind) ?? 'info'
+      pushNotice(kind, payload.text)
+    })
+
     const unsubscribeUpdate = subscribeUpdateStatus((payload) => {
       if (payload.error) {
         pushNotice('warning', t('update.checkFailed', { reason: payload.error }))
@@ -365,6 +371,7 @@ export function App() {
       automationRequestRef.current += 1
       unsubscribe()
       unsubscribeTasks()
+      unsubscribeNotice()
       unsubscribeUpdate()
       unsubscribeSettings()
       unsubscribeAutomation()
@@ -638,6 +645,21 @@ export function App() {
       submit({ restartBrowserAfterApply: enabled }, t('settings.subject.browser'), 'restartBrowser')
     },
     [settings, submit],
+  )
+
+  const changeAutoProbe = useCallback(
+    (enabled: boolean) => {
+      if (!settings || settings.maintenance?.autoProbe === enabled) return
+      submit({ autoProbe: enabled }, t('settings.subject.maintenance'), 'autoProbe')
+    },
+    [settings, submit, t],
+  )
+  const changeAutoReplace = useCallback(
+    (enabled: boolean) => {
+      if (!settings || settings.maintenance?.autoReplace === enabled) return
+      submit({ autoReplace: enabled }, t('settings.subject.maintenance'), 'autoReplace')
+    },
+    [settings, submit, t],
   )
 
   const changeSidebarWidth = useCallback(
@@ -1257,6 +1279,8 @@ export function App() {
           onProfile={changeProfile}
           onBudget={changeBudget}
           onRestartBrowser={changeRestartBrowser}
+          onAutoProbe={changeAutoProbe}
+          onAutoReplace={changeAutoReplace}
           onSidebarWidth={changeSidebarWidth}
           onQueueHeight={changeQueueHeight}
           onQueueListWidth={changeQueueListWidth}

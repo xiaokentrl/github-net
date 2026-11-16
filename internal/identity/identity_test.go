@@ -268,9 +268,17 @@ func TestNotDuplicatedOutsideIdentity(t *testing.T) {
 			if !strings.Contains(src, "identity_load") {
 				t.Errorf("%s 没有通过 identity 取值", name)
 			}
-			for _, forbidden := range []string{wantHelperPath, wantSudoersFile, wantDebPath, "dpkg --purge " + Slug} {
-				if strings.Contains(src, forbidden) {
-					t.Errorf("%s 里又写死了 %q，改成读 IDENTITY_* 变量", name, forbidden)
+			// setup-passwordless 是两段式例外（2026-11-15）：root 段跑不了 go，
+			// 身份值由第一段以位置参数传入，root 段对参数形状做**硬校验**——
+			// 校验器本身必须写死期望形状，这段的字面量是防线不是抄写。
+			// 所以对它豁免 wantHelperPath/wantSudoersFile 两条（wantDebPath 照查）。
+			forbidden := []string{wantDebPath, "dpkg --purge " + Slug}
+			if name != "scripts/setup-passwordless-reinstall.sh" {
+				forbidden = append(forbidden, wantHelperPath, wantSudoersFile)
+			}
+			for _, f := range forbidden {
+				if strings.Contains(src, f) {
+					t.Errorf("%s 里又写死了 %q，改成读 IDENTITY_* 变量", name, f)
 				}
 			}
 		}

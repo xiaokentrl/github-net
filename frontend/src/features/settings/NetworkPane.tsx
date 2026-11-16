@@ -24,6 +24,8 @@ export function NetworkPane({
   onProfile,
   onBudget,
   onRestartBrowser,
+  onAutoProbe,
+  onAutoReplace,
 }: {
   settings: Config
   hostnames: number
@@ -31,6 +33,8 @@ export function NetworkPane({
   onProfile: (profile: NetworkProfile) => void
   onBudget: (value: number) => void
   onRestartBrowser: (enabled: boolean) => void
+  onAutoProbe: (enabled: boolean) => void
+  onAutoReplace: (enabled: boolean) => void
 }) {
   const [draft, setDraft] = useState(String(settings.network.maxCandidateProbesPerRun))
   const [invalid, setInvalid] = useState(false)
@@ -40,6 +44,8 @@ export function NetworkPane({
   // 这一屏只有「每轮候选上限」带状态条（档位那条在顶栏），别把顶栏的改动提示搬进来。
   const budgetSave = saveStateFor(save, 'budget')
   const browserSave = saveStateFor(save, 'restartBrowser')
+  const autoProbeSave = saveStateFor(save, 'autoProbe')
+  const autoReplaceSave = saveStateFor(save, 'autoReplace')
   const spec = profileSpec(settings.network.profile)
   // 一轮全量需要的次数按目录里去重后的主机名数算，和后端「每 hostname 候选上限」同一口径。
   const needed = hostnames * spec.candidates
@@ -159,6 +165,36 @@ export function NetworkPane({
           {t('settings.browser.toggle')}
         </label>
         <InlineStatus kind={browserSave.kind} text={browserSave.text} />
+      </div>
+
+      <div className={styles.card}>
+        <div className={styles.cardTitle}>
+          <span className={styles.ico} aria-hidden="true">
+            ⚑
+          </span>
+          {t('settings.maintenance.title')}
+        </div>
+        <p className={styles.profileDesc}>{t('settings.maintenance.desc')}</p>
+        <label className={styles.checkRow}>
+          <input
+            type="checkbox"
+            checked={settings.maintenance?.autoProbe === true}
+            disabled={busy}
+            onChange={(event) => onAutoProbe(event.target.checked)}
+          />
+          {t('settings.maintenance.probeToggle')}
+        </label>
+        <label className={styles.checkRow}>
+          <input
+            type="checkbox"
+            checked={settings.maintenance?.autoReplace === true}
+            disabled={busy || settings.maintenance?.autoProbe !== true}
+            onChange={(event) => onAutoReplace(event.target.checked)}
+          />
+          {t('settings.maintenance.replaceToggle')}
+        </label>
+        <InlineStatus kind={autoProbeSave.kind} text={autoProbeSave.text} />
+        <InlineStatus kind={autoReplaceSave.kind} text={autoReplaceSave.text} />
       </div>
 
       <div className={styles.note}>{t('settings.network.note')}</div>
