@@ -66,7 +66,7 @@ import type { UpdateDownloadResult } from '../../bindings/github.com/xiaokentrl/
 export type NetworkProfile = 'low' | 'standard' | 'full'
 
 // 设置对话框那几屏会改的值：档位、每轮候选上限、侧栏宽度、队列高度、任务列表宽度、缩放、主题、
-// 两个焦点跟随开关，以及右下角提示面板的启用开关（界面说「显示」，配置里存「禁用」，取反一次）。
+// 两个焦点跟随开关，以及 Toast 提示的启用开关（界面说「显示」，配置里存「禁用」，取反一次）。
 export type SettingsPatch = {
   networkProfile?: NetworkProfile
   language?: string

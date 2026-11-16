@@ -293,7 +293,7 @@ export function App() {
     // 启动自动检查的结果落到顶栏徽标；详情看设置中心的检测升级屏。
     // 徽标只在「有新版本」时出现，检查失败在界面上本来完全无声——这里给一条会自己走的警告：
     // 更新检查不是主流程，不值得留一条常驻错误。
-    // 后端维护循环（巡检/自动补位）主动推的用户提示 → 右下角提示面板。
+    // 后端维护循环（巡检/自动补位）主动推的用户提示 → Toast 提示。
     const unsubscribeNotice = subscribeNoticePush((payload) => {
       const kind = (['warning', 'success', 'info', 'error'] as const).find((k) => k === payload.kind) ?? 'info'
       pushNotice(kind, payload.text)
