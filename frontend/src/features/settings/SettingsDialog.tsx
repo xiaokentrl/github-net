@@ -55,6 +55,7 @@ export function SettingsDialog({
 
   onAutoProbe,
   onAutoReplace,
+  onProbeInterval,
   onSidebarWidth,
   onQueueHeight,
   onQueueListWidth,
@@ -84,6 +85,7 @@ export function SettingsDialog({
   onRestartBrowser: (enabled: boolean) => void
   onAutoProbe: (enabled: boolean) => void
   onAutoReplace: (enabled: boolean) => void
+  onProbeInterval: (hours: number) => void
   onSidebarWidth: (width: number) => void
   onQueueHeight: (height: number) => void
   onQueueListWidth: (width: number) => void
@@ -174,7 +176,7 @@ export function SettingsDialog({
 
           <div className={styles.content}>
             {pane === 'network' && (
-              <NetworkPane settings={settings} hostnames={hostnames} save={save} onProfile={onProfile} onBudget={onBudget} onRestartBrowser={onRestartBrowser} onAutoProbe={onAutoProbe} onAutoReplace={onAutoReplace} />
+              <NetworkPane settings={settings} hostnames={hostnames} save={save} onProfile={onProfile} onBudget={onBudget} onRestartBrowser={onRestartBrowser} onAutoProbe={onAutoProbe} onAutoReplace={onAutoReplace} onProbeInterval={onProbeInterval} />
             )}
             {pane === 'layout' && (
               <LayoutPane

@@ -653,3 +653,31 @@ func TestOldConfigWithoutMaintenanceGetsDefaults(t *testing.T) {
 		t.Errorf("缺 maintenance 组该按出厂默认补（双 true），实际 %+v", cfg.Maintenance)
 	}
 }
+
+// 巡检间隔（2026-11-15 拍板改可填输入框）：默认 8 小时，越界保存拒绝；
+// roundtrip 后字段不丢。
+func TestProbeIntervalHoursDefaultAndBounds(t *testing.T) {
+	if got := Default().Maintenance.ProbeIntervalHours; got != 8 {
+		t.Fatalf("出厂默认该是 8 小时，实际 %d", got)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	s := NewStore(path, map[string]bool{"github": true}, nil, nil)
+	if _, err := s.Save(Patch{ProbeIntervalHours: intPtr(3)}, 0, "m1"); err != nil {
+		t.Fatalf("存 3 小时失败: %v", err)
+	}
+	if cfg, _ := s.Snapshot(); cfg.Maintenance.ProbeIntervalHours != 3 {
+		t.Errorf("巡检间隔该是 3，实际 %d", cfg.Maintenance.ProbeIntervalHours)
+	}
+	// 每次保存都推进 revision：用现读快照里的版本号。
+	cur, _ := s.Snapshot()
+	if _, err := s.Save(Patch{ProbeIntervalHours: intPtr(0)}, cur.Revision, "m2"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("0 小时应被拒（ErrInvalid），实际 %v", err)
+	}
+	cur, _ = s.Snapshot()
+	if _, err := s.Save(Patch{ProbeIntervalHours: intPtr(200)}, cur.Revision, "m3"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("200 小时应被拒（ErrInvalid），实际 %v", err)
+	}
+}
+
+func intPtr(v int) *int { return &v }

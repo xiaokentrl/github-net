@@ -14,6 +14,9 @@ import styles from './SettingsDialog.module.css'
 // 1008 = 目录去重后 63 个主机名 × 完整档每项 16 个候选，是完整档跑满一轮全量所需的次数。
 const CANDIDATE_MIN = 1
 const CANDIDATE_MAX = 1008
+// 巡检间隔上下界（小时）：1 小时～一周。后端 Validate 同一档（config.go）。
+const PROBE_INTERVAL_MIN = 1
+const PROBE_INTERVAL_MAX = 168
 
 // 网络与流量：档位三选一 + 每轮候选 IP 上限。每个控件改完立刻保存，
 // 所以没有「保存」按钮；改动只落到配置里，不会在这里发起任何检测。
@@ -26,6 +29,7 @@ export function NetworkPane({
   onRestartBrowser,
   onAutoProbe,
   onAutoReplace,
+  onProbeInterval,
 }: {
   settings: Config
   hostnames: number
@@ -35,6 +39,7 @@ export function NetworkPane({
   onRestartBrowser: (enabled: boolean) => void
   onAutoProbe: (enabled: boolean) => void
   onAutoReplace: (enabled: boolean) => void
+  onProbeInterval: (hours: number) => void
 }) {
   const [draft, setDraft] = useState(String(settings.network.maxCandidateProbesPerRun))
   const [invalid, setInvalid] = useState(false)
@@ -46,6 +51,10 @@ export function NetworkPane({
   const browserSave = saveStateFor(save, 'restartBrowser')
   const autoProbeSave = saveStateFor(save, 'autoProbe')
   const autoReplaceSave = saveStateFor(save, 'autoReplace')
+  const intervalSave = saveStateFor(save, 'probeInterval')
+  // 巡检间隔草稿：与 budget 输入同一模式——焦点时保留手敲值，失焦/回车提交。
+  const [intervalDraft, setIntervalDraft] = useState(String(settings.maintenance?.probeIntervalHours ?? 8))
+  const [intervalInvalid, setIntervalInvalid] = useState(false)
   const spec = profileSpec(settings.network.profile)
   // 一轮全量需要的次数按目录里去重后的主机名数算，和后端「每 hostname 候选上限」同一口径。
   const needed = hostnames * spec.candidates
@@ -65,6 +74,18 @@ export function NetworkPane({
     setInvalid(false)
     if (value === cap) return
     onBudget(value)
+  }
+
+  // 巡检间隔提交：1–168 小时越界置红不提交；与当前值相同不白涨 revision。
+  const commitInterval = () => {
+    const value = Number(intervalDraft)
+    if (!Number.isInteger(value) || value < PROBE_INTERVAL_MIN || value > PROBE_INTERVAL_MAX) {
+      setIntervalInvalid(true)
+      return
+    }
+    setIntervalInvalid(false)
+    if (value === settings.maintenance?.probeIntervalHours) return
+    onProbeInterval(value)
   }
 
   return (
@@ -184,6 +205,7 @@ export function NetworkPane({
           />
           {t('settings.maintenance.probeToggle')}
         </label>
+        <InlineStatus kind={autoProbeSave.kind} text={autoProbeSave.text} />
         <label className={styles.checkRow}>
           <input
             type="checkbox"
@@ -193,8 +215,40 @@ export function NetworkPane({
           />
           {t('settings.maintenance.replaceToggle')}
         </label>
-        <InlineStatus kind={autoProbeSave.kind} text={autoProbeSave.text} />
         <InlineStatus kind={autoReplaceSave.kind} text={autoReplaceSave.text} />
+        <div className={styles.budgetRow}>
+          <label className={styles.checkRow} htmlFor="probe-interval">
+            {t('settings.maintenance.intervalLabel')}
+          </label>
+          <input
+            id="probe-interval"
+            type="number"
+            min={PROBE_INTERVAL_MIN}
+            max={PROBE_INTERVAL_MAX}
+            step={1}
+            inputMode="numeric"
+            aria-label={t('settings.maintenance.intervalLabel')}
+            aria-invalid={intervalInvalid}
+            disabled={busy}
+            value={intervalDraft}
+            onFocus={() => {
+              focusedRef.current = true
+            }}
+            onChange={(event) => setIntervalDraft(event.target.value)}
+            onBlur={() => {
+              focusedRef.current = false
+              commitInterval()
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') (event.target as HTMLInputElement).blur()
+            }}
+          />
+          <span>{t('settings.maintenance.intervalUnit')}</span>
+          <InlineStatus
+            kind={intervalInvalid ? 'failed' : intervalSave.kind}
+            text={intervalInvalid ? t('settings.maintenance.intervalRange', { min: PROBE_INTERVAL_MIN, max: PROBE_INTERVAL_MAX }) : intervalSave.text}
+          />
+        </div>
       </div>
 
       <div className={styles.note}>{t('settings.network.note')}</div>

@@ -162,6 +162,9 @@ type Config struct {
 type MaintenanceConfig struct {
 	AutoProbe   bool `json:"autoProbe"`
 	AutoReplace bool `json:"autoReplace"`
+	// ProbeIntervalHours 是巡检间隔（小时）：默认 8，可填 1–168（一周）。
+	// 巡检一轮只探「已写入 Hosts 的 IP」（本机 7 个映射），开销与间隔成正比。
+	ProbeIntervalHours int `json:"probeIntervalHours"`
 }
 
 // BrowserConfig 是浏览器相关行为。RestartAfterApply：应用队列把 Hosts 写完后，
@@ -192,6 +195,7 @@ type Patch struct {
 	RestartBrowserAfterApply       *bool              `json:"restartBrowserAfterApply"`
 	AutoProbe                      *bool              `json:"autoProbe"`
 	AutoReplace                    *bool              `json:"autoReplace"`
+	ProbeIntervalHours             *int               `json:"probeIntervalHours"`
 	AutoStart                      *bool              `json:"autoStart"`
 	StartMinimized                 *bool              `json:"startMinimized"`
 	CloseToTray                    *bool              `json:"closeToTray"`
@@ -218,7 +222,7 @@ func Default() Config {
 		TreeBehavior: TreeBehaviorConfig{DetectFocusFollow: true, ApplyFocusFollow: true},
 		// 浏览器重启出厂关闭：动用户正开着的程序必须用户点头。
 		Browser:     BrowserConfig{RestartAfterApply: false},
-		Maintenance: MaintenanceConfig{AutoProbe: true, AutoReplace: true},
+		Maintenance: MaintenanceConfig{AutoProbe: true, AutoReplace: true, ProbeIntervalHours: 8},
 	}
 }
 
@@ -316,6 +320,9 @@ func (c Config) Validate(scopeIDs map[string]bool, strategies map[string]bool, m
 	}
 	if c.Layout.QueueListWidth < QueueListWidthMin || c.Layout.QueueListWidth > QueueListWidthMax {
 		return fmt.Errorf("%w: 任务列表宽度要在 %d 到 %d 像素之间", ErrInvalid, QueueListWidthMin, QueueListWidthMax)
+	}
+	if c.Maintenance.ProbeIntervalHours < 1 || c.Maintenance.ProbeIntervalHours > 168 {
+		return fmt.Errorf("%w: 巡检间隔要在 1 到 168 小时之间", ErrInvalid)
 	}
 	if c.Startup.AutoApplyOnStartup && len(c.Startup.AutoDetectMenus) == 0 {
 		return fmt.Errorf("%w: 启动自动应用要先在「启动后自动检测」里选至少一个主菜单", ErrInvalid)
@@ -690,6 +697,9 @@ func applyPatch(c *Config, p Patch) {
 	}
 	if p.AutoReplace != nil {
 		c.Maintenance.AutoReplace = *p.AutoReplace
+	}
+	if p.ProbeIntervalHours != nil {
+		c.Maintenance.ProbeIntervalHours = *p.ProbeIntervalHours
 	}
 	if p.CheckedItemIDs != nil {
 		ids := *p.CheckedItemIDs

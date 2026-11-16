@@ -662,6 +662,14 @@ export function App() {
     [settings, submit, t],
   )
 
+  const changeProbeInterval = useCallback(
+    (hours: number) => {
+      if (!settings || settings.maintenance?.probeIntervalHours === hours) return
+      submit({ probeIntervalHours: hours }, t('settings.subject.maintenance'), 'probeInterval')
+    },
+    [settings, submit, t],
+  )
+
   const changeSidebarWidth = useCallback(
     (width: number) => {
       if (!settings || settings.layout.sidebarWidth === width) return
@@ -1281,6 +1289,7 @@ export function App() {
           onRestartBrowser={changeRestartBrowser}
           onAutoProbe={changeAutoProbe}
           onAutoReplace={changeAutoReplace}
+          onProbeInterval={changeProbeInterval}
           onSidebarWidth={changeSidebarWidth}
           onQueueHeight={changeQueueHeight}
           onQueueListWidth={changeQueueListWidth}

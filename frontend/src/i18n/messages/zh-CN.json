@@ -551,7 +551,10 @@
   "settings.updates.busyDownloading": "下载进行中，先等它完成",
   "settings.maintenance.title": "已写入 IP 的维护",
   "settings.maintenance.desc": "后台每 15 分钟探一轮已写进系统 Hosts 的 IP：被掐了会提醒你；开了自动补位还会从候选池挑活 IP 自动改写（候选池没有活 IP 时会提示重新检测）。",
-  "settings.maintenance.probeToggle": "巡检已写入的 IP（每 15 分钟）",
+  "settings.maintenance.probeToggle": "巡检已写入的 IP",
   "settings.maintenance.replaceToggle": "发现失效后自动补位",
-  "settings.subject.maintenance": "已写入 IP 维护"
+  "settings.subject.maintenance": "已写入 IP 维护",
+  "settings.maintenance.intervalLabel": "巡检间隔",
+  "settings.maintenance.intervalUnit": "小时",
+  "settings.maintenance.intervalRange": "巡检间隔要在 {min} 到 {max} 小时之间"
 }

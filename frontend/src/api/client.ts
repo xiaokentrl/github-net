@@ -90,6 +90,7 @@ export type SettingsPatch = {
   checkedItemIds?: string[]
   autoProbe?: boolean
   autoReplace?: boolean
+  probeIntervalHours?: number
 }
 
 export function getAppStatus(): Promise<AppStatus> {
@@ -143,6 +144,7 @@ export function saveSettings(patch: SettingsPatch, expectedRevision: number, mut
     restartBrowserAfterApply: patch.restartBrowserAfterApply ?? null,
     autoProbe: patch.autoProbe ?? null,
     autoReplace: patch.autoReplace ?? null,
+    probeIntervalHours: patch.probeIntervalHours ?? null,
     checkedItemIds: patch.checkedItemIds ?? null,
     autoDetectMenus: patch.autoDetectMenus ?? null,
     autoApplyOnStartup: patch.autoApplyOnStartup ?? null,

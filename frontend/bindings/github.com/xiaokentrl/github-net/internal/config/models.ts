@@ -76,6 +76,12 @@ export interface LayoutConfig {
 export interface MaintenanceConfig {
     "autoProbe": boolean;
     "autoReplace": boolean;
+
+    /**
+     * ProbeIntervalHours 是巡检间隔（小时）：默认 8，可填 1–168（一周）。
+     * 巡检一轮只探「已写入 Hosts 的 IP」（本机 7 个映射），开销与间隔成正比。
+     */
+    "probeIntervalHours": number;
 }
 
 /**
@@ -110,6 +116,7 @@ export interface Patch {
     "restartBrowserAfterApply": boolean | null;
     "autoProbe": boolean | null;
     "autoReplace": boolean | null;
+    "probeIntervalHours": number | null;
     "autoStart": boolean | null;
     "startMinimized": boolean | null;
     "closeToTray": boolean | null;

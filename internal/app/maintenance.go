@@ -37,13 +37,19 @@ func startMaintenance(s *Service) {
 	s.maintDone = done
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(s.maintInterval)
-		defer ticker.Stop()
+		// 间隔每轮现读配置（2026-11-15 拍板：巡检间隔可在设置里填，默认 8 小时）——
+		// 用 time.After 而非固定 Ticker，改间隔下一轮立即生效，无需重启。
 		for {
+			interval := s.maintInterval
+			if s.settings != nil {
+				if cfg, err := s.settings.Snapshot(); err == nil && cfg.Maintenance.ProbeIntervalHours > 0 {
+					interval = time.Duration(cfg.Maintenance.ProbeIntervalHours) * time.Hour
+				}
+			}
 			select {
 			case <-s.maintStop:
 				return
-			case <-ticker.C:
+			case <-time.After(interval):
 				s.maintenanceCycle()
 			}
 		}
