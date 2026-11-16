@@ -269,10 +269,9 @@ func (s *Service) maintReplace(itemID, hostname string, deadIPs []string) {
 		s.detectResults.markProbe(itemID, hostname, ip, accelerator.StatusUnavailable,
 			0, "巡检：IP 已失效", at)
 	}
-	// 补位取「每主机名最优」单 IP（usablePicksFor）：同主机名多 IP 的全部冗余写入
-	// 被 hosts 包「一主机名一规范 IP」语义拦住（canonicalMappings 防线），
-	// 需要元数据 schema 升级专项——在此之前补位换主 IP 即可达成失效恢复目标。
-	picks := s.usablePicksFor(itemID)
+	// 补位写「全部活 IP」（2026-11-15 拍板「写入全部」；hosts 包多 IP 语义已落地）：
+	// usableAllFor 收该项目的全部可用候选（死 IP 已双标记排除），复验后一起写入。
+	picks := s.usableAllFor(itemID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
