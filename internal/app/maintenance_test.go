@@ -93,30 +93,31 @@ func newMaintenanceService(t *testing.T, table map[string]bool) (*Service, *fake
 	return svc, prober
 }
 
-func seedApplied(t *testing.T, svc *Service, ips ...string) {
+func seedApplied(t *testing.T, svc *Service, ip string) {
 	t.Helper()
-	cands := make([]accelerator.Candidate, 0, len(ips))
-	for i, ip := range ips {
-		cands = append(cands, accelerator.Candidate{
-			ID: "c" + ip, Hostname: "api.github.com", IP: ip,
-			Status: accelerator.StatusAvailable, LatencyMS: 100 + int64(i),
-		})
-	}
+	// 检测结果：该 IP 可用。
 	svc.detectResults.put("github", "live.one", &accelerator.Result{
 		ItemID:     "api",
 		Hostnames:  []accelerator.HostOutcome{{Hostname: "api.github.com", Resolved: true}},
-		Candidates: cands,
-		Available:  len(ips), ProbesUsed: len(ips),
+		Candidates: []accelerator.Candidate{{ID: "c1", Hostname: "api.github.com", IP: ip, Status: accelerator.StatusAvailable, LatencyMS: 100}},
+		Available:  1, ProbesUsed: 1,
 	})
 	// 候选池：给一个「活 IP」当补位货源（30.30.30.30）。
-	_ = svc.candidateStore.MarkPoolProbe("api.github.com", "30.30.30.30", "available", 60, time.Now())
+	// MarkPoolProbe 是 UPDATE-only：池里没这行就更新零行——必须走 Save 插入池行。
+	now := time.Now()
+	if err := svc.candidateStore.SaveRound("", "github", "live.one", &accelerator.Result{
+		ItemID:     "api",
+		Hostnames:  []accelerator.HostOutcome{{Hostname: "api.github.com", Resolved: true}},
+		Candidates: []accelerator.Candidate{{ID: "pool1", Hostname: "api.github.com", IP: "30.30.30.30", Status: accelerator.StatusAvailable, LatencyMS: 60}},
+		Available:  1, ProbesUsed: 1,
+		StartedAt: now, FinishedAt: now,
+	}); err != nil {
+		t.Fatalf("种池行失败: %v", err)
+	}
 	// 关键前提：先把死 IP **真写进 Hosts**（模拟用户已点过「补充可用IP」）——
 	// 巡检的对象是「已写入的 IP」，Hosts 里没有区段时 State() 不是 InUse，循环直接复位。
-	mappings := make([]hosts.Mapping, 0, len(ips))
-	for _, ip := range ips {
-		mappings = append(mappings, hosts.Mapping{IP: ip, Hostnames: []string{"api.github.com"}})
-	}
-	if err := svc.priv.Apply("api", mappings); err != nil {
+	// 单 IP 语义：hosts 包「一主机名一规范 IP」防线，全部冗余写入待 schema 专项。
+	if err := svc.priv.Apply("api", []hosts.Mapping{{IP: ip, Hostnames: []string{"api.github.com"}}}); err != nil {
 		t.Fatalf("预写 Hosts 失败: %v", err)
 	}
 }
@@ -129,15 +130,21 @@ func TestMaintenanceDetectsDeadAndReplaces(t *testing.T) {
 		"api.github.com|30.30.30.30":    true,  // 候选池里的补位货源：活着
 	}
 	svc, prober := newMaintenanceService(t, table)
-	seedApplied(t, svc, "20.27.177.113", "57.155.223.240")
+	seedApplied(t, svc, "20.27.177.113")
 
 	svc.maintenanceCycle() // 第一轮：失败计数
+	state1, err1 := svc.priv.State()
+	if err1 != nil {
+		t.Fatalf("第一轮读状态失败: %v", err1)
+	}
+	t.Logf("第一轮后 State: %+v 探针=%d 失败计数=%+v", state1, prober.calls, svc.maintFails)
 	svc.maintenanceCycle() // 第二轮：判失效＋自动补位
 
 	state, err := svc.priv.State()
 	if err != nil {
 		t.Fatalf("读状态失败: %v", err)
 	}
+	t.Logf("第二轮后 State: %+v 探针=%d", state, prober.calls)
 	ips := map[string]bool{}
 	for _, e := range state.Entries {
 		if e.Hostname == "api.github.com" {
@@ -150,7 +157,7 @@ func TestMaintenanceDetectsDeadAndReplaces(t *testing.T) {
 	if !ips["30.30.30.30"] {
 		t.Errorf("补位活 IP 应已写入，实际 %v", ips)
 	}
-	if prober.alive("github.com", "30.30.30.30") == false {
+	if prober.alive("api.github.com", "30.30.30.30") == false {
 		t.Error("补位前探活应确认 30.30.30.30 活着（测试自检）")
 	}
 }

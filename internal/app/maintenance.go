@@ -195,12 +195,20 @@ func (s *Service) maintReplace(itemID, hostname string, deadIPs []string) {
 	for _, ip := range deadIPs {
 		deadSet[ip] = true
 	}
-	// 池里先把失效 IP 标成不可用：usableAllAt 只收 available，排除即生效。
+	// 先把失效 IP 在内存与池两处都标成不可用（2026-11-15 真机教训）：
+	// 只标池子不够——内存结果也覆盖着该域名，usablePicksAt 的「内存优先」会把死 IP
+	// 当最优继续选，池里的活 IP 被排除规则挡住，补位拿到空集。两处都标之后，
+	// usablePicksFor 自然落到池里的活 IP。
 	for _, ip := range deadIPs {
-		_ = s.candidateStore.MarkPoolProbe(hostname, ip, string(accelerator.StatusUnavailable), 0, time.Now())
+		at := time.Now()
+		_ = s.candidateStore.MarkPoolProbe(hostname, ip, string(accelerator.StatusUnavailable), 0, at)
+		s.detectResults.markProbe(itemID, hostname, ip, accelerator.StatusUnavailable,
+			0, "巡检：IP 已失效", at)
 	}
-	picks := s.usableAllFor(itemID)
-	picks = pickExcluding(picks, deadSet)
+	// 补位取「每主机名最优」单 IP（usablePicksFor）：同主机名多 IP 的全部冗余写入
+	// 被 hosts 包「一主机名一规范 IP」语义拦住（canonicalMappings 防线），
+	// 需要元数据 schema 升级专项——在此之前补位换主 IP 即可达成失效恢复目标。
+	picks := s.usablePicksFor(itemID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -235,17 +243,6 @@ func (s *Service) maintReplace(itemID, hostname string, deadIPs []string) {
 	}
 	sort.Strings(parts)
 	s.emitNotice("success", fmt.Sprintf("%s 已自动补位：%s", hostname, strings.Join(parts, "；")))
-}
-
-// pickExcluding 排除指定 IP（失效的那几个）。
-func pickExcluding(picks []usablePick, dead map[string]bool) []usablePick {
-	out := make([]usablePick, 0, len(picks))
-	for _, p := range picks {
-		if !dead[p.ip] {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 // emitNotice 经通知事件把一句面向用户的话推给界面（前端弹右下角提示）。
