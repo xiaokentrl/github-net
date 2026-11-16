@@ -108,6 +108,25 @@ func TestRenderSortsAndDedupes(t *testing.T) {
 	}
 }
 
+// 冗余写入（2026-11-15 拍板）：同一主机名指到多个 IP＝合法形状，渲染成同主机名两行；
+// 行序按（主机名, IP）稳定排序，摘要可比、解析可还原。
+func TestRenderAllowsSameHostMultipleIPs(t *testing.T) {
+	out, err := Render("", []Record{rec("2.2.2.2", "a.example"), rec("1.1.1.1", "a.example")})
+	if err != nil {
+		t.Fatalf("同名两个 IP 该被允许: %v", err)
+	}
+	for _, want := range []string{"1.1.1.1 a.example", "2.2.2.2 a.example"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("渲染结果缺 %q，实际:\n%s", want, out)
+		}
+	}
+	// 行序确定性：同一批输入重复渲染，字节一致。
+	out2, _ := Render("", []Record{rec("2.2.2.2", "a.example"), rec("1.1.1.1", "a.example")})
+	if out != out2 {
+		t.Error("同一批输入两次渲染该字节一致")
+	}
+}
+
 func TestRenderRejectsBadRecords(t *testing.T) {
 	cases := []struct {
 		name string
@@ -120,7 +139,6 @@ func TestRenderRejectsBadRecords(t *testing.T) {
 		{"主机名是路径", []Record{rec("140.82.113.4", "github.com/x")}},
 		{"主机名本身是 IP", []Record{rec("140.82.113.4", "140.82.113.5")}},
 		{"主机名只有一个点", []Record{rec("140.82.113.4", ".")}},
-		{"同一主机名两个 IP", []Record{rec("1.1.1.1", "a.example"), rec("2.2.2.2", "a.example")}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -88,7 +88,6 @@ func TestApplyRejectsBadRequests(t *testing.T) {
 		{"主机名带端口", "item-a", []Mapping{mapping("1.1.1.1", "a.example:8080")}, ErrBadRecord},
 		{"主机名是路径", "item-a", []Mapping{mapping("1.1.1.1", "a.example/evil")}, ErrBadRecord},
 		{"主机名是 IP", "item-a", []Mapping{mapping("1.1.1.1", "1.2.3.4")}, ErrBadRecord},
-		{"同一个主机名给两个 IP", "item-a", []Mapping{mapping("1.1.1.1", "a.example"), mapping("2.2.2.2", "a.example")}, ErrBadRecord},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -338,6 +337,27 @@ func TestApplyAndRestoreKeepCRLFAndUnterminatedLastLine(t *testing.T) {
 	}
 }
 
+// 冗余写入（2026-11-15 拍板「写入全部」）：同一主机名给两个 IP＝合法请求，
+// 渲染成同主机名两行（行序按 (主机名, IP) 稳定），再应用一次字节一致。
+func TestApplyAllowsSameHostTwoIPs(t *testing.T) {
+	content, metaFirst := mustApply(t, Recovery{}, userTop, "item-a",
+		mapping("2.2.2.2", "a.example"), mapping("1.1.1.1", "a.example"))
+	_ = metaFirst
+	for _, want := range []string{"1.1.1.1 a.example", "2.2.2.2 a.example"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("区段缺冗余行 %q，实际:\n%s", want, content)
+		}
+	}
+	// 还原：该项目的应用前快照没有这条主机名，还原后两行都应撤掉。
+	_, restoredContent, err := RestoreItem(metaFirst, content, "item-a")
+	if err != nil {
+		t.Fatalf("还原失败: %v", err)
+	}
+	if strings.Contains(restoredContent, "1.1.1.1") && strings.Contains(restoredContent, "2.2.2.2") {
+		t.Errorf("还原后不该残留本项目写的冗余行:\n%s", restoredContent)
+	}
+}
+
 func TestApplyIsRepeatableForSameRequest(t *testing.T) {
 	first, metaA := mustApply(t, Recovery{}, userTop, "item-a", mapping("1.1.1.1", "b.example", "a.example"))
 	second, metaB := mustApply(t, metaA, first, "item-a", mapping("1.1.1.1", "a.example", "b.example"))
@@ -478,4 +498,14 @@ func mustMetaWithOldBlock(t *testing.T, head, old, tail string) Recovery {
 		t.Fatal(err)
 	}
 	return meta
+}
+
+// rendered 用元数据重新渲染该版本的全文（测试断言用）。
+func rendered(t *testing.T, meta Recovery, content string) string {
+	t.Helper()
+	out, err := Render(content, recordSet(meta.Entries))
+	if err != nil {
+		t.Fatalf("重渲染失败: %v", err)
+	}
+	return out
 }

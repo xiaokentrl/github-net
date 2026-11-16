@@ -79,7 +79,7 @@ func Render(content string, desired []Record) (string, error) {
 // 顺序规则是「按每行最小的主机名排」，行内主机名也按字典序——同一批映射在任何机器、
 // 任何顺序进来都出同一个字节串，后面算区段摘要才可比。
 func managedLines(desired []Record) ([]string, error) {
-	ipByHost := make(map[string]string, len(desired))
+	seenPairs := make(map[string]bool, len(desired))
 	hostsByIP := make(map[string][]string)
 	for _, rec := range desired {
 		ip := net.ParseIP(strings.TrimSpace(rec.IP))
@@ -95,14 +95,14 @@ func managedLines(desired []Record) ([]string, error) {
 			if !validHostname(host) {
 				return nil, fmt.Errorf("%w：主机名 %q 不能写进区段", ErrBadRecord, raw)
 			}
-			// 同一个 IP 的两种写法（::1 与 0:0:0:0:0:0:0:1）算同一条，不算冲突。
-			if known, seen := ipByHost[host]; seen {
-				if known != canonicalIP {
-					return nil, fmt.Errorf("%w：主机名 %s 同时被指到 %s 和 %s", ErrBadRecord, host, known, canonicalIP)
-				}
+			// 同一个 IP 的两种写法（::1 与 0:0:0:0:0:0:0:1）算同一条，不算冲突；
+			// 同一主机名指到多个不同 IP＝冗余写入（2026-11-15 拍板），各出一行——
+			// 解析按行序首条生效，冗余行的顺序由调用方（延迟序）保证。
+			key := host + "|" + canonicalIP
+			if _, seen := seenPairs[key]; seen {
 				continue
 			}
-			ipByHost[host] = canonicalIP
+			seenPairs[key] = true
 			hostsByIP[canonicalIP] = append(hostsByIP[canonicalIP], host)
 		}
 	}
@@ -111,15 +111,19 @@ func managedLines(desired []Record) ([]string, error) {
 		ip        string
 		hostnames []string
 	}
-	// 每个主机名只会归到一个 IP 上（上面那道门保证），所以 hostsByIP 里天然没有重复，
-	// 「行内最小主机名」在行与行之间也不会并列——用它当排序键就是全序，
-	// 输出与 map 遍历顺序无关。
+	// 同一主机名可能出现在多行（冗余写入），「行内最小主机名」在行间可能并列——
+	// 排序键改为（行内最小主机名, IP）二元组，输出仍然与 map 遍历顺序无关。
 	rows := make([]row, 0, len(hostsByIP))
 	for ip, hosts := range hostsByIP {
 		sort.Strings(hosts)
 		rows = append(rows, row{ip: ip, hostnames: hosts})
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].hostnames[0] < rows[j].hostnames[0] })
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].hostnames[0] != rows[j].hostnames[0] {
+			return rows[i].hostnames[0] < rows[j].hostnames[0]
+		}
+		return rows[i].ip < rows[j].ip
+	})
 	if len(rows) == 0 {
 		// 一条映射都不剩：整段撤掉，连标记一起走。留着空标记对会让下一次判读
 		// 把「空区段」当成已应用状态，而且文件里永久挂着两行没用的工具痕迹。

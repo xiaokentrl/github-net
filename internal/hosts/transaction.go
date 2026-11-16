@@ -44,51 +44,92 @@ func Apply(meta Recovery, content string, itemID string, mappings []Mapping) (Re
 	}
 
 	entries := cloneEntries(meta.Entries)
-	current := indexEntries(entries)
 
 	// 快照先攒，再动条目：顺序反了就会把「本次刚写进去的 IP」当成应用前的样子。
-	before := make(map[string]string)
+	before := make(map[string][]Ownership)
+	recorded := make(map[string]bool)
 	if state, ok := projectState(meta, itemID); ok {
 		for _, o := range state.Before {
-			before[o.Hostname] = o.IP
+			before[o.Hostname] = append(before[o.Hostname], o)
+			// 载入过的 host 就不再重新记快照：快照语义是「保留最初那个样子」，
+			// 重记会把中间态当应用前（这条语义有测试钉住）。
+			recorded[o.Hostname] = true
 		}
 	}
+	// 快照记录「应用前该主机名在区段里的全部样子」：每个 host 记一组 Ownership
+	//（多条＝冗余写入的形状；一条＝传统形状；IP 空＝应用前无映射）。
+	// 已记过的 host 保留最初那个样子（与原语义一致）。
 	record := func(host string) {
-		if _, seen := before[host]; seen {
+		if recorded[host] {
 			return
 		}
-		prev := ""
-		if entry, ok := current[host]; ok && len(withoutOwner(entry.Owners, itemID)) == 0 {
-			prev = entry.IP
+		recorded[host] = true
+		existing := entriesOfHost(entries, host)
+		if len(existing) == 0 {
+			before[host] = append(before[host], Ownership{Hostname: host})
+			return
 		}
-		before[host] = prev
+		for _, e := range existing {
+			// 还有别的项目认领的条目：它的存亡归对方管，本项目还原时不该去恢复它——
+			// 记空 IP（还原时跳过）。
+			ip := e.IP
+			if len(withoutOwner(e.Owners, itemID)) > 0 {
+				ip = ""
+			}
+			before[host] = append(before[host], Ownership{Hostname: host, IP: ip})
+		}
 	}
-	for _, host := range sortedIPs(want) {
-		if entry, ok := current[host]; ok && entry.IP != want[host] && len(withoutOwner(entry.Owners, itemID)) > 0 {
-			return meta, content, fmt.Errorf("%w：%s 当前指向 %s，仍被 %s 认领，项目 %s 不能把它改成 %s",
-				ErrSharedOwner, host, entry.IP, strings.Join(entry.Owners, "、"), itemID, want[host])
+	for _, host := range sortedWantHosts(want) {
+		// 共享认领检查升级为按 (主机名, IP) 条目：其他项目认领着的条目里，
+		// 有「本次集合不包含的 IP」就拒（我要撤掉别人还认领着的行）；
+		// 本次集合包含的 IP 可以并入认领（同一个 IP 就并进去的原语义）。
+		for _, e := range entriesOfHost(entries, host) {
+			if wantHasIP(want, host, e.IP) || len(withoutOwner(e.Owners, itemID)) == 0 {
+				continue
+			}
+			return meta, content, fmt.Errorf("%w：%s 当前指向 %s，仍被 %s 认领，项目 %s 不能撤掉它",
+				ErrSharedOwner, host, e.IP, strings.Join(e.Owners, "、"), itemID)
 		}
 		record(host)
 	}
 
 	// 不再释放（拍板 2026-11-03）：本轮没覆盖的主机名保留现有映射——
 	// 应用只写入/替换有数据的域名，绝不因为「这一轮没查到它」就把原来写好的条目删掉。
-	// 旧映射的认领关系原样保留，还原语义不受影响（快照里记着应用前的样子）。
-	// 写入：新映射落进条目集，认领者排序去重。
-	for _, host := range sortedIPs(want) {
-		if idx, ok := indexOfEntry(entries, host); ok {
-			entries[idx].IP = want[host]
-			entries[idx].Owners = withOwner(entries[idx].Owners, itemID)
-			continue
+	// 写入：按 (主机名, IP) 条目落进条目集——我名下不在新集合里的旧 IP 行撤掉
+	//（仅我认领时），新 IP 行追加；新集合里已有的行并入认领者。
+	for _, host := range sortedWantHosts(want) {
+		newIPs := want[host]
+		for _, e := range entriesOfHost(entries, host) {
+			if !hasOwner(e.Owners, itemID) || wantHasIP(want, host, e.IP) {
+				continue
+			}
+			if len(withoutOwner(e.Owners, itemID)) > 0 {
+				// 该 IP 行还有别的认领者，但本次集合不包含它：拒（不能撤别人的）。
+				return meta, content, fmt.Errorf("%w：%s 当前指向 %s，仍被 %s 认领，项目 %s 不能撤掉它",
+					ErrSharedOwner, host, e.IP, strings.Join(e.Owners, "、"), itemID)
+			}
+			entries = removeEntryPair(entries, host, e.IP)
 		}
-		entries = append(entries, Entry{Hostname: host, IP: want[host], Owners: []string{itemID}})
+		for _, ip := range newIPs {
+			if idx, ok := indexOfPair(entries, host, ip); ok {
+				entries[idx].Owners = withOwner(entries[idx].Owners, itemID)
+				continue
+			}
+			entries = append(entries, Entry{Hostname: host, IP: ip, Owners: []string{itemID}})
+		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Hostname < entries[j].Hostname })
 	snapshot := make([]Ownership, 0, len(before))
-	for host, ip := range before {
-		snapshot = append(snapshot, Ownership{Hostname: host, IP: ip})
+	for host, owns := range before {
+		snapshot = append(snapshot, owns...)
+		_ = host
 	}
-	sort.Slice(snapshot, func(i, j int) bool { return snapshot[i].Hostname < snapshot[j].Hostname })
+	sort.Slice(snapshot, func(i, j int) bool {
+		if snapshot[i].Hostname != snapshot[j].Hostname {
+			return snapshot[i].Hostname < snapshot[j].Hostname
+		}
+		return snapshot[i].IP < snapshot[j].IP
+	})
 
 	next, nextContent, err := finish(meta, content, entries, itemID, snapshot)
 	if err != nil {
@@ -279,13 +320,16 @@ func recordSet(entries []Entry) []Record {
 	return records
 }
 
-// canonicalMappings 把应用请求规范化成「主机名 → 规范 IP」。同一个主机名在一份请求里
-// 给了两个 IP 就地拒掉，不是后者覆盖前者——那等于让调用方的遍历顺序决定写什么。
-func canonicalMappings(mappings []Mapping, itemID string) (map[string]string, error) {
+// canonicalMappings 把应用请求规范化成「主机名 → 有序规范 IP 列表」。
+// 同一主机名指到多个不同 IP＝冗余写入（2026-11-15 拍板「写入全部」）：hosts 支持同
+// 主机名多行，解析按行序首条生效——列表顺序保留调用方给的延迟序，浏览器按序尝试，
+// 单 IP 被掐还能落到备选。同主机名同 IP 的重复给出就地去重；列表内 IP 按首次出现排序，
+// 对同一批输入输出稳定。ErrSharedOwner 的共享认领检查升级为按 (主机名, IP) 条目判定。
+func canonicalMappings(mappings []Mapping, itemID string) (map[string][]string, error) {
 	if len(mappings) == 0 {
 		return nil, fmt.Errorf("%w：项目 %s 没有给出任何主机名", ErrBadRecord, itemID)
 	}
-	want := make(map[string]string)
+	want := make(map[string][]string)
 	for _, m := range mappings {
 		ip := net.ParseIP(strings.TrimSpace(m.IP))
 		if ip == nil {
@@ -299,16 +343,42 @@ func canonicalMappings(mappings []Mapping, itemID string) (map[string]string, er
 			if !validHostname(host) {
 				return nil, fmt.Errorf("%w：项目 %s 的主机名 %q 不能写进区段", ErrBadRecord, itemID, raw)
 			}
-			if known, seen := want[host]; seen {
-				if known != ip.String() {
-					return nil, fmt.Errorf("%w：项目 %s 把 %s 同时指到 %s 和 %s", ErrBadRecord, itemID, host, known, ip.String())
+			canonical := ip.String()
+			known, seen := want[host]
+			if seen {
+				for _, k := range known {
+					if k == canonical {
+						// 同主机名同 IP 重复给出：去重。
+						break
+					}
 				}
-				continue
 			}
-			want[host] = ip.String()
+			if seen {
+				dup := false
+				for _, k := range known {
+					if k == canonical {
+						dup = true
+						break
+					}
+				}
+				if dup {
+					continue
+				}
+			}
+			want[host] = append(want[host], canonical)
 		}
 	}
 	return want, nil
+}
+
+// wantHasIP 判断本次写入集合里某主机名是否指到某 IP。
+func wantHasIP(want map[string][]string, host, ip string) bool {
+	for _, k := range want[host] {
+		if k == ip {
+			return true
+		}
+	}
+	return false
 }
 
 func projectState(r Recovery, itemID string) (ProjectState, bool) {
@@ -410,4 +480,48 @@ func withOwner(owners []string, itemID string) []string {
 	out := append(withoutOwner(owners, itemID), itemID)
 	sort.Strings(out)
 	return out
+}
+
+// entriesOfHost 列出一个主机名在条目集里的全部条目（冗余写入后同主机名可有多条，
+// 每 (主机名, IP) 一条）。
+func entriesOfHost(entries []Entry, host string) []Entry {
+	out := make([]Entry, 0, 1)
+	for _, e := range entries {
+		if e.Hostname == host {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// removeEntryPair 按 (主机名, IP) 精确删除一条条目（冗余写入后同主机名可有多条）。
+func removeEntryPair(entries []Entry, host, ip string) []Entry {
+	out := make([]Entry, 0, len(entries))
+	for _, e := range entries {
+		if e.Hostname == host && e.IP == ip {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// indexOfPair 按 (主机名, IP) 定位条目。
+func indexOfPair(entries []Entry, host, ip string) (int, bool) {
+	for i, e := range entries {
+		if e.Hostname == host && e.IP == ip {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// sortedWantHosts 列出本次写入集合的主机名（稳定排序）。
+func sortedWantHosts(want map[string][]string) []string {
+	hosts := make([]string, 0, len(want))
+	for host := range want {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	return hosts
 }
