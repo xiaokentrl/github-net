@@ -1,6 +1,6 @@
 ## English
 
-### github-net 0.1.21 Stable (0.1.20 → 0.1.21)
+### github-net 0.1.22 Stable (0.1.21 → 0.1.22)
 
 **Added**
 
@@ -8,15 +8,16 @@ None
 
 **Fixed**
 
-1. Fixed the factory default not following the Toast rewrite: fresh installs and missing-field fallbacks now show toasts by default (the 0.1.20 notes claimed this but the code flip was missing)
+None
 
 **Updated**
 
-1. Three stale "notification panel" comments updated to Toast semantics (comments only)
+1. "Apply usable IPs" upgraded to redundant writes: every usable IP found for a hostname is written to the hosts file as separate lines, so browsers fall back to alternatives when one is blocked
+2. Auto-replacement now rewrites all live IPs for the affected project, not just the single best one
 
 ## 中文
 
-### 0.1.21 稳定版（0.1.20 → 0.1.21）
+### 0.1.22 稳定版（0.1.21 → 0.1.22）
 
 **新增**
 
@@ -24,8 +25,9 @@ None
 
 **修复**
 
-1. 修复 Toast 出厂默认没有跟着翻转的问题：全新安装与缺字段兜底的用户现在默认能看到提示（0.1.20 的发布说明写了但代码没跟上，复核抓出）
+无
 
 **更新**
 
-1. 三处「提示面板」旧措辞同步为 Toast 语义（纯注释与文档，无行为变化）
+1. 「补充可用IP」升级为冗余写入：每个主机名把检测出的全部可用 IP 都写进系统 Hosts（同主机名多行冗余），单 IP 被掐时浏览器自动落到备选行
+2. 自动补位同步升级：IP 失效后自动改写该项目区段的全部活 IP（不只最优单 IP）
